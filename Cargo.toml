@@ -1,0 +1,9 @@
+[package]
+name = "prism"
+version = "0.1.0"
+authors = ["Dennis van Ee <dennis@vanee.us>"]
+edition = "2018"
+
+[dependencies]
+num-traits = "0.2.8"
+ply-rs = "0.1.2"
