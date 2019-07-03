@@ -6,4 +6,4 @@ edition = "2018"
 
 [dependencies]
 num-traits = "0.2.8"
-ply-rs = "0.1.2"
+ply-rs = "0.1.2" 
