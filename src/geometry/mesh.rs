@@ -174,7 +174,7 @@ impl Triangle {
         time > 1e-8f32
     }
 
-    pub fn intersect(&self, ray: &Ray, intinfo: &RayIntInfo, mesh: &Mesh) -> Option<MeshIntInfo> {
+    pub fn intersect(&self, ray: &Ray, intinfo: &RayIntInfo, mesh: &Mesh) -> Option<Intersection> {
         let poss = self.get_poss(mesh);
         let pt = [poss[0] - ray.org, poss[1] - ray.org, poss[2] - ray.org];
         let pt = [
@@ -411,7 +411,7 @@ impl Triangle {
             z: 0f32,
         };
 
-        Some(MeshIntInfo {
+        Some(Intersection {
             p,
             n,
             wo,
