@@ -12,7 +12,7 @@ pub struct Mesh {
 
 // A struct that stores information about the intersection
 // of a mesh:
-pub struct MeshIntInfo {
+pub struct Intersection {
     pub p: Vec3f,
     pub n: Vec3f,
     pub wo: Vec3f,
