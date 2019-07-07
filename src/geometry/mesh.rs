@@ -428,37 +428,37 @@ impl Triangle {
     }
 
     pub fn centroid(&self, mesh: &Mesh) -> Vec3f {
-        let poss = self.get_poss(mesh);
+        let poss = unsafe { self.get_poss(mesh) };
         (poss[0] + poss[1] + poss[2]).scale(1f32 / 3f32)
     }
 
     // Might make unsafe if it improves performance:
 
-    fn get_poss(&self, mesh: &Mesh) -> [Vec3f; 3] {
+    unsafe fn get_poss(&self, mesh: &Mesh) -> [Vec3f; 3] {
         [
-            mesh.poss[self.indices[0] as usize],
-            mesh.poss[self.indices[1] as usize],
-            mesh.poss[self.indices[2] as usize],
+            *mesh.poss.get_unchecked(self.indices[0] as usize),
+            *mesh.poss.get_unchecked(self.indices[1] as usize),
+            *mesh.poss.get_unchecked(self.indices[2] as usize),
         ]
     }
 
-    fn get_norms(&self, mesh: &Mesh) -> [Vec3f; 3] {
+    unsafe fn get_norms(&self, mesh: &Mesh) -> [Vec3f; 3] {
         [
-            mesh.norms[self.indices[0] as usize],
-            mesh.norms[self.indices[1] as usize],
-            mesh.norms[self.indices[2] as usize],
+            *mesh.norms.get_unchecked(self.indices[0] as usize),
+            *mesh.norms.get_unchecked(self.indices[1] as usize),
+            *mesh.norms.get_unchecked(self.indices[2] as usize),
         ]
     }
 
-    fn get_tans(&self, mesh: &Mesh) -> [Vec3f; 3] {
+    unsafe fn get_tans(&self, mesh: &Mesh) -> [Vec3f; 3] {
         [
-            mesh.tans[self.indices[0] as usize],
-            mesh.tans[self.indices[1] as usize],
-            mesh.tans[self.indices[2] as usize],
+            *mesh.tans.get_unchecked(self.indices[0] as usize),
+            *mesh.tans.get_unchecked(self.indices[1] as usize),
+            *mesh.tans.get_unchecked(self.indices[2] as usize),
         ]
     }
 
-    fn get_uvs(&self, mesh: &Mesh) -> [Vec2f; 3] {
+    unsafe fn get_uvs(&self, mesh: &Mesh) -> [Vec2f; 3] {
         if mesh.uvs.is_empty() {
             [
                 Vec2f { x: 0f32, y: 0f32 },
@@ -467,9 +467,9 @@ impl Triangle {
             ]
         } else {
             [
-                mesh.uvs[self.indices[0] as usize],
-                mesh.uvs[self.indices[1] as usize],
-                mesh.uvs[self.indices[2] as usize],
+                *mesh.uvs.get_unchecked(self.indices[0] as usize),
+                *mesh.uvs.get_unchecked(self.indices[1] as usize),
+                *mesh.uvs.get_unchecked(self.indices[2] as usize),
             ]
         }
     }

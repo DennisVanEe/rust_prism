@@ -4,26 +4,18 @@
 use ply_rs::{ply, parser};
 use simple_error::{SimpleResult, try_with, bail};
 
-use std::io::{BufReader, BufRead}, Read};
+use std::io::{BufReader, BufRead, Read};
 use std::fs::File;
 use std::mem::transmute;
 
 use crate::geometry::mesh::{Mesh, Triangle};
 use crate::math::vector::{Vec3f, Vec2f};
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 enum Endianness { LITTLE, BIG, }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 enum VertexProp { POS, NRM, TAN, UV, NONE, }
-
-// This function returns a slice representing the next line if it were carriage-returned line.
-fn extract_line(buffer: &Vec<u8>, start_loc: usize) -> (&[u8], usize) {
-    let mut end_loc = start_loc;
-    for b in buffer[start_loc..] {
-        
-    }
-}
 
 /// Given a path, this function will load a mesh from a given PLY file.
 /// It is important to note that this is not a general PLY file loader, it will only support
@@ -86,20 +78,22 @@ fn load_faces_ascii(file: &mut BufReader::<File>, count: usize) -> SimpleResult<
     // Again, for something more efficient, use binary format:
     for i in 1..=count {
         let line = String::new();
-        try_with!(file.read_line(&mut line), "problem when reading ply file");
+        try_with!(file.read_line(&mut line), "problem when reading PLY file");
 
         // Check certain properties of the line:
         let line = line.split_ascii_whitespace().collect::<Vec<&str>>();
         if line.len() != 4usize {
-            bail!("non-triangular face detected in ply file");
+            bail!("problem when parsing PLY file");
         }
 
         // Convert the string to the appropriate type:
-        let indices = [
-            try_with!(line[1].parse::<u32>(), "problem when parsing ply file"),
-            try_with!(line[2].parse::<u32>(), "problem when parsing ply file"),
-            try_with!(line[3].parse::<u32>(), "problem when parsing ply file"),
-        ];
+        // We already checked the length of line, so to squeeze out a bit of performance,
+        // we'll perform an unsafe get:
+        let indices = unsafe { [
+            try_with!(line.get_unchecked(1).parse::<u32>(), "problem when parsing PLY file"),
+            try_with!(line.get_unchecked(2).parse::<u32>(), "problem when parsing PLY file"),
+            try_with!(line.get_unchecked(3).parse::<u32>(), "problem when parsing PLY file"),
+        ] };
 
         result.push(Triangle { indices });
     }
@@ -108,61 +102,59 @@ fn load_faces_ascii(file: &mut BufReader::<File>, count: usize) -> SimpleResult<
 }
 
 // Load the properties of the vertices (poss, norms, tans, uvs):
-fn load_vertices_bin(file: &mut BufReader::<File>, count: usize, properties: [VertexProp; 4], encoding: Endianness) -> SimpleResult<(Vec<Vec3f>, Vec<Vec3f>, Vec<Vec3f>, Vec<Vec2f>)> {
+fn load_vertices_bin(file: &mut BufReader::<File>, count: usize, properties: &[VertexProp; 4], encoding: Endianness) -> SimpleResult<(Vec<Vec3f>, Vec<Vec3f>, Vec<Vec3f>, Vec<Vec2f>)> {
     let mut poss = Vec::new();
     let mut norms = Vec::new();
     let mut tans = Vec::new();
     let mut uvs = Vec::new();
 
     // Allocate memory before hand as appropriate:
-    for prop in properties {
+    for &prop in properties {
         match prop {
-            VertexProp::POS => poss.reserve(count);,
-            VertexProp::NORM => norms.reserve(count);,
-            VertexProp::TAN => tans.reserve(count);,
-            VertexProp::UV => uvs.reserve(count);,
-            VertexProp::NONE => break;,
-        }
+            VertexProp::POS => poss.reserve(count),
+            VertexProp::NRM => norms.reserve(count),
+            VertexProp::TAN => tans.reserve(count),
+            VertexProp::UV => uvs.reserve(count),
+            VertexProp::NONE => break,
+        };
     }
 
     // Now we go through the data:
     for i in 1..=count {
-        for prop in properties {
+        for &prop in properties {
             if prop == VertexProp::NONE {
                 // There are no other properties to worry about.
                 break;
             } else if prop == VertexProp::UV {
                 // Allocate buffer:
                 let buffer = [0u8; 8];
-                try_with!(file.read_exact(&mut buffer), "problem when reading ply file");
+                try_with!(file.read_exact(&mut buffer), "problem when reading PLY file");
                 // Now we convert the data:
-                let uvs = unsafe { transmute::<[u8; 8], [u32; 2]>(buffer) };
-                let uvs = match encoding {
-                    Endianness::LITTLE => [ u32::from_le(uvs[0]), u32::from_le(uvs[1]) ],
-                    Endianness::BIG => [ u32::from_be(uvs[0]), u32::from_be(uvs[1]) ],
+                let uv = unsafe { transmute::<[u8; 8], [u32; 2]>(buffer) };
+                let uv = match encoding {
+                    Endianness::LITTLE => [ u32::from_le(uv[0]), u32::from_le(uv[1]) ],
+                    Endianness::BIG => [ u32::from_be(uv[0]), u32::from_be(uv[1]) ],
                 };
-                uvs.push( Vec2f { x: unsafe { transmute::<u32, f32>(uvs[0]) }, y: unsafe { transmute::<u32, f32>(uvs[1]) } } );
+                let uv = unsafe { transmute::<[u32; 2], Vec2f>(uv) };
+
+                uvs.push(uv);
             } else {
                 let buffer = [0u8; 12];
-                try_with!(file.read_exact(&mut buffer), "problem when reading ply file");
+                try_with!(file.read_exact(&mut buffer), "problem when reading PLY file");
                 // Now we convert the data:
-                let vertex = unsafe { transmute::<[u8; 12], [u32, 3]>(buffer) };
+                let vertex = unsafe { transmute::<[u8; 12], [u32; 3]>(buffer) };
                 let vertex = match encoding {
-                    Endianness::LITTLE => [ u32::from_le(uvs[0]), u32::from_le(uvs[1]), u32::from_le(uvs[2]) ],
-                    Endianness::BIG => [ u32::from_be(uvs[0]), u32::from_be(uvs[1]), u32::from_be(uvs[2]) ],
+                    Endianness::LITTLE => [ u32::from_le(vertex[0]), u32::from_le(vertex[1]), u32::from_le(vertex[2]) ],
+                    Endianness::BIG => [ u32::from_be(vertex[0]), u32::from_be(vertex[1]), u32::from_be(vertex[2]) ],
                 };
-                let vec = Vec3f { 
-                    x: unsafe { transmute::<u32, f32>(vertex[0]) }, 
-                    y: unsafe { transmute::<u32, f32>(vertex[0]) }, 
-                    z: unsafe { transmute::<u32, f32>(vertex[0]) },
-                };
+                let vertex = unsafe { transmute::<[u32; 3], Vec3f>(vertex) };
 
                 match prop {
-                    VertexProp::POS => poss.push(vec);,
-                    VertexProp::NORM => norms.push(vec);,
-                    VertexProp::TAN => tans.push(vec);,
+                    VertexProp::POS => poss.push(vertex),
+                    VertexProp::NRM => norms.push(vertex),
+                    VertexProp::TAN => tans.push(vertex),
                     // This should never happen:
-                    VertexProp::UV | VertexProp::None => continue;,
+                    VertexProp::UV | VertexProp::NONE => continue,
                 }
             }
         }
@@ -172,6 +164,43 @@ fn load_vertices_bin(file: &mut BufReader::<File>, count: usize, properties: [Ve
 }
 
 // Loads the properties of the vertices(poss, norms, tans, uvs):
-// fn load_faces_ascii() -> Result<(Vec<Vec3f>, Vec<Vec3f>, Vec<Vec3f>, Vec<Vec2f>)> {
+fn load_vertices_ascii(file: &mut BufReader::<File>, count: usize, properties: &[VertexProp; 4]) -> SimpleResult<(Vec<Vec3f>, Vec<Vec3f>, Vec<Vec3f>, Vec<Vec2f>)> {
+    let mut poss = Vec::new();
+    let mut norms = Vec::new();
+    let mut tans = Vec::new();
+    let mut uvs = Vec::new();
 
-// }
+    // Allocate memory before hand as appropriate:
+    let mut num_properties = 0usize;
+    for &prop in properties {
+        match prop {
+            VertexProp::POS => { poss.reserve(count); num_properties += 3; },
+            VertexProp::NRM => { norms.reserve(count); num_properties += 3; },
+            VertexProp::TAN => { tans.reserve(count); num_properties += 3; },
+            VertexProp::UV => { uvs.reserve(count); num_properties += 2; },
+            VertexProp::NONE => break,
+        };
+    }
+
+    for i in 1..=count {
+        let line = String::new();
+        try_with!(file.read_line(line), "problem when reading PLY file");
+
+        // Check certain properties of the line:
+        let line = line.split_ascii_whitespace().collect::<Vec<&str>>();
+        if line.len() != num_properties {
+            bail!("problem when parsing PLY file");
+        }
+
+        let
+        for &prop in properties {
+            if prop == VertexProp::NONE {
+                break;
+            } else {
+                match prop {
+
+                }
+            }
+        }
+    }
+}
