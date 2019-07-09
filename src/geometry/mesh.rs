@@ -2,12 +2,110 @@ use crate::math::ray::Ray;
 use crate::math::util::{align, coord_system};
 use crate::math::vector::{Vec2f, Vec3f, Vec3d};
 
+// Compact mesh storage that should be cache friendly:
+// (actually, the only reason I did it this way was because of the way mesh loading worked):
 pub struct Mesh {
-    pub tris: Vec<Triangle>,
-    pub poss: Vec<Vec3f>,
-    pub norms: Vec<Vec3f>,
-    pub tans: Vec<Vec3f>,
-    pub uvs: Vec<Vec2f>,
+    tris: Vec<Triangle>,
+    data: Vec<f32>,
+
+    // If the value is 0xFF, it exists, if it is 0x00, it doesn't:
+    has_nrm: u8,
+    has_tan: u8,
+    has_uvs: u8,
+
+    // number of properties per vertex 
+    // (in terms of the number of floats):
+    num_prop: u8,
+    num_vert: u32,
+}
+
+// Mesh access is done through u32 values to save on storage:
+impl Mesh {
+    pub fn new(tris: Vec<Triangle>, data: Vec<f32>, has_nrm: bool, has_tan: bool, has_uvs: bool) -> Mesh {
+        let has_nrm = if has_nrm { 0xffu8 } else { 0x00u8 };
+        let has_tan = if has_tan { 0xffu8 } else { 0x00u8 };
+        let has_uvs = if has_uvs { 0xffu8 } else { 0x00u8 };
+
+        // Performs a logical right shift because it's unsigned:
+        // Always add 3 (the position information, which must always be present):
+        let num_prop = 3u8 + ((has_nrm >> 7u8) * 3u8) + ((has_tan >> 7u8) * 3u8) + ((has_uvs >> 7u8) * 2u8);
+        // Down casts value (might be dangerous, we'll see):
+        let num_vert = (data.len() / (num_prop as usize)) as u32; 
+
+        Mesh { tris, data, has_nrm, has_tan, has_uvs, num_prop, num_vert }
+    }
+
+    pub fn len(&self) -> usize {
+        self.num_vert as usize
+    }
+
+    pub unsafe fn get_pos(&self, index: u32) -> Vec3f {
+        let index = (self.num_prop as usize) * (index as usize);
+        Vec3f {
+            x: *self.data.get_unchecked(index + 0usize),
+            y: *self.data.get_unchecked(index + 1usize),
+            z: *self.data.get_unchecked(index + 2usize),
+        }
+    }
+
+    pub unsafe fn get_nrm(&self, index: u32) -> Vec3f {
+        let index = (self.num_prop as usize) * ((index as usize) +
+            ((self.has_nrm & 1u8) as usize));
+        Vec3f {
+            x: *self.data.get_unchecked(index + 0usize),
+            y: *self.data.get_unchecked(index + 1usize),
+            z: *self.data.get_unchecked(index + 2usize),
+        }
+    }
+
+    pub unsafe fn get_tan(&self, index: u32) -> Vec3f {
+        let index = (self.num_prop as usize) * ((index as usize) +
+            ((self.has_nrm & 1u8) as usize) + ((self.has_tan & 1u8) as usize));
+        Vec3f {
+            x: *self.data.get_unchecked(index + 0usize),
+            y: *self.data.get_unchecked(index + 1usize),
+            z: *self.data.get_unchecked(index + 2usize),
+        }
+    }
+
+    pub unsafe fn get_uvs(&self, index: u32) -> Vec2f {
+        let index = (self.num_prop as usize) * ((index as usize) +
+            ((self.has_nrm & 1u8) as usize) + ((self.has_tan & 1u8) as usize) + ((self.has_uvs & 1u8) as usize));
+        Vec2f {
+            x: *self.data.get_unchecked(index + 0usize),
+            y: *self.data.get_unchecked(index + 1usize),
+        }
+    }
+
+    pub unsafe fn set_pos(&self, index: u32, vec: Vec3f) {
+        let index = (self.num_prop as usize) * (index as usize);
+        *self.data.get_unchecked_mut(index + 0usize) = vec.x;
+        *self.data.get_unchecked_mut(index + 1usize) = vec.y;
+        *self.data.get_unchecked_mut(index + 2usize) = vec.z;
+    }
+
+    pub unsafe fn set_nrm(&self, index: u32, vec: Vec3f) {
+        let index = (self.num_prop as usize) * ((index as usize) +
+            ((self.has_nrm & 1u8) as usize));
+        *self.data.get_unchecked_mut(index + 0usize) = vec.x;
+        *self.data.get_unchecked_mut(index + 1usize) = vec.y;
+        *self.data.get_unchecked_mut(index + 2usize) = vec.z;
+    }
+
+    pub unsafe fn set_tan(&self, index: u32, vec: Vec3f) {
+        let index = (self.num_prop as usize) * ((index as usize) +
+            ((self.has_nrm & 1u8) as usize) + ((self.has_tan & 1u8) as usize));
+        *self.data.get_unchecked_mut(index + 0usize) = vec.x;
+        *self.data.get_unchecked_mut(index + 1usize) = vec.y;
+        *self.data.get_unchecked_mut(index + 2usize) = vec.z;
+    }
+
+    pub unsafe fn set_uvs(&self, index: u32, vec: Vec2f) {
+        let index = (self.num_prop as usize) * ((index as usize) +
+            ((self.has_nrm & 1u8) as usize) + ((self.has_tan & 1u8) as usize) + ((self.has_uvs & 1u8) as usize));
+        *self.data.get_unchecked_mut(index + 0usize) = vec.x;
+        *self.data.get_unchecked_mut(index + 1usize) = vec.y;
+    }
 }
 
 // A struct that stores information about the intersection
