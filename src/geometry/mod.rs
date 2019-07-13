@@ -1,2 +1,2 @@
-pub mod mesh;
 pub mod loader;
+pub mod mesh;

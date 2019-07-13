@@ -18,8 +18,8 @@ impl Transform {
     /// Note that, because the inverse can be undefined,
     /// it returns an optional.
     pub fn new(nrm: Mat4<f32>) -> Option<Transform> {
-        let invOpt = nrm.inverse();
-        match invOpt {
+        let inv_opt = nrm.inverse();
+        match inv_opt {
             Some(inv) => Some(Transform { nrm, inv }),
             None => None,
         }
@@ -34,10 +34,10 @@ impl Transform {
 
     // generates the inverse of the transformation (just the old swap):
     pub fn inverse(&self) -> Transform {
-        let matCopy = self.clone();
+        let mat_copy = self.clone();
         Transform {
-            nrm: matCopy.inv,
-            inv: matCopy.nrm,
+            nrm: mat_copy.inv,
+            inv: mat_copy.nrm,
         }
     }
 }

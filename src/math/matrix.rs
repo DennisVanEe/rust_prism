@@ -45,62 +45,62 @@ impl<T: Signed + Float> Mat4<T> {
     /// Calculates the inverse of a matrix. Note that, because
     /// the inverse can be undefined, it retuns an option.
     pub fn inverse(&self) -> Option<Mat4<T>> {
-        let A2323 = self.m[2][2] * self.m[3][3] - self.m[2][3] * self.m[3][2];
-        let A1323 = self.m[2][1] * self.m[3][3] - self.m[2][3] * self.m[3][1];
-        let A1223 = self.m[2][1] * self.m[3][2] - self.m[2][2] * self.m[3][1];
-        let A0323 = self.m[2][0] * self.m[3][3] - self.m[2][3] * self.m[3][0];
-        let A0223 = self.m[2][0] * self.m[3][2] - self.m[2][2] * self.m[3][0];
-        let A0123 = self.m[2][0] * self.m[3][1] - self.m[2][1] * self.m[3][0];
-        let A2313 = self.m[1][2] * self.m[3][3] - self.m[1][3] * self.m[3][2];
-        let A1313 = self.m[1][1] * self.m[3][3] - self.m[1][3] * self.m[3][1];
-        let A1213 = self.m[1][1] * self.m[3][2] - self.m[1][2] * self.m[3][1];
-        let A2312 = self.m[1][2] * self.m[2][3] - self.m[1][3] * self.m[2][2];
-        let A1312 = self.m[1][1] * self.m[2][3] - self.m[1][3] * self.m[2][1];
-        let A1212 = self.m[1][1] * self.m[2][2] - self.m[1][2] * self.m[2][1];
-        let A0313 = self.m[1][0] * self.m[3][3] - self.m[1][3] * self.m[3][0];
-        let A0213 = self.m[1][0] * self.m[3][2] - self.m[1][2] * self.m[3][0];
-        let A0312 = self.m[1][0] * self.m[2][3] - self.m[1][3] * self.m[2][0];
-        let A0212 = self.m[1][0] * self.m[2][2] - self.m[1][2] * self.m[2][0];
-        let A0113 = self.m[1][0] * self.m[3][1] - self.m[1][1] * self.m[3][0];
-        let A0112 = self.m[1][0] * self.m[2][1] - self.m[1][1] * self.m[2][0];
+        let a2323 = self.m[2][2] * self.m[3][3] - self.m[2][3] * self.m[3][2];
+        let a1323 = self.m[2][1] * self.m[3][3] - self.m[2][3] * self.m[3][1];
+        let a1223 = self.m[2][1] * self.m[3][2] - self.m[2][2] * self.m[3][1];
+        let a0323 = self.m[2][0] * self.m[3][3] - self.m[2][3] * self.m[3][0];
+        let a0223 = self.m[2][0] * self.m[3][2] - self.m[2][2] * self.m[3][0];
+        let a0123 = self.m[2][0] * self.m[3][1] - self.m[2][1] * self.m[3][0];
+        let a2313 = self.m[1][2] * self.m[3][3] - self.m[1][3] * self.m[3][2];
+        let a1313 = self.m[1][1] * self.m[3][3] - self.m[1][3] * self.m[3][1];
+        let a1213 = self.m[1][1] * self.m[3][2] - self.m[1][2] * self.m[3][1];
+        let a2312 = self.m[1][2] * self.m[2][3] - self.m[1][3] * self.m[2][2];
+        let a1312 = self.m[1][1] * self.m[2][3] - self.m[1][3] * self.m[2][1];
+        let a1212 = self.m[1][1] * self.m[2][2] - self.m[1][2] * self.m[2][1];
+        let a0313 = self.m[1][0] * self.m[3][3] - self.m[1][3] * self.m[3][0];
+        let a0213 = self.m[1][0] * self.m[3][2] - self.m[1][2] * self.m[3][0];
+        let a0312 = self.m[1][0] * self.m[2][3] - self.m[1][3] * self.m[2][0];
+        let a0212 = self.m[1][0] * self.m[2][2] - self.m[1][2] * self.m[2][0];
+        let a0113 = self.m[1][0] * self.m[3][1] - self.m[1][1] * self.m[3][0];
+        let a0112 = self.m[1][0] * self.m[2][1] - self.m[1][1] * self.m[2][0];
 
-        let invDet = self.m[0][0]
-            * (self.m[1][1] * A2323 - self.m[1][2] * A1323 + self.m[1][3] * A1223)
-            - self.m[0][1] * (self.m[1][0] * A2323 - self.m[1][2] * A0323 + self.m[1][3] * A0223)
-            + self.m[0][2] * (self.m[1][0] * A1323 - self.m[1][1] * A0323 + self.m[1][3] * A0123)
-            - self.m[0][3] * (self.m[1][0] * A1223 - self.m[1][1] * A0223 + self.m[1][2] * A0123);
-        let det = T::one() / invDet;
+        let inv_det = self.m[0][0]
+            * (self.m[1][1] * a2323 - self.m[1][2] * a1323 + self.m[1][3] * a1223)
+            - self.m[0][1] * (self.m[1][0] * a2323 - self.m[1][2] * a0323 + self.m[1][3] * a0223)
+            + self.m[0][2] * (self.m[1][0] * a1323 - self.m[1][1] * a0323 + self.m[1][3] * a0123)
+            - self.m[0][3] * (self.m[1][0] * a1223 - self.m[1][1] * a0223 + self.m[1][2] * a0123);
+        let det = T::one() / inv_det;
 
         // Check if the determinant is zero (might have to do this another way later):
         if det == T::zero() {
             None
         } else {
             let r0 = Vec4 {
-                x: det * (self.m[1][1] * A2323 - self.m[1][2] * A1323 + self.m[1][3] * A1223),
-                y: det * -(self.m[0][1] * A2323 - self.m[0][2] * A1323 + self.m[0][3] * A1223),
-                z: det * (self.m[0][1] * A2313 - self.m[0][2] * A1313 + self.m[0][3] * A1213),
-                w: det * -(self.m[0][1] * A2312 - self.m[0][2] * A1312 + self.m[0][3] * A1212),
+                x: det * (self.m[1][1] * a2323 - self.m[1][2] * a1323 + self.m[1][3] * a1223),
+                y: det * -(self.m[0][1] * a2323 - self.m[0][2] * a1323 + self.m[0][3] * a1223),
+                z: det * (self.m[0][1] * a2313 - self.m[0][2] * a1313 + self.m[0][3] * a1213),
+                w: det * -(self.m[0][1] * a2312 - self.m[0][2] * a1312 + self.m[0][3] * a1212),
             };
 
             let r1 = Vec4 {
-                x: det * -(self.m[1][0] * A2323 - self.m[1][2] * A0323 + self.m[1][3] * A0223),
-                y: det * (self.m[0][0] * A2323 - self.m[0][2] * A0323 + self.m[0][3] * A0223),
-                z: det * -(self.m[0][0] * A2313 - self.m[0][2] * A0313 + self.m[0][3] * A0213),
-                w: det * (self.m[0][0] * A2312 - self.m[0][2] * A0312 + self.m[0][3] * A0212),
+                x: det * -(self.m[1][0] * a2323 - self.m[1][2] * a0323 + self.m[1][3] * a0223),
+                y: det * (self.m[0][0] * a2323 - self.m[0][2] * a0323 + self.m[0][3] * a0223),
+                z: det * -(self.m[0][0] * a2313 - self.m[0][2] * a0313 + self.m[0][3] * a0213),
+                w: det * (self.m[0][0] * a2312 - self.m[0][2] * a0312 + self.m[0][3] * a0212),
             };
 
             let r2 = Vec4 {
-                x: det * (self.m[1][0] * A1323 - self.m[1][1] * A0323 + self.m[1][3] * A0123),
-                y: det * -(self.m[0][0] * A1323 - self.m[0][1] * A0323 + self.m[0][3] * A0123),
-                z: det * (self.m[0][0] * A1313 - self.m[0][1] * A0313 + self.m[0][3] * A0113),
-                w: det * -(self.m[0][0] * A1312 - self.m[0][1] * A0312 + self.m[0][3] * A0112),
+                x: det * (self.m[1][0] * a1323 - self.m[1][1] * a0323 + self.m[1][3] * a0123),
+                y: det * -(self.m[0][0] * a1323 - self.m[0][1] * a0323 + self.m[0][3] * a0123),
+                z: det * (self.m[0][0] * a1313 - self.m[0][1] * a0313 + self.m[0][3] * a0113),
+                w: det * -(self.m[0][0] * a1312 - self.m[0][1] * a0312 + self.m[0][3] * a0112),
             };
 
             let r3 = Vec4 {
-                x: det * -(self.m[1][0] * A1223 - self.m[1][1] * A0223 + self.m[1][2] * A0123),
-                y: det * (self.m[0][0] * A1223 - self.m[0][1] * A0223 + self.m[0][2] * A0123),
-                z: det * -(self.m[0][0] * A1213 - self.m[0][1] * A0213 + self.m[0][2] * A0113),
-                w: det * (self.m[0][0] * A1212 - self.m[0][1] * A0212 + self.m[0][2] * A0112),
+                x: det * -(self.m[1][0] * a1223 - self.m[1][1] * a0223 + self.m[1][2] * a0123),
+                y: det * (self.m[0][0] * a1223 - self.m[0][1] * a0223 + self.m[0][2] * a0123),
+                z: det * -(self.m[0][0] * a1213 - self.m[0][1] * a0213 + self.m[0][2] * a0113),
+                w: det * (self.m[0][0] * a1212 - self.m[0][1] * a0212 + self.m[0][2] * a0112),
             };
 
             Some(Mat4 {
@@ -185,8 +185,8 @@ impl<T: Signed + Float> Mat4<T> {
         &self.m[r][c]
     }
 
-    // Creates an idmity matrix:
-    pub fn idmity() -> Mat4<T> {
+    // Creates an identity matrix:
+    pub fn identity() -> Mat4<T> {
         let r0 = Vec4 {
             x: T::one(),
             y: T::zero(),
