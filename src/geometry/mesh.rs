@@ -57,8 +57,12 @@ impl Mesh {
         }
     }
 
-    pub fn len(&self) -> usize {
-        self.num_vert as usize
+    pub fn num_tri(&self) -> u32 {
+        self.tris.len() as u32
+    }
+
+    pub fn num_vert(&self) -> u32 {
+        self.num_vert
     }
 
     pub fn has_nrm(&self) -> bool {
@@ -71,6 +75,10 @@ impl Mesh {
 
     pub fn has_uvs(&self) -> bool {
         self.has_uvs
+    }
+
+    pub unsafe fn get_tri(&self, index: u32) -> Triangle {
+        *self.tris.get_unchecked(index as usize)
     }
 
     pub unsafe fn get_pos(&self, index: u32) -> Vec3f {
@@ -209,6 +217,7 @@ pub fn calc_rayintinfo(ray: &Ray) -> RayIntInfo {
 }
 
 // The triangle itself doesn't store the mesh, it just stores the indices:
+#[derive(Clone, Copy, Debug)]
 pub struct Triangle {
     pub indices: [u32; 3],
 }

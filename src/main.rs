@@ -1,20 +1,22 @@
 mod geometry;
 mod math;
 
-extern crate num_traits;
-
-use math::matrix::Mat4;
-use math::vector::Vec3;
+use math::vector::Vec3f;
+use geometry::mesh::Mesh;
+use geometry::loader::ply;
 
 fn main() {
-    let dir = Vec3 {
-        x: 4.5f32,
-        y: 9.8f32,
-        z: 1.7f32,
-    };
-    let trans = Mat4::translation(dir);
-    let kk = trans.transpose();
-    let trans2 = kk.transpose();
+    let mesh = ply::load_path("/home/dennis/Downloads/sphere.ply").unwrap();
 
-    println!("Hello, world!");
+    let v0 = unsafe { mesh.get_pos(0u32) };
+    let v1 = unsafe { mesh.get_nrm(0u32) };
+
+    let v2 = unsafe { mesh.get_pos(8u32) };
+    let v3 = unsafe { mesh.get_nrm(8u32) };
+
+    let v4 = unsafe { mesh.get_pos(mesh.num_vert() - 1) };
+    let v5 = unsafe { mesh.get_nrm(mesh.num_vert() - 1) };
+
+
+    println!("this is something {:?}, {:?}, {:?}, {:?}, {:?}, {:?}", v0, v1, v2, v3, v4, v5);
 }
