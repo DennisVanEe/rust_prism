@@ -1,6 +1,6 @@
 use crate::math::ray::Ray;
-use crate::math::util::{align, coord_system};
-use crate::math::vector::{Vec2f, Vec3d, Vec3f};
+use crate::math::util::{align, coord_system, gamma_f32};
+use crate::math::vector::{Vec2f, Vec3Perm, Vec3d, Vec3f};
 
 // Compact mesh storage that should be cache friendly:
 // (actually, the only reason I did it this way was because of the way mesh loading worked):
@@ -11,7 +11,7 @@ pub struct Mesh {
     // If the value is 0xFF, it exists, if it is 0x00, it doesn't:
     has_nrm: u8,
     has_tan: u8,
-    // We don't need to that for has_uvs:
+    // We don't need 0xFF stuff for has_uvs:
     has_uvs: bool,
 
     // number of properties per vertex
@@ -77,45 +77,51 @@ impl Mesh {
         self.has_uvs
     }
 
-    pub unsafe fn get_tri(&self, index: u32) -> Triangle {
-        *self.tris.get_unchecked(index as usize)
+    pub fn get_tri(&self, index: u32) -> Triangle {
+        unsafe { *self.tris.get_unchecked(index as usize) }
     }
 
-    pub unsafe fn get_pos(&self, index: u32) -> Vec3f {
+    pub fn get_pos(&self, index: u32) -> Vec3f {
         let index = (self.num_prop as usize) * (index as usize);
-        Vec3f {
-            x: *self.data.get_unchecked(index + 0usize),
-            y: *self.data.get_unchecked(index + 1usize),
-            z: *self.data.get_unchecked(index + 2usize),
+        unsafe {
+            Vec3f {
+                x: *self.data.get_unchecked(index + 0usize),
+                y: *self.data.get_unchecked(index + 1usize),
+                z: *self.data.get_unchecked(index + 2usize),
+            }
         }
     }
 
     // make sure you have normals first...
-    pub unsafe fn get_nrm(&self, index: u32) -> Vec3f {
+    pub fn get_nrm(&self, index: u32) -> Vec3f {
         debug_assert!(self.has_nrm());
 
         // If we have normal information, it'll always follow the position:
         let index = (self.num_prop as usize) * (index as usize) + 3usize;
-        Vec3f {
-            x: *self.data.get_unchecked(index + 0usize),
-            y: *self.data.get_unchecked(index + 1usize),
-            z: *self.data.get_unchecked(index + 2usize),
+        unsafe {
+            Vec3f {
+                x: *self.data.get_unchecked(index + 0usize),
+                y: *self.data.get_unchecked(index + 1usize),
+                z: *self.data.get_unchecked(index + 2usize),
+            }
         }
     }
 
-    pub unsafe fn get_tan(&self, index: u32) -> Vec3f {
+    pub fn get_tan(&self, index: u32) -> Vec3f {
         debug_assert!(self.has_tan());
 
         // If we have tangent information, it will always follow normal position:
         let index = (self.num_prop as usize) * (index as usize) + 6usize;
-        Vec3f {
-            x: *self.data.get_unchecked(index + 0usize),
-            y: *self.data.get_unchecked(index + 1usize),
-            z: *self.data.get_unchecked(index + 2usize),
+        unsafe {
+            Vec3f {
+                x: *self.data.get_unchecked(index + 0usize),
+                y: *self.data.get_unchecked(index + 1usize),
+                z: *self.data.get_unchecked(index + 2usize),
+            }
         }
     }
 
-    pub unsafe fn get_uvs(&self, index: u32) -> Vec2f {
+    pub fn get_uvs(&self, index: u32) -> Vec2f {
         debug_assert!(self.has_uvs());
 
         // Here we have to do a bit more work, because UVs cana technically belong anywhere:
@@ -123,66 +129,77 @@ impl Mesh {
             + 3usize
             + ((self.has_nrm & 3u8) as usize)
             + ((self.has_tan & 3u8) as usize);
-        Vec2f {
-            x: *self.data.get_unchecked(index + 0usize),
-            y: *self.data.get_unchecked(index + 1usize),
+        unsafe {
+            Vec2f {
+                x: *self.data.get_unchecked(index + 0usize),
+                y: *self.data.get_unchecked(index + 1usize),
+            }
         }
     }
 
-    pub unsafe fn set_pos(&mut self, index: u32, vec: Vec3f) {
+    pub fn set_pos(&mut self, index: u32, vec: Vec3f) {
         let index = (self.num_prop as usize) * (index as usize);
-        *self.data.get_unchecked_mut(index + 0usize) = vec.x;
-        *self.data.get_unchecked_mut(index + 1usize) = vec.y;
-        *self.data.get_unchecked_mut(index + 2usize) = vec.z;
+        unsafe {
+            *self.data.get_unchecked_mut(index + 0usize) = vec.x;
+            *self.data.get_unchecked_mut(index + 1usize) = vec.y;
+            *self.data.get_unchecked_mut(index + 2usize) = vec.z;
+        }
     }
 
-    pub unsafe fn set_nrm(&mut self, index: u32, vec: Vec3f) {
+    pub fn set_nrm(&mut self, index: u32, vec: Vec3f) {
         debug_assert!(self.has_nrm());
 
         let index = (self.num_prop as usize) * (index as usize) + 3usize;
-        *self.data.get_unchecked_mut(index + 0usize) = vec.x;
-        *self.data.get_unchecked_mut(index + 1usize) = vec.y;
-        *self.data.get_unchecked_mut(index + 2usize) = vec.z;
+        unsafe {
+            *self.data.get_unchecked_mut(index + 0usize) = vec.x;
+            *self.data.get_unchecked_mut(index + 1usize) = vec.y;
+            *self.data.get_unchecked_mut(index + 2usize) = vec.z;
+        }
     }
 
-    pub unsafe fn set_tan(&mut self, index: u32, vec: Vec3f) {
+    pub fn set_tan(&mut self, index: u32, vec: Vec3f) {
         debug_assert!(self.has_tan());
 
         let index = (self.num_prop as usize) * (index as usize) + 6usize;
-        *self.data.get_unchecked_mut(index + 0usize) = vec.x;
-        *self.data.get_unchecked_mut(index + 1usize) = vec.y;
-        *self.data.get_unchecked_mut(index + 2usize) = vec.z;
+        unsafe {
+            *self.data.get_unchecked_mut(index + 0usize) = vec.x;
+            *self.data.get_unchecked_mut(index + 1usize) = vec.y;
+            *self.data.get_unchecked_mut(index + 2usize) = vec.z;
+        }
     }
 
-    pub unsafe fn set_uvs(&mut self, index: u32, vec: Vec2f) {
+    pub fn set_uvs(&mut self, index: u32, vec: Vec2f) {
         debug_assert!(self.has_uvs());
 
         let index = (self.num_prop as usize) * (index as usize)
             + 3usize
             + ((self.has_nrm & 3u8) as usize)
             + ((self.has_tan & 3u8) as usize);
-        *self.data.get_unchecked_mut(index + 0usize) = vec.x;
-        *self.data.get_unchecked_mut(index + 1usize) = vec.y;
+        unsafe {
+            *self.data.get_unchecked_mut(index + 0usize) = vec.x;
+            *self.data.get_unchecked_mut(index + 1usize) = vec.y;
+        }
     }
 }
 
 // A struct that stores information about the intersection
 // of a mesh:
 pub struct Intersection {
-    pub p: Vec3f,
-    pub n: Vec3f,
-    pub wo: Vec3f,
+    pub p: Vec3f,     // intersection point
+    pub n: Vec3f,     // geometric normal (of triangle)
+    pub wo: Vec3f,    // direction of intersection leaving the point
+    pub p_err: Vec3f, // error at the intersection point
 
-    pub time: f32,
+    pub time: f32, // time when the intersection occured
 
-    pub uv: Vec2f,
-    pub dpdu: Vec3f,
+    pub uv: Vec2f,   // uv coordinate at the intersection
+    pub dpdu: Vec3f, // vectors parallel to the triangle
     pub dpdv: Vec3f,
 
-    pub shading_n: Vec3f,
-    pub shading_dpdu: Vec3f,
+    pub shading_n: Vec3f,    // the shading normal at this point
+    pub shading_dpdu: Vec3f, // the shading dpdu, dpdv at this point
     pub shading_dpdv: Vec3f,
-    pub shading_dndu: Vec3f,
+    pub shading_dndu: Vec3f, // the shading dndu, dndv at this point
     pub shading_dndv: Vec3f,
 }
 
@@ -190,23 +207,24 @@ pub struct Intersection {
 pub struct RayIntInfo {
     shear: Vec3f,
     perm_dir: Vec3f,
-    perm: u32,
+    perm: Vec3Perm,
 }
 
 // Given a ray, calculates the ray intersection information used for
 // efficient ray-triangle intersection.
 pub fn calc_rayintinfo(ray: &Ray) -> RayIntInfo {
-    let z = ray.dir.abs().max_dim() as u32;
-    let x = if z == 2u32 { 0u32 } else { z + 1u32 };
-    let y = if x == 2u32 { 0u32 } else { x + 1u32 };
+    let z = ray.dir.abs().max_dim();
+    let x = if z == 2usize { 0usize } else { z + 1usize };
+    let y = if x == 2usize { 0usize } else { x + 1usize };
 
-    let perm = x + 2 * y + 4 * z;
+    let perm = Vec3Perm::new(x, y, z);
     let perm_dir = ray.dir.permute(perm);
 
+    let inv_perm_dir_z = 1f32 / perm_dir.z;
     let shear = Vec3f {
-        x: -perm_dir.x / perm_dir.z,
-        y: -perm_dir.y / perm_dir.z,
-        z: 1f32 / perm_dir.z,
+        x: -perm_dir.x * inv_perm_dir_z,
+        y: -perm_dir.y * inv_perm_dir_z,
+        z: inv_perm_dir_z,
     };
 
     RayIntInfo {
@@ -223,28 +241,36 @@ pub struct Triangle {
 }
 
 impl Triangle {
-    pub fn intersect_test(&self, ray: &Ray, intinfo: &RayIntInfo, mesh: &Mesh) -> bool {
+    pub fn intersect_test(&self, ray: &Ray, int_info: &RayIntInfo, mesh: &Mesh) -> bool {
         let poss = self.get_poss(mesh);
+
+        // // NOTE: if you decide to include this, dp is used somewhere else in the code
+        // // Check for bad triangles:
+        // let dp = (poss[2] - poss[0]).cross(poss[1] - poss[0]);
+        // if (dp.length2() == 0f32) {
+        //     return false;
+        // }
+
         let pt = [poss[0] - ray.org, poss[1] - ray.org, poss[2] - ray.org];
         let pt = [
-            pt[0].permute(intinfo.perm),
-            pt[1].permute(intinfo.perm),
-            pt[2].permute(intinfo.perm),
+            pt[0].permute(int_info.perm),
+            pt[1].permute(int_info.perm),
+            pt[2].permute(int_info.perm),
         ];
         let pt = [
             Vec3f {
-                x: intinfo.shear.x * pt[0].z + pt[0].x,
-                y: intinfo.shear.y * pt[0].z + pt[0].y,
+                x: int_info.shear.x * pt[0].z + pt[0].x,
+                y: int_info.shear.y * pt[0].z + pt[0].y,
                 z: pt[0].z,
             },
             Vec3f {
-                x: intinfo.shear.x * pt[1].z + pt[1].x,
-                y: intinfo.shear.y * pt[1].z + pt[1].y,
+                x: int_info.shear.x * pt[1].z + pt[1].x,
+                y: int_info.shear.y * pt[1].z + pt[1].y,
                 z: pt[1].z,
             },
             Vec3f {
-                x: intinfo.shear.x * pt[2].z + pt[2].x,
-                y: intinfo.shear.y * pt[2].z + pt[2].y,
+                x: int_info.shear.x * pt[2].z + pt[2].x,
+                y: int_info.shear.y * pt[2].z + pt[2].y,
                 z: pt[2].z,
             },
         ];
@@ -301,17 +327,17 @@ impl Triangle {
             Vec3f {
                 x: pt[0].x,
                 y: pt[0].y,
-                z: pt[0].z * intinfo.shear.z,
+                z: pt[0].z * int_info.shear.z,
             },
             Vec3f {
                 x: pt[1].x,
                 y: pt[1].y,
-                z: pt[1].z * intinfo.shear.z,
+                z: pt[1].z * int_info.shear.z,
             },
             Vec3f {
                 x: pt[2].x,
                 y: pt[2].y,
-                z: pt[2].z * intinfo.shear.z,
+                z: pt[2].z * int_info.shear.z,
             },
         ];
 
@@ -327,32 +353,60 @@ impl Triangle {
         let inv_sum_e = 1f32 / sum_e;
         // The time of the intersection:
         let time = time_scaled * inv_sum_e;
-        // Finally, we check if the time is in the correct place:
-        time > 1e-8f32
+
+        // Perform some error detection:
+        let abs_pt = [pt[0].abs(), pt[1].abs(), pt[2].abs()];
+        let abs_e = [e[0].abs(), e[1].abs(), e[2].abs()];
+
+        let max_z = abs_pt[0].z.max(abs_pt[1].z.max(abs_pt[2].z));
+        let delta_z = gamma_f32(3) * max_z;
+
+        let max_x = abs_pt[0].x.max(abs_pt[1].x.max(abs_pt[2].x));
+        let delta_x = gamma_f32(5) * (max_x + max_z);
+
+        let max_y = abs_pt[0].y.max(abs_pt[1].y.max(abs_pt[2].y));
+        let delta_y = gamma_f32(5) * (max_y + max_z);
+
+        let delta_e = 2f32 * (gamma_f32(2) * max_x * max_y + delta_y * max_x + delta_x * max_y);
+
+        let max_e = abs_e[0].max(abs_e[1].max(abs_e[2]));
+        let delta_t = 3f32
+            * (gamma_f32(3) * max_e * max_z + delta_e * max_z + delta_z * max_e)
+            * inv_sum_e.abs();
+
+        time > delta_t
     }
 
-    pub fn intersect(&self, ray: &Ray, intinfo: &RayIntInfo, mesh: &Mesh) -> Option<Intersection> {
+    pub fn intersect(&self, ray: &Ray, int_info: &RayIntInfo, mesh: &Mesh) -> Option<Intersection> {
         let poss = self.get_poss(mesh);
+
+        // // NOTE: if you decide to include this, dp is used somewhere else in the code
+        // // Check for bad triangles:
+        // let dp = (poss[2] - poss[0]).cross(poss[1] - poss[0]);
+        // if (dp.length2() == 0f32) {
+        //     return false;
+        // }
+
         let pt = [poss[0] - ray.org, poss[1] - ray.org, poss[2] - ray.org];
         let pt = [
-            pt[0].permute(intinfo.perm),
-            pt[1].permute(intinfo.perm),
-            pt[2].permute(intinfo.perm),
+            pt[0].permute(int_info.perm),
+            pt[1].permute(int_info.perm),
+            pt[2].permute(int_info.perm),
         ];
         let pt = [
             Vec3f {
-                x: intinfo.shear.x * pt[0].z + pt[0].x,
-                y: intinfo.shear.y * pt[0].z + pt[0].y,
+                x: int_info.shear.x * pt[0].z + pt[0].x,
+                y: int_info.shear.y * pt[0].z + pt[0].y,
                 z: pt[0].z,
             },
             Vec3f {
-                x: intinfo.shear.x * pt[1].z + pt[1].x,
-                y: intinfo.shear.y * pt[1].z + pt[1].y,
+                x: int_info.shear.x * pt[1].z + pt[1].x,
+                y: int_info.shear.y * pt[1].z + pt[1].y,
                 z: pt[1].z,
             },
             Vec3f {
-                x: intinfo.shear.x * pt[2].z + pt[2].x,
-                y: intinfo.shear.y * pt[2].z + pt[2].y,
+                x: int_info.shear.x * pt[2].z + pt[2].x,
+                y: int_info.shear.y * pt[2].z + pt[2].y,
                 z: pt[2].z,
             },
         ];
@@ -409,17 +463,17 @@ impl Triangle {
             Vec3f {
                 x: pt[0].x,
                 y: pt[0].y,
-                z: pt[0].z * intinfo.shear.z,
+                z: pt[0].z * int_info.shear.z,
             },
             Vec3f {
                 x: pt[1].x,
                 y: pt[1].y,
-                z: pt[1].z * intinfo.shear.z,
+                z: pt[1].z * int_info.shear.z,
             },
             Vec3f {
                 x: pt[2].x,
                 y: pt[2].y,
-                z: pt[2].z * intinfo.shear.z,
+                z: pt[2].z * int_info.shear.z,
             },
         ];
 
@@ -436,15 +490,45 @@ impl Triangle {
         // The time of the intersection:
         let time = time_scaled * inv_sum_e;
 
-        // Maybe pick something better here to determine if ray is too close:
-        if time <= 1e-8f32 {
-            return None;
-        };
+        // Perform some error detection:
+        {
+            let abs_pt = [pt[0].abs(), pt[1].abs(), pt[2].abs()];
+            let abs_e = [e[0].abs(), e[1].abs(), e[2].abs()];
+
+            let max_z = abs_pt[0].z.max(abs_pt[1].z.max(abs_pt[2].z));
+            let delta_z = gamma_f32(3) * max_z;
+
+            let max_x = abs_pt[0].x.max(abs_pt[1].x.max(abs_pt[2].x));
+            let delta_x = gamma_f32(5) * (max_x + max_z);
+
+            let max_y = abs_pt[0].y.max(abs_pt[1].y.max(abs_pt[2].y));
+            let delta_y = gamma_f32(5) * (max_y + max_z);
+
+            let delta_e = 2f32 * (gamma_f32(2) * max_x * max_y + delta_y * max_x + delta_x * max_y);
+
+            let max_e = abs_e[0].max(abs_e[1].max(abs_e[2]));
+            let delta_t = 3f32
+                * (gamma_f32(3) * max_e * max_z + delta_e * max_z + delta_z * max_e)
+                * inv_sum_e.abs();
+
+            if time <= delta_t {
+                return None;
+            }
+        }
 
         // Baycentric coordinates:
         let b = [e[0] * inv_sum_e, e[1] * inv_sum_e, e[2] * inv_sum_e];
         // The hit point:
         let p = poss[0].scale(b[0]) + poss[1].scale(b[1]) + poss[2].scale(b[2]);
+
+        // Calculate the error at this point now:
+        let p_err = {
+            let x = (b[0] * poss[0].x).abs() + (b[1] * poss[1].x).abs() + (b[2] * poss[2].x).abs();
+            let y = (b[0] * poss[0].y).abs() + (b[1] * poss[1].y).abs() + (b[2] * poss[2].y).abs();
+            let z = (b[0] * poss[0].z).abs() + (b[1] * poss[1].z).abs() + (b[2] * poss[2].z).abs();
+            (Vec3f { x, y, z }).scale(gamma_f32(7))
+        };
+
         // The edges along the triangle:
         let dp02 = poss[0] - poss[2];
         let dp12 = poss[1] - poss[2];
@@ -460,25 +544,25 @@ impl Triangle {
         let duv02 = uvs[0] - uvs[2];
         let duv12 = uvs[1] - uvs[2];
         let det = duv02[0] * duv12[1] - duv02[1] * duv12[0];
-        let is_degen_uv = det.abs() < 1e-8f32;
+        let is_degen_uv = det.abs() < 1e-8f32; // This is quite a hack, so we should do something about this
         let inv_det = if is_degen_uv { 0f32 } else { 1f32 / det };
 
         // Compute triangle partial derivatives:
         // These vectors are parallel to the triangle:
         let (dpdu, dpdv) = if is_degen_uv {
-            let ng = (poss[2] - poss[0]).cross(poss[1] - poss[0]);
-            coord_system(ng)
+            coord_system((poss[2] - poss[0]).cross(poss[1] - poss[0]))
         } else {
             // Solve the system:
             let dpdu = (dp02.scale(duv12[1]) - dp12.scale(duv02[1])).scale(inv_det);
             let dpdv = (dp02.scale(-duv12[0]) + dp12.scale(duv02[0])).scale(inv_det);
             if dpdu.cross(dpdv).length2() == 0f32 {
-                let ng = (poss[2] - poss[0]).cross(poss[1] - poss[0]);
-                coord_system(ng)
+                coord_system((poss[2] - poss[0]).cross(poss[1] - poss[0]))
             } else {
                 (dpdu, dpdv)
             }
         };
+
+        // TODO: texture stuff goes here
 
         // Calculate the shading normals now:
         let shading_n = if mesh.has_nrm() {
@@ -497,18 +581,7 @@ impl Triangle {
 
         // Calculate the shading dndu and dndv values:
         let (shading_dndu, shading_dndv) = if mesh.has_nrm() {
-            (
-                Vec3f {
-                    x: 0f32,
-                    y: 0f32,
-                    z: 0f32,
-                },
-                Vec3f {
-                    x: 0f32,
-                    y: 0f32,
-                    z: 0f32,
-                },
-            )
+            (Vec3f::zero(), Vec3f::zero())
         } else {
             let norms = self.get_nrms(mesh);
             let dn02 = norms[0] - norms[2];
@@ -517,18 +590,7 @@ impl Triangle {
             if is_degen_uv {
                 let dn = (norms[2] - norms[0]).cross(norms[1] - norms[0]);
                 if dn.length2() == 0f32 {
-                    (
-                        Vec3f {
-                            x: 0f32,
-                            y: 0f32,
-                            z: 0f32,
-                        },
-                        Vec3f {
-                            x: 0f32,
-                            y: 0f32,
-                            z: 0f32,
-                        },
-                    )
+                    (Vec3f::zero(), Vec3f::zero())
                 } else {
                     coord_system(dn)
                 }
@@ -555,23 +617,20 @@ impl Triangle {
         // Calculate the shaind bitangent:
         let (shading_dpdu, shading_dpdv) = {
             let sbt = shading_n.cross(shading_dpdu);
-            if sbt.length2() != 0f32 {
+            if sbt.length2() > 0f32 {
                 (sbt.cross(shading_dpdu), sbt.normalize())
             } else {
                 coord_system(shading_n)
             }
         };
 
-        let wo = Vec3f {
-            x: 0f32,
-            y: 0f32,
-            z: 0f32,
-        };
+        let wo = -ray.dir;
 
         Some(Intersection {
             p,
             n,
             wo,
+            p_err,
             time,
             uv,
             dpdu,
@@ -602,40 +661,34 @@ impl Triangle {
     }
 
     fn get_nrms(&self, mesh: &Mesh) -> [Vec3f; 3] {
-        unsafe {
-            [
-                mesh.get_nrm(self.indices[0]),
-                mesh.get_nrm(self.indices[1]),
-                mesh.get_nrm(self.indices[2]),
-            ]
-        }
+        [
+            mesh.get_nrm(self.indices[0]),
+            mesh.get_nrm(self.indices[1]),
+            mesh.get_nrm(self.indices[2]),
+        ]
     }
 
     fn get_tans(&self, mesh: &Mesh) -> [Vec3f; 3] {
-        unsafe {
-            [
-                mesh.get_tan(self.indices[0]),
-                mesh.get_tan(self.indices[1]),
-                mesh.get_tan(self.indices[2]),
-            ]
-        }
+        [
+            mesh.get_tan(self.indices[0]),
+            mesh.get_tan(self.indices[1]),
+            mesh.get_tan(self.indices[2]),
+        ]
     }
 
     fn get_uvs(&self, mesh: &Mesh) -> [Vec2f; 3] {
-        unsafe {
-            if mesh.has_uvs() {
-                [
-                    mesh.get_uvs(self.indices[0]),
-                    mesh.get_uvs(self.indices[1]),
-                    mesh.get_uvs(self.indices[2]),
-                ]
-            } else {
-                [
-                    Vec2f { x: 0f32, y: 0f32 },
-                    Vec2f { x: 1f32, y: 0f32 },
-                    Vec2f { x: 1f32, y: 1f32 },
-                ]
-            }
+        if mesh.has_uvs() {
+            [
+                mesh.get_uvs(self.indices[0]),
+                mesh.get_uvs(self.indices[1]),
+                mesh.get_uvs(self.indices[2]),
+            ]
+        } else {
+            [
+                Vec2f { x: 0f32, y: 0f32 },
+                Vec2f { x: 1f32, y: 0f32 },
+                Vec2f { x: 1f32, y: 1f32 },
+            ]
         }
     }
 }

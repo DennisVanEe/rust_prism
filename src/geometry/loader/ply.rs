@@ -425,7 +425,6 @@ pub fn load_path(path: &str) -> SimpleResult<Mesh> {
         }
         // Convert it to just floats:
         unsafe { convert_vec::<VertexPos, f32>(vertices) }
-
     } else if !has_nrm && !has_tan && has_uv {
         let vertex_parser = parser::Parser::<VertexPosUV>::new();
         let mut vertices = Vec::new();
@@ -448,7 +447,6 @@ pub fn load_path(path: &str) -> SimpleResult<Mesh> {
         }
         // Convert it to just floats:
         unsafe { convert_vec::<VertexPosUV, f32>(vertices) }
-
     } else if has_nrm && !has_tan && !has_uv {
         let vertex_parser = parser::Parser::<VertexPosNrm>::new();
         let mut vertices = Vec::new();
@@ -471,7 +469,6 @@ pub fn load_path(path: &str) -> SimpleResult<Mesh> {
         }
         // Convert it to just floats:
         unsafe { convert_vec::<VertexPosNrm, f32>(vertices) }
-
     } else if has_nrm && !has_tan && has_uv {
         let vertex_parser = parser::Parser::<VertexPosNrmUV>::new();
         let mut vertices = Vec::new();
@@ -494,7 +491,6 @@ pub fn load_path(path: &str) -> SimpleResult<Mesh> {
         }
         // Convert it to just floats:
         unsafe { convert_vec::<VertexPosNrmUV, f32>(vertices) }
-
     } else if has_nrm && has_tan && !has_uv {
         let vertex_parser = parser::Parser::<VertexPosNrmTan>::new();
         let mut vertices = Vec::new();
@@ -517,7 +513,6 @@ pub fn load_path(path: &str) -> SimpleResult<Mesh> {
         }
         // Convert it to just floats:
         unsafe { convert_vec::<VertexPosNrmTan, f32>(vertices) }
-
     } else {
         let vertex_parser = parser::Parser::<VertexPosNrmTanUV>::new();
         let mut vertices = Vec::new();

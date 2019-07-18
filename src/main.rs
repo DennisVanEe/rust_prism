@@ -1,22 +1,44 @@
 mod geometry;
 mod math;
 
-use math::vector::Vec3f;
-use geometry::mesh::Mesh;
 use geometry::loader::ply;
+use geometry::mesh::{calc_rayintinfo, Mesh};
+use math::ray::Ray;
+use math::vector::Vec3f;
 
 fn main() {
     let mesh = ply::load_path("/home/dennis/Downloads/sphere.ply").unwrap();
 
-    let v0 = unsafe { mesh.get_pos(0u32) };
-    let v1 = unsafe { mesh.get_nrm(0u32) };
+    let org = Vec3f {
+        x: -2f32,
+        y: 0f32,
+        z: 0f32,
+    };
+    let dir = Vec3f {
+        x: -1f32,
+        y: 0f32,
+        z: 0f32,
+    };
+    let max_time = 100f32;
+    let time = 1.2f32;
+    let ray = Ray {
+        org,
+        dir,
+        max_time,
+        time,
+    };
+    let int_info = calc_rayintinfo(&ray);
 
-    let v2 = unsafe { mesh.get_pos(8u32) };
-    let v3 = unsafe { mesh.get_nrm(8u32) };
+    // Now let's try to intersect it:
+    let num_tris = mesh.num_tri();
+    for i in 0..num_tris {
+        let triangle = mesh.get_tri(i);
 
-    let v4 = unsafe { mesh.get_pos(mesh.num_vert() - 1) };
-    let v5 = unsafe { mesh.get_nrm(mesh.num_vert() - 1) };
+        if triangle.intersect_test(&ray, &int_info, &mesh) {
+            println!("intersection found!");
+            break;
+        }
+    }
 
-
-    println!("this is something {:?}, {:?}, {:?}, {:?}, {:?}, {:?}", v0, v1, v2, v3, v4, v5);
+    println!("end of line has been reached");
 }

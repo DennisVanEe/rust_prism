@@ -1,5 +1,5 @@
 use crate::math::vector::Vec3;
-use num_traits::Float;
+use num_traits::{Float, FromPrimitive};
 
 // This creates a coordinate system given only a single vector.
 pub fn coord_system<T: Float>(v1: Vec3<T>) -> (Vec3<T>, Vec3<T>) {
@@ -31,4 +31,17 @@ pub fn align<T: Float>(refv: Vec3<T>, vec: Vec3<T>) -> Vec3<T> {
     } else {
         vec
     }
+}
+
+// Used for error detection:
+pub fn gamma_f32(n: i32) -> f32 {
+    let n = n as f32;
+    let half_eps = std::f32::EPSILON / 2f32;
+    (n * half_eps) / (1f32 - n * half_eps)
+}
+
+pub fn gamma_f64(n: i64) -> f64 {
+    let n = n as f64;
+    let half_eps = std::f64::EPSILON / 2f64;
+    (n * half_eps) / (1f64 - n * half_eps)
 }

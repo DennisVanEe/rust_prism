@@ -1,7 +1,7 @@
 /// Defines a bunch of vector types and whatnot:
 // Needs to be signed to support negation.
 // Float is used to handle sqrt case and whatnot that may arise.
-use num_traits::{Float, Signed};
+use num_traits::{Float, Signed, Zero};
 
 use std::ops::{Add, Index, Mul, Neg, Sub};
 
@@ -19,6 +19,16 @@ pub struct Vec3<T: Copy> {
     pub x: T,
     pub y: T,
     pub z: T,
+}
+
+#[derive(Copy, Clone)]
+pub enum Vec3Perm {
+    XYZ,
+    XZY,
+    YXZ,
+    YZX,
+    ZXY,
+    ZYX,
 }
 
 pub type Vec3f = Vec3<f32>;
@@ -39,10 +49,19 @@ pub type Vec4i = Vec4<i32>;
 // Operations:
 
 impl<T: Signed + Copy> Vec2<T> {
-    pub fn abs(self) -> Vec2<T> {
+    pub fn abs(self) -> Self {
         Vec2 {
             x: self.x.abs(),
             y: self.y.abs(),
+        }
+    }
+}
+
+impl<T: Zero + Copy> Vec2<T> {
+    pub fn zero() -> Self {
+        Vec2 {
+            x: T::zero(),
+            y: T::zero(),
         }
     }
 }
@@ -52,7 +71,7 @@ impl<T: Mul<Output = T> + Add<Output = T> + Copy> Vec2<T> {
         self.x * o.x + self.y * o.y
     }
 
-    pub fn scale(self, s: T) -> Vec2<T> {
+    pub fn scale(self, s: T) -> Self {
         Vec2 {
             x: self.x * s,
             y: self.y * s,
@@ -80,18 +99,28 @@ impl<T: Float> Vec2<T> {
         self.length2().sqrt()
     }
 
-    pub fn normalize(self) -> Vec2<T> {
+    pub fn normalize(self) -> Self {
         let scale = T::one() / self.length();
         self.scale(scale)
     }
 }
 
 impl<T: Signed + Copy> Vec3<T> {
-    pub fn abs(self) -> Vec3<T> {
+    pub fn abs(self) -> Self {
         Vec3 {
             x: self.x.abs(),
             y: self.y.abs(),
             z: self.z.abs(),
+        }
+    }
+}
+
+impl<T: Zero + Copy> Vec3<T> {
+    pub fn zero() -> Self {
+        Vec3 {
+            x: T::zero(),
+            y: T::zero(),
+            z: T::zero(),
         }
     }
 }
@@ -101,7 +130,7 @@ impl<T: Mul<Output = T> + Add<Output = T> + Copy> Vec3<T> {
         self.x * o.x + self.y * o.y + self.z * o.z
     }
 
-    pub fn scale(self, s: T) -> Vec3<T> {
+    pub fn scale(self, s: T) -> Self {
         Vec3 {
             x: self.x * s,
             y: self.y * s,
@@ -116,7 +145,7 @@ impl<T: Mul<Output = T> + Add<Output = T> + Copy> Vec3<T> {
 
 // Only supported for vec3:
 impl<T: Mul<Output = T> + Sub<Output = T> + Copy> Vec3<T> {
-    pub fn cross(self, o: Vec3<T>) -> Vec3<T> {
+    pub fn cross(self, o: Vec3<T>) -> Self {
         let x = self.y * o.z - self.z * o.y;
         let y = self.z * o.x - self.x * o.z;
         let z = self.x * o.y - self.y * o.x;
@@ -129,7 +158,7 @@ impl<T: Float> Vec3<T> {
         self.length2().sqrt()
     }
 
-    pub fn normalize(self) -> Vec3<T> {
+    pub fn normalize(self) -> Self {
         let scale = T::one() / self.length();
         self.scale(scale)
     }
@@ -146,21 +175,61 @@ impl<T: PartialOrd + Copy> Vec3<T> {
         }
     }
 
-    pub fn permute(self, perm: u32) -> Vec3<T> {
+    pub fn permute(self, perm: Vec3Perm) -> Self {
         match perm {
-            8 /*xzy*/ => Vec3 { x: self.x, y: self.z, z: self.y },
-            5 /*yzx*/ => Vec3 { x: self.y, y: self.z, z: self.x },
-            9 /*yxz*/ => Vec3 { x: self.y, y: self.x, z: self.z },
-            4 /*zyx*/ => Vec3 { x: self.z, y: self.y, z: self.x },
-            6 /*zxy*/ => Vec3 { x: self.z, y: self.x, z: self.y },
-            10 /*xyz*/ => Vec3 { x: self.x, y: self.y, z: self.z },
-            _ => panic!("Invalid permutation value"),
+            Vec3Perm::XYZ => Vec3 {
+                x: self.x,
+                y: self.y,
+                z: self.z,
+            },
+            Vec3Perm::XZY => Vec3 {
+                x: self.x,
+                y: self.z,
+                z: self.y,
+            },
+            Vec3Perm::YXZ => Vec3 {
+                x: self.y,
+                y: self.x,
+                z: self.z,
+            },
+            Vec3Perm::YZX => Vec3 {
+                x: self.y,
+                y: self.z,
+                z: self.x,
+            },
+            Vec3Perm::ZXY => Vec3 {
+                x: self.z,
+                y: self.x,
+                z: self.y,
+            },
+            Vec3Perm::ZYX => Vec3 {
+                x: self.z,
+                y: self.y,
+                z: self.x,
+            },
+        }
+    }
+}
+
+impl Vec3Perm {
+    // Given a permutation, convert it to the proper enum:
+    pub fn new(x: usize, y: usize, z: usize) -> Vec3Perm {
+        let perm_code = x + 2 * y + 4 * z;
+        match perm_code {
+            8 /*xzy*/ => Vec3Perm::XZY,
+            5 /*yzx*/ => Vec3Perm::YZX,
+            9 /*yxz*/ => Vec3Perm::YXZ,
+            4 /*zyx*/ => Vec3Perm::ZYX,
+            6 /*zxy*/ => Vec3Perm::ZXY,
+            10 /*xyz*/ => Vec3Perm::XYZ,
+            // TODO: support more permutations:
+            _ => panic!("Invalid permutation number for Vec3"),
         }
     }
 }
 
 impl<T: Signed + Copy> Vec4<T> {
-    pub fn abs(self) -> Vec4<T> {
+    pub fn abs(self) -> Self {
         Vec4 {
             x: self.x.abs(),
             y: self.y.abs(),
@@ -170,12 +239,23 @@ impl<T: Signed + Copy> Vec4<T> {
     }
 }
 
+impl<T: Zero + Copy> Vec4<T> {
+    pub fn zero() -> Self {
+        Vec4 {
+            x: T::zero(),
+            y: T::zero(),
+            z: T::zero(),
+            w: T::zero(),
+        }
+    }
+}
+
 impl<T: Mul<Output = T> + Add<Output = T> + Copy> Vec4<T> {
     pub fn dot(self, o: Vec4<T>) -> T {
         self.x * o.x + self.y * o.y + self.z * o.z + self.w * o.w
     }
 
-    pub fn scale(self, s: T) -> Vec4<T> {
+    pub fn scale(self, s: T) -> Self {
         Vec4 {
             x: self.x * s,
             y: self.y * s,
@@ -194,7 +274,7 @@ impl<T: Float> Vec4<T> {
         self.length2().sqrt()
     }
 
-    pub fn normalize(self) -> Vec4<T> {
+    pub fn normalize(self) -> Self {
         let scale = T::one() / self.length();
         self.scale(scale)
     }
@@ -207,7 +287,7 @@ impl<T: Float> Vec4<T> {
 impl<T: Add<Output = T> + Copy> Add for Vec2<T> {
     type Output = Vec2<T>;
 
-    fn add(self, o: Vec2<T>) -> Vec2<T> {
+    fn add(self, o: Vec2<T>) -> Self {
         Vec2 {
             x: self.x + o.x,
             y: self.y + o.y,
@@ -218,7 +298,7 @@ impl<T: Add<Output = T> + Copy> Add for Vec2<T> {
 impl<T: Sub<Output = T> + Copy> Sub for Vec2<T> {
     type Output = Vec2<T>;
 
-    fn sub(self, o: Vec2<T>) -> Vec2<T> {
+    fn sub(self, o: Vec2<T>) -> Self {
         Vec2 {
             x: self.x - o.x,
             y: self.y - o.y,
@@ -229,7 +309,7 @@ impl<T: Sub<Output = T> + Copy> Sub for Vec2<T> {
 impl<T: Mul<Output = T> + Copy> Mul for Vec2<T> {
     type Output = Vec2<T>;
 
-    fn mul(self, o: Vec2<T>) -> Vec2<T> {
+    fn mul(self, o: Vec2<T>) -> Self {
         Vec2 {
             x: self.x * o.x,
             y: self.y * o.y,
@@ -252,7 +332,7 @@ impl<T: Copy> Index<usize> for Vec2<T> {
 impl<T: Neg<Output = T> + Copy> Neg for Vec2<T> {
     type Output = Vec2<T>;
 
-    fn neg(self) -> Vec2<T> {
+    fn neg(self) -> Self {
         Vec2 {
             x: -self.x,
             y: -self.y,
@@ -263,7 +343,7 @@ impl<T: Neg<Output = T> + Copy> Neg for Vec2<T> {
 impl<T: Add<Output = T> + Copy> Add for Vec3<T> {
     type Output = Vec3<T>;
 
-    fn add(self, o: Vec3<T>) -> Vec3<T> {
+    fn add(self, o: Vec3<T>) -> Self {
         Vec3 {
             x: self.x + o.x,
             y: self.y + o.y,
@@ -275,7 +355,7 @@ impl<T: Add<Output = T> + Copy> Add for Vec3<T> {
 impl<T: Sub<Output = T> + Copy> Sub for Vec3<T> {
     type Output = Vec3<T>;
 
-    fn sub(self, o: Vec3<T>) -> Vec3<T> {
+    fn sub(self, o: Vec3<T>) -> Self {
         Vec3 {
             x: self.x - o.x,
             y: self.y - o.y,
@@ -287,7 +367,7 @@ impl<T: Sub<Output = T> + Copy> Sub for Vec3<T> {
 impl<T: Signed + Copy> Mul for Vec3<T> {
     type Output = Vec3<T>;
 
-    fn mul(self, o: Vec3<T>) -> Vec3<T> {
+    fn mul(self, o: Vec3<T>) -> Self {
         Vec3 {
             x: self.x * o.x,
             y: self.y * o.y,
@@ -312,7 +392,7 @@ impl<T: Copy> Index<usize> for Vec3<T> {
 impl<T: Neg<Output = T> + Copy> Neg for Vec3<T> {
     type Output = Vec3<T>;
 
-    fn neg(self) -> Vec3<T> {
+    fn neg(self) -> Self {
         Vec3 {
             x: -self.x,
             y: -self.y,
@@ -324,7 +404,7 @@ impl<T: Neg<Output = T> + Copy> Neg for Vec3<T> {
 impl<T: Add<Output = T> + Copy> Add for Vec4<T> {
     type Output = Vec4<T>;
 
-    fn add(self, o: Vec4<T>) -> Vec4<T> {
+    fn add(self, o: Vec4<T>) -> Self {
         Vec4 {
             x: self.x + o.x,
             y: self.y + o.y,
@@ -337,7 +417,7 @@ impl<T: Add<Output = T> + Copy> Add for Vec4<T> {
 impl<T: Sub<Output = T> + Copy> Sub for Vec4<T> {
     type Output = Vec4<T>;
 
-    fn sub(self, o: Vec4<T>) -> Vec4<T> {
+    fn sub(self, o: Vec4<T>) -> Self {
         Vec4 {
             x: self.x - o.x,
             y: self.y - o.y,
@@ -350,7 +430,7 @@ impl<T: Sub<Output = T> + Copy> Sub for Vec4<T> {
 impl<T: Mul<Output = T> + Copy> Mul for Vec4<T> {
     type Output = Vec4<T>;
 
-    fn mul(self, o: Vec4<T>) -> Vec4<T> {
+    fn mul(self, o: Vec4<T>) -> Self {
         Vec4 {
             x: self.x * o.x,
             y: self.y * o.y,
@@ -377,7 +457,7 @@ impl<T: Copy> Index<usize> for Vec4<T> {
 impl<T: Neg<Output = T> + Copy> Neg for Vec4<T> {
     type Output = Vec4<T>;
 
-    fn neg(self) -> Vec4<T> {
+    fn neg(self) -> Self {
         Vec4 {
             x: -self.x,
             y: -self.y,
