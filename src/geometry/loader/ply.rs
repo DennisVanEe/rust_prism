@@ -7,8 +7,9 @@
 use ply_rs::{parser, ply};
 use simple_error::{bail, try_with, SimpleResult};
 
-use crate::geometry::mesh::{Mesh, Triangle};
+use crate::geometry::mesh::{Mesh, MeshData, Triangle};
 use crate::math::vector::{Vec2f, Vec3f};
+use crate::util::transmute_vec;
 
 use std::fs::File;
 use std::io::BufReader;
@@ -288,32 +289,11 @@ impl ply::PropertyAccess for Triangle {
     }
 }
 
-// This should be fine, I know what I'm doing...
-unsafe fn convert_vec<U, T>(mut src: Vec<U>) -> Vec<T> {
-    // First we extract everything we want:
-    let src_ptr = src.as_mut_ptr();
-    let src_len = src.len();
-    let src_cap = src.capacity();
-
-    let size_u = std::mem::size_of::<U>();
-    let size_t = std::mem::size_of::<T>();
-
-    // Get new length required here:
-    let src_len = (src_len * size_u) / size_t;
-
-    // "Forget" src so that we don't call the destructor on src (which would delete our memory)
-    std::mem::forget(src);
-    let src_ptr = std::mem::transmute::<*mut U, *mut T>(src_ptr);
-
-    // Construct the new vector:
-    Vec::from_raw_parts(src_ptr, src_len, src_cap)
-}
-
 /// Given a path, this function will load a mesh from a given PLY file.
 /// It is important to note that this is not a general PLY file loader, it will only support
 /// loading PLY files formatted in a specific way (though, most PLY files created by normal
 /// 3D software should work).
-pub fn load_path(path: &str) -> SimpleResult<Mesh> {
+pub fn load_path(path: &str) -> SimpleResult<(Mesh, MeshData)> {
     let file = try_with!(File::open(path), "problem when opening ply file: {}", path);
     let mut file = BufReader::new(file);
 
@@ -424,7 +404,7 @@ pub fn load_path(path: &str) -> SimpleResult<Mesh> {
             }
         }
         // Convert it to just floats:
-        unsafe { convert_vec::<VertexPos, f32>(vertices) }
+        unsafe { transmute_vec::<VertexPos, f32>(vertices) }
     } else if !has_nrm && !has_tan && has_uv {
         let vertex_parser = parser::Parser::<VertexPosUV>::new();
         let mut vertices = Vec::new();
@@ -446,7 +426,7 @@ pub fn load_path(path: &str) -> SimpleResult<Mesh> {
             }
         }
         // Convert it to just floats:
-        unsafe { convert_vec::<VertexPosUV, f32>(vertices) }
+        unsafe { transmute_vec::<VertexPosUV, f32>(vertices) }
     } else if has_nrm && !has_tan && !has_uv {
         let vertex_parser = parser::Parser::<VertexPosNrm>::new();
         let mut vertices = Vec::new();
@@ -468,7 +448,7 @@ pub fn load_path(path: &str) -> SimpleResult<Mesh> {
             }
         }
         // Convert it to just floats:
-        unsafe { convert_vec::<VertexPosNrm, f32>(vertices) }
+        unsafe { transmute_vec::<VertexPosNrm, f32>(vertices) }
     } else if has_nrm && !has_tan && has_uv {
         let vertex_parser = parser::Parser::<VertexPosNrmUV>::new();
         let mut vertices = Vec::new();
@@ -490,7 +470,7 @@ pub fn load_path(path: &str) -> SimpleResult<Mesh> {
             }
         }
         // Convert it to just floats:
-        unsafe { convert_vec::<VertexPosNrmUV, f32>(vertices) }
+        unsafe { transmute_vec::<VertexPosNrmUV, f32>(vertices) }
     } else if has_nrm && has_tan && !has_uv {
         let vertex_parser = parser::Parser::<VertexPosNrmTan>::new();
         let mut vertices = Vec::new();
@@ -512,7 +492,7 @@ pub fn load_path(path: &str) -> SimpleResult<Mesh> {
             }
         }
         // Convert it to just floats:
-        unsafe { convert_vec::<VertexPosNrmTan, f32>(vertices) }
+        unsafe { transmute_vec::<VertexPosNrmTan, f32>(vertices) }
     } else {
         let vertex_parser = parser::Parser::<VertexPosNrmTanUV>::new();
         let mut vertices = Vec::new();
@@ -534,9 +514,9 @@ pub fn load_path(path: &str) -> SimpleResult<Mesh> {
             }
         }
         // Convert it to just floats:
-        unsafe { convert_vec::<VertexPosNrmTanUV, f32>(vertices) }
+        unsafe { transmute_vec::<VertexPosNrmTanUV, f32>(vertices) }
     };
 
     // Great! Now we can go ahead and construct our damn mesh:
-    Ok(Mesh::new(triangles, vertices, has_nrm, has_tan, has_uv))
+    Ok((Mesh::new(triangles), MeshData::new(vertices, has_nrm, has_tan, has_uv)))
 }

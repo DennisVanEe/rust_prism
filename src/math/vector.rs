@@ -46,6 +46,10 @@ pub struct Vec4<T: Copy> {
 pub type Vec4f = Vec4<f32>;
 pub type Vec4i = Vec4<i32>;
 
+//
+// --------------------------------------------
+//
+
 // Operations:
 
 impl<T: Signed + Copy> Vec2<T> {
@@ -103,7 +107,48 @@ impl<T: Float> Vec2<T> {
         let scale = T::one() / self.length();
         self.scale(scale)
     }
+
+    // Floats have different min and max implementations as they are partially ordered:
+
+    pub fn min(self, o: Vec2<T>) -> Self {
+        Vec2 {
+            x: self.x.min(o.x),
+            y: self.x.min(o.y),
+            z: self.x.min(o.z),
+        }
+    }
+
+    pub fn max(self, o: Vec2<T>) -> Self {
+        Vec2 {
+            x: self.x.max(o.x),
+            y: self.x.max(o.y),
+            z: self.x.max(o.z),
+        }
+    }
 }
+
+// This is the min and max function for values that have total orderings:
+impl<T: Ord + Copy> Vec2<T> {
+    pub fn min(self, o: Vec2<T>) -> Self {
+        Vec2 {
+            x: self.x.min(o.x),
+            y: self.x.min(o.y),
+            z: self.x.min(o.z),
+        }
+    }
+
+    pub fn max(self, o: Vec2<T>) -> Self {
+        Vec2 {
+            x: self.x.max(o.x),
+            y: self.x.max(o.y),
+            z: self.x.max(o.z),
+        }
+    }
+}
+
+//
+// --------------------------------------------
+//
 
 impl<T: Signed + Copy> Vec3<T> {
     pub fn abs(self) -> Self {
@@ -111,6 +156,26 @@ impl<T: Signed + Copy> Vec3<T> {
             x: self.x.abs(),
             y: self.y.abs(),
             z: self.z.abs(),
+        }
+    }
+}
+
+impl<T: Signed + Copy> Vec3<T> {
+    // Returns a vec of bools indicating whether or 
+    // not the entry is positive or negative:
+    pub fn comp_wise_is_neg(self) -> Vec3<bool> {
+        Vec3 {
+            x: self.x.is_negative(),
+            y: self.y.is_negative(),
+            z: self.z.is_negative(),
+        }
+    }
+
+    pub fn comp_wise_is_pos(self) -> Vec3<bool> {
+        Vec3 {
+            x: self.x.is_positive(),
+            y: self.y.is_positive(),
+            z: self.z.is_positive(),
         }
     }
 }
@@ -161,6 +226,43 @@ impl<T: Float> Vec3<T> {
     pub fn normalize(self) -> Self {
         let scale = T::one() / self.length();
         self.scale(scale)
+    }
+
+    // Floats have different min and max implementations as they are partially ordered:
+
+    pub fn min(self, o: Vec3<T>) -> Self {
+        Vec3 {
+            x: self.x.min(o.x),
+            y: self.x.min(o.y),
+            z: self.x.min(o.z),
+        }
+    }
+
+    pub fn max(self, o: Vec3<T>) -> Self {
+        Vec3 {
+            x: self.x.max(o.x),
+            y: self.x.max(o.y),
+            z: self.x.max(o.z),
+        }
+    }
+}
+
+// This is the min and max function for values that have total orderings:
+impl<T: Ord + Copy> Vec3<T> {
+    pub fn min(self, o: Vec3<T>) -> Self {
+        Vec3 {
+            x: self.x.min(o.x),
+            y: self.x.min(o.y),
+            z: self.x.min(o.z),
+        }
+    }
+
+    pub fn max(self, o: Vec3<T>) -> Self {
+        Vec3 {
+            x: self.x.max(o.x),
+            y: self.x.max(o.y),
+            z: self.x.max(o.z),
+        }
     }
 }
 
@@ -227,6 +329,10 @@ impl Vec3Perm {
         }
     }
 }
+
+//
+// --------------------------------------------
+//
 
 impl<T: Signed + Copy> Vec4<T> {
     pub fn abs(self) -> Self {

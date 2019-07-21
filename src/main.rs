@@ -1,5 +1,6 @@
 mod geometry;
 mod math;
+mod util;
 
 use geometry::loader::ply;
 use geometry::mesh::{calc_rayintinfo, Mesh};

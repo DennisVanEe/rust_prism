@@ -1,9 +1,10 @@
 use crate::math::ray::Ray;
 use crate::math::util::{align, coord_system, gamma_f32};
 use crate::math::vector::{Vec2f, Vec3Perm, Vec3d, Vec3f};
+use crate::math::bbox::BBox3f;
 
-// Compact mesh storage that should be cache friendly:
-// (actually, the only reason I did it this way was because of the way mesh loading worked):
+// MeshData is the data associated with the mesh, they are separated for the
+// BVH structure.
 pub struct Mesh {
     tris: Vec<Triangle>,
     data: Vec<f32>,
@@ -30,7 +31,7 @@ impl Mesh {
         has_nrm: bool,
         has_tan: bool,
         has_uvs: bool,
-    ) -> Mesh {
+    ) -> Self {
         // Make sure that, if has_tan is true, has_nrm is also true:
         debug_assert!(has_nrm || (!has_nrm && !has_tan));
 
@@ -57,8 +58,20 @@ impl Mesh {
         }
     }
 
-    pub fn num_tri(&self) -> u32 {
+    pub fn num_tris(&self) -> u32 {
         self.tris.len() as u32
+    }
+
+    pub fn get_tri(&self, index: u32) -> Triangle {
+        unsafe {
+            *self.tris.get_unchecked(index as usize)
+        }
+    }
+
+    pub fn set_tri(&mut self, index: u32, tri: Triangle) {
+        unsafe {
+            *self.tris.get_unchecked_mut(index as usize) = tri;
+        }
     }
 
     pub fn num_vert(&self) -> u32 {
@@ -75,10 +88,6 @@ impl Mesh {
 
     pub fn has_uvs(&self) -> bool {
         self.has_uvs
-    }
-
-    pub fn get_tri(&self, index: u32) -> Triangle {
-        unsafe { *self.tris.get_unchecked(index as usize) }
     }
 
     pub fn get_pos(&self, index: u32) -> Vec3f {
@@ -641,6 +650,11 @@ impl Triangle {
             shading_dndu,
             shading_dndv,
         })
+    }
+
+    pub fn bound(&self), mesh: &Mesh) -> BBox3f {
+        let poss = self.get_poss(mesh);
+        
     }
 
     pub fn centroid(&self, mesh: &Mesh) -> Vec3f {
