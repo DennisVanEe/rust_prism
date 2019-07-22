@@ -1,7 +1,7 @@
+use crate::math::bbox::BBox3f;
 use crate::math::ray::Ray;
 use crate::math::util::{align, coord_system, gamma_f32};
 use crate::math::vector::{Vec2f, Vec3Perm, Vec3d, Vec3f};
-use crate::math::bbox::BBox3f;
 
 // MeshData is the data associated with the mesh, they are separated for the
 // BVH structure.
@@ -63,9 +63,7 @@ impl Mesh {
     }
 
     pub fn get_tri(&self, index: u32) -> Triangle {
-        unsafe {
-            *self.tris.get_unchecked(index as usize)
-        }
+        unsafe { *self.tris.get_unchecked(index as usize) }
     }
 
     pub fn set_tri(&mut self, index: u32, tri: Triangle) {
@@ -652,9 +650,9 @@ impl Triangle {
         })
     }
 
-    pub fn bound(&self), mesh: &Mesh) -> BBox3f {
+    pub fn bound(&self, mesh: &Mesh) -> BBox3f {
         let poss = self.get_poss(mesh);
-        
+        BBox3f::from_pnts(poss[0], poss[1]).combine_pnt(poss[2])
     }
 
     pub fn centroid(&self, mesh: &Mesh) -> Vec3f {

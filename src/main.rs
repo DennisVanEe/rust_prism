@@ -1,3 +1,5 @@
+#![feature(slice_partition_at_index)]
+
 mod geometry;
 mod math;
 mod util;
@@ -31,7 +33,7 @@ fn main() {
     let int_info = calc_rayintinfo(&ray);
 
     // Now let's try to intersect it:
-    let num_tris = mesh.num_tri();
+    let num_tris = mesh.num_tris();
     for i in 0..num_tris {
         let triangle = mesh.get_tri(i);
 

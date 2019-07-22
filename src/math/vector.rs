@@ -1,8 +1,11 @@
 /// Defines a bunch of vector types and whatnot:
 // Needs to be signed to support negation.
 // Float is used to handle sqrt case and whatnot that may arise.
+use crate::math::util::{max, min};
+
 use num_traits::{Float, Signed, Zero};
 
+use std::cmp::PartialOrd;
 use std::ops::{Add, Index, Mul, Neg, Sub};
 
 #[derive(Copy, Clone, Debug)]
@@ -95,10 +98,25 @@ impl<T: PartialOrd + Copy> Vec2<T> {
             1
         }
     }
+
+    // Returns the maximum elements of the vector:
+    pub fn max(self, o: Vec2<T>) -> Self {
+        Vec2 {
+            x: max(self.x, o.x),
+            y: max(self.y, o.y),
+        }
+    }
+
+    pub fn min(self, o: Vec2<T>) -> Self {
+        Vec2 {
+            x: min(self.x, o.x),
+            y: min(self.y, o.y),
+        }
+    }
 }
 
 // This is for operations that require a float (like a length function):
-impl<T: Float> Vec2<T> {
+impl<T: Float + Copy> Vec2<T> {
     pub fn length(self) -> T {
         self.length2().sqrt()
     }
@@ -107,48 +125,48 @@ impl<T: Float> Vec2<T> {
         let scale = T::one() / self.length();
         self.scale(scale)
     }
-
-    // Floats have different min and max implementations as they are partially ordered:
-
-    pub fn min(self, o: Vec2<T>) -> Self {
-        Vec2 {
-            x: self.x.min(o.x),
-            y: self.x.min(o.y),
-            z: self.x.min(o.z),
-        }
-    }
-
-    pub fn max(self, o: Vec2<T>) -> Self {
-        Vec2 {
-            x: self.x.max(o.x),
-            y: self.x.max(o.y),
-            z: self.x.max(o.z),
-        }
-    }
-}
-
-// This is the min and max function for values that have total orderings:
-impl<T: Ord + Copy> Vec2<T> {
-    pub fn min(self, o: Vec2<T>) -> Self {
-        Vec2 {
-            x: self.x.min(o.x),
-            y: self.x.min(o.y),
-            z: self.x.min(o.z),
-        }
-    }
-
-    pub fn max(self, o: Vec2<T>) -> Self {
-        Vec2 {
-            x: self.x.max(o.x),
-            y: self.x.max(o.y),
-            z: self.x.max(o.z),
-        }
-    }
 }
 
 //
 // --------------------------------------------
 //
+
+impl<T: Copy> Vec3<T> {
+    pub fn permute(self, perm: Vec3Perm) -> Self {
+        match perm {
+            Vec3Perm::XYZ => Vec3 {
+                x: self.x,
+                y: self.y,
+                z: self.z,
+            },
+            Vec3Perm::XZY => Vec3 {
+                x: self.x,
+                y: self.z,
+                z: self.y,
+            },
+            Vec3Perm::YXZ => Vec3 {
+                x: self.y,
+                y: self.x,
+                z: self.z,
+            },
+            Vec3Perm::YZX => Vec3 {
+                x: self.y,
+                y: self.z,
+                z: self.x,
+            },
+            Vec3Perm::ZXY => Vec3 {
+                x: self.z,
+                y: self.x,
+                z: self.y,
+            },
+            Vec3Perm::ZYX => Vec3 {
+                x: self.z,
+                y: self.y,
+                z: self.x,
+            },
+        }
+    }
+}
 
 impl<T: Signed + Copy> Vec3<T> {
     pub fn abs(self) -> Self {
@@ -161,7 +179,7 @@ impl<T: Signed + Copy> Vec3<T> {
 }
 
 impl<T: Signed + Copy> Vec3<T> {
-    // Returns a vec of bools indicating whether or 
+    // Returns a vec of bools indicating whether or
     // not the entry is positive or negative:
     pub fn comp_wise_is_neg(self) -> Vec3<bool> {
         Vec3 {
@@ -227,43 +245,6 @@ impl<T: Float> Vec3<T> {
         let scale = T::one() / self.length();
         self.scale(scale)
     }
-
-    // Floats have different min and max implementations as they are partially ordered:
-
-    pub fn min(self, o: Vec3<T>) -> Self {
-        Vec3 {
-            x: self.x.min(o.x),
-            y: self.x.min(o.y),
-            z: self.x.min(o.z),
-        }
-    }
-
-    pub fn max(self, o: Vec3<T>) -> Self {
-        Vec3 {
-            x: self.x.max(o.x),
-            y: self.x.max(o.y),
-            z: self.x.max(o.z),
-        }
-    }
-}
-
-// This is the min and max function for values that have total orderings:
-impl<T: Ord + Copy> Vec3<T> {
-    pub fn min(self, o: Vec3<T>) -> Self {
-        Vec3 {
-            x: self.x.min(o.x),
-            y: self.x.min(o.y),
-            z: self.x.min(o.z),
-        }
-    }
-
-    pub fn max(self, o: Vec3<T>) -> Self {
-        Vec3 {
-            x: self.x.max(o.x),
-            y: self.x.max(o.y),
-            z: self.x.max(o.z),
-        }
-    }
 }
 
 impl<T: PartialOrd + Copy> Vec3<T> {
@@ -277,38 +258,19 @@ impl<T: PartialOrd + Copy> Vec3<T> {
         }
     }
 
-    pub fn permute(self, perm: Vec3Perm) -> Self {
-        match perm {
-            Vec3Perm::XYZ => Vec3 {
-                x: self.x,
-                y: self.y,
-                z: self.z,
-            },
-            Vec3Perm::XZY => Vec3 {
-                x: self.x,
-                y: self.z,
-                z: self.y,
-            },
-            Vec3Perm::YXZ => Vec3 {
-                x: self.y,
-                y: self.x,
-                z: self.z,
-            },
-            Vec3Perm::YZX => Vec3 {
-                x: self.y,
-                y: self.z,
-                z: self.x,
-            },
-            Vec3Perm::ZXY => Vec3 {
-                x: self.z,
-                y: self.x,
-                z: self.y,
-            },
-            Vec3Perm::ZYX => Vec3 {
-                x: self.z,
-                y: self.y,
-                z: self.x,
-            },
+    pub fn min(self, o: Vec3<T>) -> Self {
+        Vec3 {
+            x: min(self.x, o.x),
+            y: min(self.y, o.y),
+            z: min(self.z, o.z),
+        }
+    }
+
+    pub fn max(self, o: Vec3<T>) -> Self {
+        Vec3 {
+            x: max(self.x, o.x),
+            y: max(self.y, o.y),
+            z: max(self.z, o.z),
         }
     }
 }

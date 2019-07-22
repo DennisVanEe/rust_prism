@@ -1,5 +1,8 @@
 use crate::math::vector::Vec3;
+
 use num_traits::{Float, FromPrimitive};
+
+use std::cmp::PartialOrd;
 
 // This creates a coordinate system given only a single vector.
 pub fn coord_system<T: Float>(v1: Vec3<T>) -> (Vec3<T>, Vec3<T>) {
@@ -44,4 +47,21 @@ pub fn gamma_f64(n: i64) -> f64 {
     let n = n as f64;
     let half_eps = std::f64::EPSILON / 2f64;
     (n * half_eps) / (1f64 - n * half_eps)
+}
+
+// Used for comparison between partial and non-partial items:
+pub fn min<T: PartialOrd>(v0: T, v1: T) -> T {
+    if v0 < v1 {
+        v0
+    } else {
+        v1
+    }
+}
+
+pub fn max<T: PartialOrd>(v0: T, v1: T) -> T {
+    if v0 > v1 {
+        v0
+    } else {
+        v1
+    }
 }

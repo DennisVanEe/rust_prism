@@ -7,7 +7,7 @@
 use ply_rs::{parser, ply};
 use simple_error::{bail, try_with, SimpleResult};
 
-use crate::geometry::mesh::{Mesh, MeshData, Triangle};
+use crate::geometry::mesh::{Mesh, Triangle};
 use crate::math::vector::{Vec2f, Vec3f};
 use crate::util::transmute_vec;
 
@@ -293,7 +293,7 @@ impl ply::PropertyAccess for Triangle {
 /// It is important to note that this is not a general PLY file loader, it will only support
 /// loading PLY files formatted in a specific way (though, most PLY files created by normal
 /// 3D software should work).
-pub fn load_path(path: &str) -> SimpleResult<(Mesh, MeshData)> {
+pub fn load_path(path: &str) -> SimpleResult<Mesh> {
     let file = try_with!(File::open(path), "problem when opening ply file: {}", path);
     let mut file = BufReader::new(file);
 
@@ -518,5 +518,5 @@ pub fn load_path(path: &str) -> SimpleResult<(Mesh, MeshData)> {
     };
 
     // Great! Now we can go ahead and construct our damn mesh:
-    Ok((Mesh::new(triangles), MeshData::new(vertices, has_nrm, has_tan, has_uv)))
+    Ok(Mesh::new(triangles, vertices, has_nrm, has_tan, has_uv))
 }

@@ -1,3 +1,3 @@
+pub mod bvh;
 pub mod loader;
 pub mod mesh;
-pub mod bvh;
