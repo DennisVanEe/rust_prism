@@ -135,23 +135,44 @@ where
         }
     }
 
-    pub fn corner(&self, i: usize) -> Vec3<T> {
-        let x = (*self)[i & 1].x;
-        let y = (*self)[if i & 2 != 0 { 1 } else { 0 }].y;
-        let z = (*self)[if i & 4 != 0 { 1 } else { 0 }].z;
+    pub fn corner(self, i: usize) -> Vec3<T> {
+        let x = self[i & 1].x;
+        let y = self[if i & 2 != 0 { 1 } else { 0 }].y;
+        let z = self[if i & 4 != 0 { 1 } else { 0 }].z;
         Vec3 { x, y, z }
     }
 
-    pub fn combine_pnt(&self, pnt: Vec3<T>) -> Self {
+    pub fn combine_pnt(self, pnt: Vec3<T>) -> Self {
         let pmin = self.pmin.min(pnt);
         let pmax = self.pmax.max(pnt);
         BBox3 { pmin, pmax }
     }
 
-    pub fn combine_bnd(&self, bnd: &BBox3<T>) -> Self {
+    pub fn combine_bnd(self, bnd: BBox3<T>) -> Self {
         let pmin = self.pmin.min(bnd.pmin);
         let pmax = self.pmax.max(bnd.pmax);
         BBox3 { pmin, pmax }
+    }
+}
+
+impl<T> BBox3<T> 
+    where T: Float + PartialOrd + Bounded + Copy 
+{
+    // Continious position of a point relative to the corners of the BBox.
+    // That is, if pnt is at pmin is (0,0,0), and if pnt is at pmax is (1,1,1)
+    pub fn offset(self, pnt: Vec3<T>) -> Vec3<T> {
+        let o = pnt - self.pmin;
+        Vec3 {
+            x: if self.pmax.x > self.pmin.x { o.x / (self.pmax.x - self.pmin.x) } else { o.x },
+            y: if self.pmax.y > self.pmin.y { o.y / (self.pmax.y - self.pmin.y) } else { o.y },
+            z: if self.pmax.z > self.pmin.z { o.z / (self.pmax.z - self.pmin.z) } else { o.z },
+        }
+    }
+
+    pub fn surface_area(self) -> T {
+        let d = self.diagonal();
+        // Not sure if there is a way to get a two, so 
+        (T::one() + T::one()) * (d.x * d.y + d.x * d.y + d.y * d.z)
     }
 }
 
