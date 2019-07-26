@@ -1,5 +1,3 @@
-#![feature(slice_partition_at_index)]
-
 mod geometry;
 mod math;
 mod util;

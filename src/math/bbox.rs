@@ -155,23 +155,36 @@ where
     }
 }
 
-impl<T> BBox3<T> 
-    where T: Float + PartialOrd + Bounded + Copy 
+impl<T> BBox3<T>
+where
+    T: Float + PartialOrd + Bounded + Copy,
 {
     // Continious position of a point relative to the corners of the BBox.
     // That is, if pnt is at pmin is (0,0,0), and if pnt is at pmax is (1,1,1)
     pub fn offset(self, pnt: Vec3<T>) -> Vec3<T> {
         let o = pnt - self.pmin;
         Vec3 {
-            x: if self.pmax.x > self.pmin.x { o.x / (self.pmax.x - self.pmin.x) } else { o.x },
-            y: if self.pmax.y > self.pmin.y { o.y / (self.pmax.y - self.pmin.y) } else { o.y },
-            z: if self.pmax.z > self.pmin.z { o.z / (self.pmax.z - self.pmin.z) } else { o.z },
+            x: if self.pmax.x > self.pmin.x {
+                o.x / (self.pmax.x - self.pmin.x)
+            } else {
+                o.x
+            },
+            y: if self.pmax.y > self.pmin.y {
+                o.y / (self.pmax.y - self.pmin.y)
+            } else {
+                o.y
+            },
+            z: if self.pmax.z > self.pmin.z {
+                o.z / (self.pmax.z - self.pmin.z)
+            } else {
+                o.z
+            },
         }
     }
 
     pub fn surface_area(self) -> T {
         let d = self.diagonal();
-        // Not sure if there is a way to get a two, so 
+        // Not sure if there is a way to get a two, so
         (T::one() + T::one()) * (d.x * d.y + d.x * d.y + d.y * d.z)
     }
 }
