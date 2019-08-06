@@ -7,7 +7,7 @@ use super::vector::Vec3;
 /// Transforms, being a massive 32 floats, can't be copied
 /// willy nilly. To do that you have to clone it.
 /// Transforms are always gauranteed to be invertible.
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug)]
 pub struct Transform {
     nrm: Mat4<f32>,
     inv: Mat4<f32>,

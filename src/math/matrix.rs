@@ -6,7 +6,7 @@ use super::vector::Vec3;
 use super::vector::Vec4;
 
 // Not copyable, as Matrices are expensive.
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug)]
 pub struct Mat4<T: Signed + Float> {
     m: [Vec4<T>; 4],
 }

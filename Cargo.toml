@@ -8,6 +8,7 @@ edition = "2018"
 num-traits = "0.2.8"
 ply-rs = "0.1.2"
 simple-error = "0.2.1"
+arrayvec = "0.4.11"
 
 # These are needed because rust doesn't have an implace partition
 # function or nth_element (in stable) function that I am aware of:

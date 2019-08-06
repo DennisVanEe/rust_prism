@@ -5,6 +5,7 @@ use crate::math::vector::{Vec2f, Vec3Perm, Vec3d, Vec3f};
 
 // MeshData is the data associated with the mesh, they are separated for the
 // BVH structure.
+#[derive(Clone, Debug)]
 pub struct Mesh {
     tris: Vec<Triangle>,
     data: Vec<f32>,
@@ -58,10 +59,48 @@ impl Mesh {
         }
     }
 
+    pub fn update_tris(&mut self, tris: Vec<Triangle>) {
+        self.tris = tris;
+    }
+
+    pub fn update_data(&mut self, data: Vec<f32>, has_nrm: bool, has_tan: bool, has_uvs: bool) {
+        // Make sure that, if has_tan is true, has_nrm is also true:
+        debug_assert!(has_nrm || (!has_nrm && !has_tan));
+
+        let has_nrm = if has_nrm { 0xffu8 } else { 0x00u8 };
+        let has_tan = if has_tan { 0xffu8 } else { 0x00u8 };
+
+        // Performs a logical right shift because it's unsigned:
+        // Always add 3 (the position information, which must always be present):
+        let num_prop = 3u8
+            + ((has_nrm >> 7u8) * 3u8)
+            + ((has_tan >> 7u8) * 3u8)
+            + if has_uvs { 2u8 } else { 0u8 };
+        // Down casts value, we are guaranteed it's a multiple:
+        let num_vert = (data.len() / (num_prop as usize)) as u32;
+
+        self.data = data;
+        self.has_nrm = has_nrm;
+        self.has_tan = has_tan;
+        self.has_uvs = has_uvs;
+        self.num_prop = num_prop;
+        self.num_vert = num_vert;
+    }
+
+    // Raw access to the data (can't modify):
+    pub fn get_tri_raw(&self) -> &Vec<Triangle> {
+        &self.tris
+    }
+
+    pub fn get_data_raw(&self) -> &Vec<f32> {
+        &self.data
+    }
+
     pub fn num_tris(&self) -> u32 {
         self.tris.len() as u32
     }
 
+    // Returns a single triangle:
     pub fn get_tri(&self, index: u32) -> Triangle {
         unsafe { *self.tris.get_unchecked(index as usize) }
     }
@@ -191,6 +230,7 @@ impl Mesh {
 
 // A struct that stores information about the intersection
 // of a mesh:
+#[derive(Clone, Copy, Debug)]
 pub struct Intersection {
     pub p: Vec3f,     // intersection point
     pub n: Vec3f,     // geometric normal (of triangle)
@@ -211,6 +251,7 @@ pub struct Intersection {
 }
 
 // Stores extra information used to speed up ray intersection calculations:
+#[derive(Clone, Copy)]
 pub struct RayIntInfo {
     shear: Vec3f,
     perm_dir: Vec3f,
@@ -219,7 +260,7 @@ pub struct RayIntInfo {
 
 // Given a ray, calculates the ray intersection information used for
 // efficient ray-triangle intersection.
-pub fn calc_rayintinfo(ray: &Ray) -> RayIntInfo {
+pub fn calc_rayintinfo(ray: Ray) -> RayIntInfo {
     let z = ray.dir.abs().max_dim();
     let x = if z == 2usize { 0usize } else { z + 1usize };
     let y = if x == 2usize { 0usize } else { x + 1usize };
@@ -248,7 +289,12 @@ pub struct Triangle {
 }
 
 impl Triangle {
-    pub fn intersect_test(&self, ray: &Ray, int_info: &RayIntInfo, mesh: &Mesh) -> bool {
+    // ray:      the ray that will intersect the triangle
+    // max_time: the maximum time that we will be considering (can prune early triangles)
+    // int_info: intersection info used to accelerate intersections
+    // mesh:     the mesh of the triangle that intersects it
+    // return    option with time where the intersection occurs.
+    pub fn intersect_test(&self, ray: Ray, max_time: f32, int_info: RayIntInfo, mesh: &Mesh) -> Option<f32> {
         let poss = self.get_poss(mesh);
 
         // // NOTE: if you decide to include this, dp is used somewhere else in the code
@@ -320,13 +366,13 @@ impl Triangle {
         if (e[0] < 0f32 || e[1] < 0f32 || e[2] < 0f32)
             && (e[0] > 0f32 || e[1] > 0f32 || e[2] > 0f32)
         {
-            return false;
+            return None;
         };
 
         let sum_e = e[0] + e[1] + e[2];
         // Checks if it's a degenerate triangle:
         if sum_e == 0f32 {
-            return false;
+            return None;
         };
 
         // Now we finish transforming the z value:
@@ -351,10 +397,10 @@ impl Triangle {
         let time_scaled = e[0] * pt[0].z + e[1] * pt[1].z + e[2] * pt[2].z;
 
         // Now check if the sign of sum is different from the sign of tScaled, it it is, then no good:
-        if (sum_e < 0f32 && (time_scaled >= 0f32 || time_scaled < ray.max_time * sum_e))
-            || (sum_e > 0f32 && (time_scaled <= 0f32 || time_scaled > ray.max_time * sum_e))
+        if (sum_e < 0f32 && (time_scaled >= 0f32 || time_scaled < max_time * sum_e))
+            || (sum_e > 0f32 && (time_scaled <= 0f32 || time_scaled > max_time * sum_e))
         {
-            return false;
+            return None;
         };
 
         let inv_sum_e = 1f32 / sum_e;
@@ -381,10 +427,14 @@ impl Triangle {
             * (gamma_f32(3) * max_e * max_z + delta_e * max_z + delta_z * max_e)
             * inv_sum_e.abs();
 
-        time > delta_t
+        if time > delta_t {
+            Some(time)
+        } else {
+            None
+        }
     }
 
-    pub fn intersect(&self, ray: &Ray, int_info: &RayIntInfo, mesh: &Mesh) -> Option<Intersection> {
+    pub fn intersect(&self, ray: Ray, max_time: f32, int_info: RayIntInfo, mesh: &Mesh) -> Option<Intersection> {
         let poss = self.get_poss(mesh);
 
         // // NOTE: if you decide to include this, dp is used somewhere else in the code
@@ -487,8 +537,8 @@ impl Triangle {
         let time_scaled = e[0] * pt[0].z + e[1] * pt[1].z + e[2] * pt[2].z;
 
         // Now check if the sign of sum is different from the sign of tScaled, it it is, then no good:
-        if (sum_e < 0f32 && (time_scaled >= 0f32 || time_scaled < ray.max_time * sum_e))
-            || (sum_e > 0f32 && (time_scaled <= 0f32 || time_scaled > ray.max_time * sum_e))
+        if (sum_e < 0f32 && (time_scaled >= 0f32 || time_scaled < max_time * sum_e))
+            || (sum_e > 0f32 && (time_scaled <= 0f32 || time_scaled > max_time * sum_e))
         {
             return None;
         };

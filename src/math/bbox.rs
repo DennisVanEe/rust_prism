@@ -2,7 +2,7 @@ use crate::math::ray::Ray;
 use crate::math::util::gamma_f32;
 use crate::math::vector::{Vec2, Vec3, Vec3f};
 
-use num_traits::{Bounded, Float, Signed, Zero};
+use num_traits::{Bounded, Float};
 
 use std::cmp::PartialOrd;
 use std::mem::swap;
@@ -192,9 +192,9 @@ where
 // Because intersections are always done with f32, we only implement the intersection
 // algorithm for BBox3s that are made up of floats:
 impl BBox3<f32> {
-    pub fn intersect(&self, ray: &Ray) -> Option<(f32, f32)> {
+    pub fn intersect(&self, ray: Ray, max_time: f32) -> Option<(f32, f32)> {
         let mut t0 = 0f32;
-        let mut t1 = ray.max_time;
+        let mut t1 = max_time;
 
         for i in 0..3 {
             let inv_dir = 1f32 / ray.dir[i];
@@ -215,7 +215,7 @@ impl BBox3<f32> {
         Some((t0, t1))
     }
 
-    pub fn intersect_test(&self, ray: &Ray, inv_dir: Vec3f, is_dir_neg: Vec3<bool>) -> bool {
+    pub fn intersect_test(&self, ray: Ray, max_time: f32, inv_dir: Vec3f, is_dir_neg: Vec3<bool>) -> Option<f32> {
         // Use as indices:
         let i_dir_neg = [
             usize::from(is_dir_neg.x),
@@ -233,7 +233,7 @@ impl BBox3<f32> {
         let ty_max = ty_max * (1f32 + 2f32 * gamma_f32(3));
 
         if t_min > ty_max || ty_min > t_max {
-            return false;
+            return None;
         }
 
         let t_min = if ty_min > t_min { ty_min } else { t_min };
@@ -244,13 +244,17 @@ impl BBox3<f32> {
 
         let tz_max = tz_max * (1f32 + 2f32 * gamma_f32(3));
         if t_min > tz_max || tz_min > t_max {
-            return false;
+            return None;
         }
 
         let t_min = if tz_min > t_min { tz_min } else { t_min };
         let t_max = if tz_max < t_max { tz_max } else { t_max };
 
-        t_min < ray.max_time && t_max > 0f32
+        if t_min < max_time && t_max > 0f32 {
+            Some(t_min)
+        } else {
+            None
+        }
     }
 }
 

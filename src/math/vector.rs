@@ -6,7 +6,7 @@ use crate::math::util::{max, min};
 use num_traits::{Float, Signed, Zero};
 
 use std::cmp::PartialOrd;
-use std::ops::{Add, Index, Mul, Neg, Sub};
+use std::ops::{Add, Index, Mul, Div, Neg, Sub};
 
 #[derive(Copy, Clone, Debug)]
 pub struct Vec2<T: Copy> {
@@ -208,11 +208,22 @@ impl<T: Zero + Copy> Vec3<T> {
     }
 }
 
-impl<T: Mul<Output = T> + Add<Output = T> + Copy> Vec3<T> {
+impl<T> Vec3<T> 
+    where T: Mul<Output = T> + Add<Output = T> + Copy
+{
     pub fn dot(self, o: Vec3<T>) -> T {
         self.x * o.x + self.y * o.y + self.z * o.z
     }
 
+    pub fn length2(self) -> T {
+        self.dot(self)
+    }
+}
+
+impl<T> Vec3<T>
+    where T: Mul<Output = T> + Copy
+{
+    // Scales the components by a scalar:
     pub fn scale(self, s: T) -> Self {
         Vec3 {
             x: self.x * s,
@@ -220,9 +231,18 @@ impl<T: Mul<Output = T> + Add<Output = T> + Copy> Vec3<T> {
             z: self.z * s,
         }
     }
+}
 
-    pub fn length2(self) -> T {
-        self.dot(self)
+impl<T> Vec3<T> 
+    where T: Div<Output = T> + Copy 
+{
+    // The inverse of scaling (s / vec):
+    pub fn inv_scale(self, s: T) -> Self {
+        Vec3 {
+            x: s / self.x,
+            y: s / self.y,
+            z: s / self.z,
+        }
     }
 }
 
