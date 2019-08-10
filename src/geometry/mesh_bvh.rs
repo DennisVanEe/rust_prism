@@ -1,13 +1,14 @@
 // The BVH is used to efficiently intersect the mesh.
 
-use crate::geometry::mesh::{Mesh, Triangle, RayIntInfo, Intersection};
+use crate::geometry::mesh::{Intersection, Mesh, RayIntInfo, Triangle};
 use crate::math::bbox::BBox3f;
-use crate::math::vector::Vec3f;
 use crate::math::ray::Ray;
+use crate::math::vector::Vec3f;
+use crate::memory::stack_alloc::StackAlloc;
 
+use arrayvec::ArrayVec;
 use order_stat::kth_by;
 use partition::partition;
-use arrayvec::ArrayVec;
 
 pub struct MeshBVH {
     mesh: Mesh,                    // The mesh of the BVH (the BVH owns the mesh)
@@ -22,18 +23,21 @@ impl MeshBVH {
     // MeshBVH Public Interface
     //
 
-    // Constructs a BVH given a mesh and the number of nodes:
+    // Constructs a BVH given a mesh and the max number of triangles per leaf node.
+    // The BVH will become the owner of the mesh when doing this.
     pub fn new(mesh: Mesh, max_tri_per_node: u32) -> Self {
-        // First we construct information about the triangles:
-        let mut tris_info = Vec::with_capacity(mesh.num_tris() as usize);
-        for i in 0..mesh.num_tris() {
+        // First we record any triangle information we may need:
+        let tris_raw = mesh.get_tri_raw();
+        let mut tris_info = Vec::with_capacity(tris_raw.len());
+        for (i, tri) in tris_raw.iter().enumerate() {
             tris_info.push(TriangleInfo {
-                tri_index: i,
-                centroid: mesh.get_tri(i).centroid(&mesh),
-                bound: mesh.get_tri(i).bound(&mesh),
+                tri_index: i as u32,
+                centroid: tri.centroid(&mesh),
+                bound: tri.bound(&mesh),
             });
         }
 
+        // Now we can go ahead and construct the tree:
         Self::construct_tree(mesh, tris_info, max_tri_per_node)
     }
 
@@ -54,7 +58,10 @@ impl MeshBVH {
         let mut curr_node_index = 0usize;
         loop {
             // We don't care where our ray intersects in time:
-            if let Some(_) = curr_node.bound.intersect_test(ray, max_time, inv_dir, is_dir_neg) {
+            if let Some(_) = curr_node
+                .bound
+                .intersect_test(ray, max_time, inv_dir, is_dir_neg)
+            {
                 // Check if it is a leaf node (and thus, we can traverse the nodes):
                 if curr_node.num_tri > 0 {
                     // Traverse over the triangles we want to check an intersection for:
@@ -76,19 +83,23 @@ impl MeshBVH {
                     } as usize;
                     // We can do this because we are guaranteed the algorithm works:
                     curr_node = unsafe { *self.linear_nodes.get_unchecked(curr_node_index) };
-    
                 } else {
                     // Check which child it's most likely to be:
                     if is_dir_neg[curr_node.split_axis as usize] {
                         // Push the first child onto the stack to perform later:
-                        node_index_stack.push(curr_node_index + 1); 
+                        node_index_stack.push(curr_node_index + 1);
                         // Get the second child (unsafe because it's gauranteed to work):
-                        curr_node = unsafe { *self.linear_nodes.get_unchecked(curr_node.tri_index as usize) };
+                        curr_node = unsafe {
+                            *self
+                                .linear_nodes
+                                .get_unchecked(curr_node.tri_index as usize)
+                        };
                     } else {
                         // Push the second child onto the stack to perform later:
                         node_index_stack.push(curr_node.tri_index as usize);
                         // Get the first child (unsafe because it's gauranteed to work):
-                        curr_node = unsafe { *self.linear_nodes.get_unchecked(curr_node_index + 1) };
+                        curr_node =
+                            unsafe { *self.linear_nodes.get_unchecked(curr_node_index + 1) };
                     }
                 }
             } else {
@@ -105,7 +116,12 @@ impl MeshBVH {
         None
     }
 
-    pub fn intersect(&self, mut max_time: f32, ray: Ray, int_info: RayIntInfo) -> Option<Intersection> {
+    pub fn intersect(
+        &self,
+        mut max_time: f32,
+        ray: Ray,
+        int_info: RayIntInfo,
+    ) -> Option<Intersection> {
         let mut curr_node = match self.linear_nodes.first() {
             Some(&val) => val,
             None => return None,
@@ -123,7 +139,10 @@ impl MeshBVH {
         let mut intersection = None;
         loop {
             // We don't care where our ray intersects in time:
-            if let Some(_) = curr_node.bound.intersect_test(ray, max_time, inv_dir, is_dir_neg) {
+            if let Some(_) = curr_node
+                .bound
+                .intersect_test(ray, max_time, inv_dir, is_dir_neg)
+            {
                 // Check if it is a leaf node (and thus, we can traverse the nodes):
                 if curr_node.num_tri > 0 {
                     // Traverse over the triangles we want to check an intersection for:
@@ -147,19 +166,23 @@ impl MeshBVH {
                     } as usize;
                     // We can do this because we are guaranteed the algorithm works:
                     curr_node = unsafe { *self.linear_nodes.get_unchecked(curr_node_index) };
-    
                 } else {
                     // Check which child it's most likely to be:
                     if is_dir_neg[curr_node.split_axis as usize] {
                         // Push the first child onto the stack to perform later:
-                        node_index_stack.push(curr_node_index + 1); 
+                        node_index_stack.push(curr_node_index + 1);
                         // Get the second child (unsafe because it's gauranteed to work):
-                        curr_node = unsafe { *self.linear_nodes.get_unchecked(curr_node.tri_index as usize) };
+                        curr_node = unsafe {
+                            *self
+                                .linear_nodes
+                                .get_unchecked(curr_node.tri_index as usize)
+                        };
                     } else {
                         // Push the second child onto the stack to perform later:
                         node_index_stack.push(curr_node.tri_index as usize);
                         // Get the first child (unsafe because it's gauranteed to work):
-                        curr_node = unsafe { *self.linear_nodes.get_unchecked(curr_node_index + 1) };
+                        curr_node =
+                            unsafe { *self.linear_nodes.get_unchecked(curr_node_index + 1) };
                     }
                 }
             } else {
@@ -177,17 +200,18 @@ impl MeshBVH {
         intersection
     }
 
-    //
-    // MeshBVH Private Functions:
-    //
-
+    // Given a mesh, triangle info (as passed by new), and the number of triangles per node,
+    // construct a tree:
     fn construct_tree(
         mut mesh: Mesh,
         mut tris_info: Vec<TriangleInfo>,
         max_tri_per_node: u32,
     ) -> Self {
-        let mut tree_nodes = Vec::new();
-        // The new triangles that will replace the ones in Mesh:
+        // It would probably make more sense to create a better allocator for nodes then by doing
+        // it this way, that way we could maintain pointers instead.
+        let mut allocator = StackAlloc::new(32768);
+        // The new triangles that will replace the ones in Mesh (they will be ordered
+        // in the correct manner):
         let mut new_tris = Vec::with_capacity(mesh.num_tris() as usize);
 
         // Construct the regular tree first:
@@ -196,16 +220,16 @@ impl MeshBVH {
             &mesh,
             &mut tris_info,
             &mut new_tris,
-            &mut tree_nodes,
+            &mut allocator,
         );
 
         // Now construct the linear tree (which should be more efficient):
         // We already know how many nodes we will be allocating:
-        let mut linear_nodes = Vec::with_capacity(tree_nodes.len());
+        let mut linear_nodes = Vec::with_capacity(allocator.get_num_alloc());
         // Use the new triangles in their better position:
         mesh.update_tris(new_tris);
         // Create the linear nodes:
-        Self::flatten_tree(&mut linear_nodes, &tree_nodes, &tree_nodes[root_node]);
+        //Self::flatten_tree(&mut linear_nodes, root_node);
         MeshBVH { mesh, linear_nodes }
     }
 
@@ -214,11 +238,10 @@ impl MeshBVH {
     // the sense that they are contigiously in memory).
     fn flatten_tree(
         linear_nodes: &mut Vec<LinearNode>,
-        tree_nodes: &[TreeNode],
         curr_tree_node: &TreeNode,
     ) -> usize {
-        // A leaf node:
         match curr_tree_node.children {
+            // There are no children, so it must be a leaf:
             None => {
                 linear_nodes.push(LinearNode::create_leaf(
                     curr_tree_node.tri_index,
@@ -227,6 +250,7 @@ impl MeshBVH {
                 ));
                 linear_nodes.len() - 1
             }
+            // There are children, so it must be a leaf:
             Some((left_child, right_child)) => {
                 let curr_pos = linear_nodes.len();
                 linear_nodes.push(LinearNode::create_interior(
@@ -234,9 +258,9 @@ impl MeshBVH {
                     0,
                     curr_tree_node.bound,
                 ));
-                Self::flatten_tree(linear_nodes, tree_nodes, &tree_nodes[left_child as usize]);
+                Self::flatten_tree(linear_nodes, left_child);
                 linear_nodes[curr_pos].tri_index =
-                    Self::flatten_tree(linear_nodes, tree_nodes, &tree_nodes[right_child as usize])
+                    Self::flatten_tree(linear_nodes, right_child)
                         as u32;
                 curr_pos
             }
@@ -246,13 +270,13 @@ impl MeshBVH {
     // Recursively constructs the tree:
     // Returns the index of the node created in the next call, that node will be on the vector
     // That one passes to it.
-    fn recursive_construct_tree(
-        max_tri_per_node: u32,          // The maximum number of triangles per node.
-        mesh: &Mesh,                    // The mesh we are currently constructing a BVH for.
-        tri_infos: &mut [TriangleInfo], // The current slice of triangles we are working on.
-        new_tris: &mut Vec<Triangle>,   // The correct order for the new triangles we care about.
-        tree_nodes: &mut Vec<TreeNode>, // Where we allocate tree nodes onto (won't need this memory in final form).
-    ) -> usize {
+    fn recursive_construct_tree<'a>(
+        max_tri_per_node: u32,                 // The maximum number of triangles per node.
+        mesh: &Mesh,                           // The mesh we are currently constructing a BVH for.
+        tri_infos: &mut [TriangleInfo],        // The current slice of triangles we are working on.
+        new_tris: &mut Vec<Triangle>,          // The correct order for the new triangles we care about.
+        allocator: &'a mut StackAlloc<TreeNode<'a>>,  // Allocator used to allocate the nodes.
+    ) -> &'a TreeNode<'a> {
         // A bound over all of the triangles we are currently working with:
         let all_bound = tri_infos.iter().fold(BBox3f::new(), |all_bound, tri_info| {
             all_bound.combine_bnd(tri_info.bound)
@@ -260,12 +284,11 @@ impl MeshBVH {
 
         // If we only have one triangle, make a leaf:
         if tri_infos.len() == 1 {
-            tree_nodes.push(TreeNode::create_leaf(all_bound, new_tris.len() as u32, 1));
             new_tris.push(mesh.get_tri(tri_infos[0].tri_index));
-            return tree_nodes.len() - 1;
+            return allocator.push(TreeNode::create_leaf(all_bound, (new_tris.len() - 1) as u32, 1));
         }
 
-        // Otherwise, we may have to perform some splitting:
+        // Otherwise, we want to split the tree into smaller parts:
 
         // The bound covering all of the centroids (used for SAH BVH construction):
         let centroid_bound = tri_infos
@@ -284,12 +307,12 @@ impl MeshBVH {
             for tri_info in tri_infos.iter() {
                 new_tris.push(mesh.get_tri(tri_info.tri_index));
             }
-            tree_nodes.push(TreeNode::create_leaf(
+            // Allocate the a new leaf node and push it:
+            return allocator.push(TreeNode::create_leaf(
                 all_bound,
                 curr_tri_index,
                 tri_infos.len() as u32,
             ));
-            return tree_nodes.len() - 1;
         }
 
         // Figure out how to split the elements:
@@ -304,7 +327,6 @@ impl MeshBVH {
                     .partial_cmp(&tri_info1.centroid[max_dim])
                     .unwrap()
             });
-
             // Split the array:
             tri_infos.split_at_mut(mid)
         } else {
@@ -389,12 +411,11 @@ impl MeshBVH {
                 for tri_info in tri_infos.iter() {
                     new_tris.push(mesh.get_tri(tri_info.tri_index));
                 }
-                tree_nodes.push(TreeNode::create_leaf(
+                return allocator.push(TreeNode::create_leaf(
                     all_bound,
                     curr_tri_index,
                     tri_infos.len() as u32,
                 ));
-                return tree_nodes.len() - 1;
             }
         };
 
@@ -404,25 +425,22 @@ impl MeshBVH {
             mesh,
             tri_infos_left,
             new_tris,
-            tree_nodes,
+            allocator,
         );
         let right_node = Self::recursive_construct_tree(
             max_tri_per_node,
             mesh,
             tri_infos_right,
             new_tris,
-            tree_nodes,
+            allocator,
         );
 
         // Create a node and push it on:
-        tree_nodes.push(TreeNode::create_interior(
+        allocator.push(TreeNode::create_interior(
             max_dim as u8,
-            left_node as u32,
-            right_node as u32,
-        ));
-
-        // The interior node we just created can go right here:
-        tree_nodes.len() - 1
+            left_node,
+            right_node,
+        ))
     }
 }
 
@@ -467,20 +485,20 @@ struct Bucket {
     pub bound: BBox3f,
 }
 
-// Nodes used in the tree when constructing the MeshBVH. These nodes aren't used
-// in the final representation of the tree.
+// This is a node used for the "unflattened" tree.
 #[derive(Clone, Copy)]
-struct TreeNode {
+struct TreeNode<'a> {
     pub bound: BBox3f,
     // children that index into the nodes vector
-    pub children: Option<(u32, u32)>,
+    pub children: Option<(&'a TreeNode<'a>, &'a TreeNode<'a>)>,
 
+    // index into the triangle array now used:
     pub tri_index: u32,
     pub num_tri: u32,
     pub split_axis: u8,
 }
 
-impl TreeNode {
+impl<'a> TreeNode<'a> {
     // Simple stuff we care about:
     pub fn create_leaf(bound: BBox3f, tri_index: u32, num_tri: u32) -> Self {
         TreeNode {
@@ -492,19 +510,18 @@ impl TreeNode {
         }
     }
 
-    pub fn create_interior(split_axis: u8, left: u32, right: u32) -> Self {
+    pub fn create_interior(split_axis: u8, left: &'a TreeNode<'a>, right: &'a TreeNode<'a>) -> Self {
         TreeNode {
             split_axis,
             children: Some((left, right)),
-            bound: BBox3f::new(),
+            bound: left.bound.combine_bnd(right.bound),
             tri_index: 0,
             num_tri: 0,
         }
     }
 }
 
-// Internally used structure that represents information about a triangle
-// (we only use this temporarily):
+// Structure used to construct the BVH:
 #[derive(Clone, Copy)]
 struct TriangleInfo {
     pub tri_index: u32,

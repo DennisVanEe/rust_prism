@@ -1,6 +1,7 @@
 mod geometry;
 mod math;
 mod util;
+mod memory;
 
 use geometry::loader::ply;
 use geometry::mesh::{calc_rayintinfo, Mesh};
@@ -9,7 +10,8 @@ use math::ray::Ray;
 use math::vector::Vec3f;
 
 fn main() {
-    let mesh = ply::load_path("E:/Development/cpp_projects/prism/Prism/test_files/sphere.ply").unwrap();
+    let mesh =
+        ply::load_path("E:/Development/cpp_projects/prism/Prism/test_files/sphere.ply").unwrap();
 
     let org = Vec3f {
         x: 0f32,
@@ -22,10 +24,7 @@ fn main() {
         z: 0f32,
     };
     let max_time = 100f32;
-    let ray = Ray {
-        org,
-        dir,
-    };
+    let ray = Ray { org, dir };
     let int_info = calc_rayintinfo(ray);
 
     // Now let's try to intersect it:

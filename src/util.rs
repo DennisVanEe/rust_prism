@@ -21,3 +21,11 @@ pub unsafe fn transmute_vec<U, T>(mut src: Vec<U>) -> Vec<T> {
     // Construct the new vector:
     Vec::from_raw_parts(src_ptr, src_len, src_cap)
 }
+
+// Allocates an array of UNINITIALIZED data:
+pub unsafe fn alloc_array<T: Sized>(len: usize) -> Box<[T]> {
+    // Allocate the space using vector (I know I know...)
+    let mut array = Vec::with_capacity(len);
+    array.set_len(len);
+    array.into_boxed_slice()
+}

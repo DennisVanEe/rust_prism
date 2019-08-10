@@ -215,7 +215,13 @@ impl BBox3<f32> {
         Some((t0, t1))
     }
 
-    pub fn intersect_test(&self, ray: Ray, max_time: f32, inv_dir: Vec3f, is_dir_neg: Vec3<bool>) -> Option<f32> {
+    pub fn intersect_test(
+        &self,
+        ray: Ray,
+        max_time: f32,
+        inv_dir: Vec3f,
+        is_dir_neg: Vec3<bool>,
+    ) -> Option<f32> {
         // Use as indices:
         let i_dir_neg = [
             usize::from(is_dir_neg.x),

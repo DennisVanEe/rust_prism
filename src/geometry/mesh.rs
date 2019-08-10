@@ -294,7 +294,13 @@ impl Triangle {
     // int_info: intersection info used to accelerate intersections
     // mesh:     the mesh of the triangle that intersects it
     // return    option with time where the intersection occurs.
-    pub fn intersect_test(&self, ray: Ray, max_time: f32, int_info: RayIntInfo, mesh: &Mesh) -> Option<f32> {
+    pub fn intersect_test(
+        &self,
+        ray: Ray,
+        max_time: f32,
+        int_info: RayIntInfo,
+        mesh: &Mesh,
+    ) -> Option<f32> {
         let poss = self.get_poss(mesh);
 
         // // NOTE: if you decide to include this, dp is used somewhere else in the code
@@ -434,7 +440,13 @@ impl Triangle {
         }
     }
 
-    pub fn intersect(&self, ray: Ray, max_time: f32, int_info: RayIntInfo, mesh: &Mesh) -> Option<Intersection> {
+    pub fn intersect(
+        &self,
+        ray: Ray,
+        max_time: f32,
+        int_info: RayIntInfo,
+        mesh: &Mesh,
+    ) -> Option<Intersection> {
         let poss = self.get_poss(mesh);
 
         // // NOTE: if you decide to include this, dp is used somewhere else in the code
@@ -710,7 +722,8 @@ impl Triangle {
         (poss[0] + poss[1] + poss[2]).scale(1f32 / 3f32)
     }
 
-    // Might make unsafe if it improves performance:
+    // All of these are marked as unsafe because we always assume that the
+    // mesh objects are created with correct triangle informations:
 
     fn get_poss(&self, mesh: &Mesh) -> [Vec3f; 3] {
         unsafe {
