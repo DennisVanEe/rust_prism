@@ -10,8 +10,7 @@ use math::ray::Ray;
 use math::vector::Vec3f;
 
 fn main() {
-    let mesh =
-        ply::load_path("C:/Users/jan/Downloads/sphere.ply").unwrap();
+    let mesh = ply::load_path("C:/Users/jan/Downloads/sphere.ply").unwrap();
 
     let org = Vec3f {
         x: 0f32,

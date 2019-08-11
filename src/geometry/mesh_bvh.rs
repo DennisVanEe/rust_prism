@@ -44,156 +44,154 @@ impl MeshBVH {
             None => return None,
         };
 
-        // Some values we would need before we start:
         let inv_dir = ray.dir.inv_scale(1f32);
         let is_dir_neg = ray.dir.comp_wise_is_neg();
 
-        // We could do this recursively, but a loop is more efficient in this case:
-
-        // This is the stack used to traverse the tree:
+        // This is the stack used to traverse the tree (it's set to 64, not sure
+        // if we should do anything if it goes deeper):
         let mut node_index_stack = ArrayVec::<[usize; 64]>::new();
         let mut curr_node_index = 0usize;
         loop {
-            // We don't care where our ray intersects in time:
+            // First we check for an intersection:
             if let Some(_) = curr_node
                 .bound
                 .intersect_test(ray, max_time, inv_dir, is_dir_neg)
             {
-                // Check if it is a leaf node (and thus, we can traverse the nodes):
-                if curr_node.num_tri > 0 {
-                    // Traverse over the triangles we want to check an intersection for:
-                    let begin = curr_node.tri_index as usize;
-                    let end = begin + (curr_node.num_tri as usize);
-                    let triangles = &self.mesh.get_tri_raw()[begin..end];
+                match curr_node.kind {
+                    LinearNodeKind::Leaf { tri_index, num_tri } => {
+                        let tri_start = tri_index as usize;
+                        let tri_end = tri_start + (num_tri as usize);
+                        for tri in (&self.mesh.get_tri_raw()[tri_start..tri_end]).iter() {
+                            max_time = match tri.intersect_test(ray, max_time, int_info, &self.mesh)
+                            {
+                                Some(time) => time,
+                                None => return None,
+                            };
+                        }
 
-                    for tri in triangles.iter() {
-                        max_time = match tri.intersect_test(ray, max_time, int_info, &self.mesh) {
-                            Some(time) => time,
+                        // Pop the stack (if it's empty, we are done):
+                        curr_node_index = match node_index_stack.pop() {
+                            Some(val) => val,
                             None => return None,
-                        };
+                        } as usize;
+
+                        // We can do this because we are guaranteed the algorithm works:
+                        curr_node = unsafe { *self.linear_nodes.get_unchecked(curr_node_index) };
                     }
-
-                    // Pop the stack:
-                    curr_node_index = match node_index_stack.pop() {
-                        Some(val) => val,
-                        None => return None,
-                    } as usize;
-                    // We can do this because we are guaranteed the algorithm works:
-                    curr_node = unsafe { *self.linear_nodes.get_unchecked(curr_node_index) };
-                } else {
-                    // Check which child it's most likely to be:
-                    if is_dir_neg[curr_node.split_axis as usize] {
-                        // Push the first child onto the stack to perform later:
-                        node_index_stack.push(curr_node_index + 1);
-                        // Get the second child (unsafe because it's gauranteed to work):
-                        curr_node = unsafe {
-                            *self
-                                .linear_nodes
-                                .get_unchecked(curr_node.tri_index as usize)
-                        };
-                    } else {
-                        // Push the second child onto the stack to perform later:
-                        node_index_stack.push(curr_node.tri_index as usize);
-                        // Get the first child (unsafe because it's gauranteed to work):
-                        curr_node =
-                            unsafe { *self.linear_nodes.get_unchecked(curr_node_index + 1) };
-                    }
-                }
-            } else {
-                // Pop the stack:
-                curr_node_index = match node_index_stack.pop() {
-                    Some(val) => val,
-                    None => return None,
-                } as usize;
-                // We can do this because we are guaranteed the algorithm works:
-                curr_node = unsafe { *self.linear_nodes.get_unchecked(curr_node_index) };
-            }
-        }
-    }
-
-    pub fn intersect(
-        &self,
-        mut max_time: f32,
-        ray: Ray,
-        int_info: RayIntInfo,
-    ) -> Option<Intersection> {
-        let mut curr_node = match self.linear_nodes.first() {
-            Some(&val) => val,
-            None => return None,
-        };
-
-        // Some values we would need before we start:
-        let inv_dir = ray.dir.inv_scale(1f32);
-        let is_dir_neg = ray.dir.comp_wise_is_neg();
-
-        // We could do this recursively, but a loop is more efficient in this case:
-
-        // This is the stack used to traverse the tree:
-        let mut node_index_stack = ArrayVec::<[usize; 64]>::new();
-        let mut curr_node_index = 0usize;
-        let mut intersection = None;
-        loop {
-            // We don't care where our ray intersects in time:
-            if let Some(_) = curr_node
-                .bound
-                .intersect_test(ray, max_time, inv_dir, is_dir_neg)
-            {
-                // Check if it is a leaf node (and thus, we can traverse the nodes):
-                if curr_node.num_tri > 0 {
-                    // Traverse over the triangles we want to check an intersection for:
-                    let begin = curr_node.tri_index as usize;
-                    let end = begin + (curr_node.num_tri as usize);
-                    let triangles = &self.mesh.get_tri_raw()[begin..end];
-
-                    // Update the hit and the max_time (so we can ignore values that are too far).
-                    // Unlike before, we can't return instantly, because there might be a closer intersection.
-                    for tri in triangles.iter() {
-                        if let Some(int) = tri.intersect(ray, max_time, int_info, &self.mesh) {
-                            intersection = Some(int);
-                            max_time = int.time;
+                    LinearNodeKind::Interior {
+                        right_child_index,
+                        split_axis,
+                    } => {
+                        // Check which child it's most likely to be:
+                        if is_dir_neg[split_axis as usize] {
+                            // Push the first child onto the stack to perform later:
+                            node_index_stack.push(curr_node_index + 1);
+                            curr_node = unsafe {
+                                *self.linear_nodes.get_unchecked(right_child_index as usize)
+                            };
+                        } else {
+                            // Push the second child onto the stack to perform later:
+                            node_index_stack.push(right_child_index as usize);
+                            // Get the first child (unsafe because it's gauranteed to work):
+                            curr_node =
+                                unsafe { *self.linear_nodes.get_unchecked(curr_node_index + 1) };
                         }
                     }
-
-                    // Pop the stack:
-                    curr_node_index = match node_index_stack.pop() {
-                        Some(val) => val,
-                        None => return None,
-                    } as usize;
-                    // We can do this because we are guaranteed the algorithm works:
-                    curr_node = unsafe { *self.linear_nodes.get_unchecked(curr_node_index) };
-                } else {
-                    // Check which child it's most likely to be:
-                    if is_dir_neg[curr_node.split_axis as usize] {
-                        // Push the first child onto the stack to perform later:
-                        node_index_stack.push(curr_node_index + 1);
-                        // Get the second child (unsafe because it's gauranteed to work):
-                        curr_node = unsafe {
-                            *self
-                                .linear_nodes
-                                .get_unchecked(curr_node.tri_index as usize)
-                        };
-                    } else {
-                        // Push the second child onto the stack to perform later:
-                        node_index_stack.push(curr_node.tri_index as usize);
-                        // Get the first child (unsafe because it's gauranteed to work):
-                        curr_node =
-                            unsafe { *self.linear_nodes.get_unchecked(curr_node_index + 1) };
-                    }
                 }
+            // If we don't hit it, then we try another item from the stack:
             } else {
-                // Pop the stack:
                 curr_node_index = match node_index_stack.pop() {
                     Some(val) => val,
                     None => return None,
                 } as usize;
-                // We can do this because we are guaranteed the algorithm works:
                 curr_node = unsafe { *self.linear_nodes.get_unchecked(curr_node_index) };
             }
         }
-
-        // If we were lucky enough to hit something, it'll be returned here:
-        intersection
     }
+
+    // pub fn intersect(
+    //     &self,
+    //     mut max_time: f32,
+    //     ray: Ray,
+    //     int_info: RayIntInfo,
+    // ) -> Option<Intersection> {
+    //     let mut curr_node = match self.linear_nodes.first() {
+    //         Some(&val) => val,
+    //         None => return None,
+    //     };
+
+    //     // Some values we would need before we start:
+    //     let inv_dir = ray.dir.inv_scale(1f32);
+    //     let is_dir_neg = ray.dir.comp_wise_is_neg();
+
+    //     // We could do this recursively, but a loop is more efficient in this case:
+
+    //     // This is the stack used to traverse the tree:
+    //     let mut node_index_stack = ArrayVec::<[usize; 64]>::new();
+    //     let mut curr_node_index = 0usize;
+    //     let mut intersection = None;
+    //     loop {
+    //         // We don't care where our ray intersects in time:
+    //         if let Some(_) = curr_node
+    //             .bound
+    //             .intersect_test(ray, max_time, inv_dir, is_dir_neg)
+    //         {
+    //             // Check if it is a leaf node (and thus, we can traverse the nodes):
+    //             if curr_node.num_tri > 0 {
+    //                 // Traverse over the triangles we want to check an intersection for:
+    //                 let begin = curr_node.tri_index as usize;
+    //                 let end = begin + (curr_node.num_tri as usize);
+    //                 let triangles = &self.mesh.get_tri_raw()[begin..end];
+
+    //                 // Update the hit and the max_time (so we can ignore values that are too far).
+    //                 // Unlike before, we can't return instantly, because there might be a closer intersection.
+    //                 for tri in triangles.iter() {
+    //                     if let Some(int) = tri.intersect(ray, max_time, int_info, &self.mesh) {
+    //                         intersection = Some(int);
+    //                         max_time = int.time;
+    //                     }
+    //                 }
+
+    //                 // Pop the stack:
+    //                 curr_node_index = match node_index_stack.pop() {
+    //                     Some(val) => val,
+    //                     None => return None,
+    //                 } as usize;
+    //                 // We can do this because we are guaranteed the algorithm works:
+    //                 curr_node = unsafe { *self.linear_nodes.get_unchecked(curr_node_index) };
+    //             } else {
+    //                 // Check which child it's most likely to be:
+    //                 if is_dir_neg[curr_node.split_axis as usize] {
+    //                     // Push the first child onto the stack to perform later:
+    //                     node_index_stack.push(curr_node_index + 1);
+    //                     // Get the second child (unsafe because it's gauranteed to work):
+    //                     curr_node = unsafe {
+    //                         *self
+    //                             .linear_nodes
+    //                             .get_unchecked(curr_node.tri_index as usize)
+    //                     };
+    //                 } else {
+    //                     // Push the second child onto the stack to perform later:
+    //                     node_index_stack.push(curr_node.tri_index as usize);
+    //                     // Get the first child (unsafe because it's gauranteed to work):
+    //                     curr_node =
+    //                         unsafe { *self.linear_nodes.get_unchecked(curr_node_index + 1) };
+    //                 }
+    //             }
+    //         } else {
+    //             // Pop the stack:
+    //             curr_node_index = match node_index_stack.pop() {
+    //                 Some(val) => val,
+    //                 None => return None,
+    //             } as usize;
+    //             // We can do this because we are guaranteed the algorithm works:
+    //             curr_node = unsafe { *self.linear_nodes.get_unchecked(curr_node_index) };
+    //         }
+    //     }
+
+    //     // If we were lucky enough to hit something, it'll be returned here:
+    //     intersection
+    // }
 
     // Given a mesh, triangle info (as passed by new), and the number of triangles per node,
     // construct a tree:
@@ -229,38 +227,49 @@ impl MeshBVH {
     // Need to specify the tree node and the total number of nodes.
     // Will return the linear nodes as a vector.
     fn flatten_tree(num_nodes: usize, root_node: &TreeNode) -> Vec<LinearNode> {
-        // First create a vector with the correct number of nodes:
-        let mut linear_nodes = Vec::with_capacity(num_nodes);
-
         // This will generate the linear nodes we care about:
-        fn generate_linear_nodes(linear_nodes: &mut Vec<LinearNode>, curr_node: &TreeNode) -> usize {
+        fn generate_linear_nodes(
+            linear_nodes: &mut Vec<LinearNode>,
+            curr_node: &TreeNode,
+        ) -> usize {
             match *curr_node {
-                TreeNode::Leaf { bound, tri_index, num_tri } => {
-                    linear_nodes.push(LinearNode::Leaf {
+                TreeNode::Leaf {
+                    bound,
+                    tri_index,
+                    num_tri,
+                } => {
+                    linear_nodes.push(LinearNode {
                         bound,
-                        tri_index,
-                        num_tri,
+                        kind: LinearNodeKind::Leaf { tri_index, num_tri },
                     });
                     linear_nodes.len() - 1
-                },
-                TreeNode::Interior { bound, children: (left, right), split_axis } => {
+                }
+                TreeNode::Interior {
+                    bound,
+                    children: (left, right),
+                    split_axis,
+                } => {
                     let curr_pos = linear_nodes.len();
-                    // We can do this because we allocated with capacity before:
+                    // We can do this because we allocated with capacity before so we should always have enough.
+                    // We need to do this to maintain the order of the nodes in the vector, but we can't complete
+                    // this position until we have all of the information.
                     unsafe { linear_nodes.set_len(curr_pos + 1) };
                     generate_linear_nodes(linear_nodes, left);
                     let right_child_index = generate_linear_nodes(linear_nodes, right) as u32;
-                    unsafe {
-                        *linear_nodes.get_unchecked_mut(curr_pos) = LinearNode::Interior {
-                            bound,
+                    *unsafe { linear_nodes.get_unchecked_mut(curr_pos) } = LinearNode {
+                        bound,
+                        kind: LinearNodeKind::Interior {
                             right_child_index,
                             split_axis,
-                        };
-                    }
+                        },
+                    };
                     curr_pos
-                },
+                }
             }
         }
 
+        // First create a vector with the correct number of nodes:
+        let mut linear_nodes = Vec::with_capacity(num_nodes);
         generate_linear_nodes(&mut linear_nodes, root_node);
         linear_nodes
     }
@@ -474,21 +483,25 @@ enum TreeNode<'a> {
         bound: BBox3f,
         children: (&'a TreeNode<'a>, &'a TreeNode<'a>),
         split_axis: u8,
-    }
+    },
 }
 
 //#[repr(align(32))] <- experimental, TODOL: add once not experimental
 #[derive(Clone, Copy)]
-enum LinearNode {
+enum LinearNodeKind {
     Leaf {
-        bound: BBox3f,
         tri_index: u32,
         num_tri: u32,
     },
     Interior {
-        bound: BBox3f,
         // left_child_index: it's always next to it in the array
         right_child_index: u32,
         split_axis: u8,
     },
+}
+
+#[derive(Clone, Copy)]
+struct LinearNode {
+    bound: BBox3f,
+    kind: LinearNodeKind,
 }
