@@ -220,42 +220,49 @@ impl MeshBVH {
 
         // Repalce the trianlges in the mesh with the reordered triangles:
         mesh.update_tris(new_tris);
-
         // Now we flatten the nodes for better memory and performance later down the line:
-        let mut linear_nodes = Vec::with_capacity(allocator.get_alloc_count());
-        Self::flatten_tree(&mut linear_nodes, root_node);
+        let linear_nodes = Self::flatten_tree(allocator.get_alloc_count(), root_node);
 
         MeshBVH { mesh, linear_nodes }
     }
 
-    // Given a tree represented as a "tree node", we can "flatten" it in a specific manner that
-    // would allow for more efficient traversal (technically, the tree_nodes are already flat in
-    // the sense that they are contigiously in memory).
-    fn flatten_tree(linear_nodes: &mut Vec<LinearNode>, curr_tree_node: &TreeNode) -> usize {
-        match curr_tree_node.children {
-            // There are no children, so it must be a leaf:
-            None => {
-                linear_nodes.push(LinearNode::Leaf {
-                    bound: curr_tree_node.bound,
-                    tri_index: curr_tree_node.tri_index,
-                    num_tri: curr_tree_node.num_tri,
-                });
-                linear_nodes.len() - 1
-            }
-            // There are children, so it must be a leaf:
-            Some((left_child, right_child)) => {
-                let curr_pos = linear_nodes.len();
-                linear_nodes.push(LinearNode::Interior {
-                    bound: curr_tree_node.bound,
-                    right_child_index: 0, // temporary for now
-                    split_axis: curr_tree_node.split_axis,
-                });
-                Self::flatten_tree(linear_nodes, left_child);
-                linear_nodes[curr_pos].tri_index =
-                    Self::flatten_tree(linear_nodes, right_child) as u32;
-                curr_pos
+    // Need to specify the tree node and the total number of nodes.
+    // Will return the linear nodes as a vector.
+    fn flatten_tree(num_nodes: usize, root_node: &TreeNode) -> Vec<LinearNode> {
+        // First create a vector with the correct number of nodes:
+        let mut linear_nodes = Vec::with_capacity(num_nodes);
+
+        // This will generate the linear nodes we care about:
+        fn generate_linear_nodes(linear_nodes: &mut Vec<LinearNode>, curr_node: &TreeNode) -> usize {
+            match *curr_node {
+                TreeNode::Leaf { bound, tri_index, num_tri } => {
+                    linear_nodes.push(LinearNode::Leaf {
+                        bound,
+                        tri_index,
+                        num_tri,
+                    });
+                    linear_nodes.len() - 1
+                },
+                TreeNode::Interior { bound, children: (left, right), split_axis } => {
+                    let curr_pos = linear_nodes.len();
+                    // We can do this because we allocated with capacity before:
+                    unsafe { linear_nodes.set_len(curr_pos + 1) };
+                    generate_linear_nodes(linear_nodes, left);
+                    let right_child_index = generate_linear_nodes(linear_nodes, right) as u32;
+                    unsafe {
+                        *linear_nodes.get_unchecked_mut(curr_pos) = LinearNode::Interior {
+                            bound,
+                            right_child_index,
+                            split_axis,
+                        };
+                    }
+                    curr_pos
+                },
             }
         }
+
+        generate_linear_nodes(&mut linear_nodes, root_node);
+        linear_nodes
     }
 
     // Recursively constructs the tree.
@@ -275,11 +282,11 @@ impl MeshBVH {
         // If we only have one triangle, make a leaf:
         if tri_infos.len() == 1 {
             new_tris.push(mesh.get_tri(tri_infos[0].tri_index));
-            return allocator.push(TreeNode::create_leaf(
-                all_bound,
-                (new_tris.len() - 1) as u32,
-                1,
-            ));
+            return allocator.push(TreeNode::Leaf {
+                bound: all_bound,
+                tri_index: (new_tris.len() - 1) as u32,
+                num_tri: 1,
+            });
         }
 
         // Otherwise, we want to split the tree into smaller parts:
@@ -302,11 +309,11 @@ impl MeshBVH {
                 new_tris.push(mesh.get_tri(tri_info.tri_index));
             }
             // Allocate the a new leaf node and push it:
-            return allocator.push(TreeNode::create_leaf(
-                all_bound,
-                curr_tri_index,
-                tri_infos.len() as u32,
-            ));
+            return allocator.push(TreeNode::Leaf {
+                bound: all_bound,
+                tri_index: curr_tri_index,
+                num_tri: tri_infos.len() as u32,
+            });
         }
 
         // Figure out how to split the elements:
@@ -404,11 +411,11 @@ impl MeshBVH {
                 for tri_info in tri_infos.iter() {
                     new_tris.push(mesh.get_tri(tri_info.tri_index));
                 }
-                return allocator.push(TreeNode::create_leaf(
-                    all_bound,
-                    curr_tri_index,
-                    tri_infos.len() as u32,
-                ));
+                return allocator.push(TreeNode::Leaf {
+                    bound: all_bound,
+                    tri_index: curr_tri_index,
+                    num_tri: tri_infos.len() as u32,
+                });
             }
         };
 
@@ -429,11 +436,44 @@ impl MeshBVH {
         );
 
         // Create a node and push it on:
-        allocator.push(TreeNode::create_interior(
-            max_dim as u8,
-            left_node,
-            right_node,
-        ))
+        allocator.push(TreeNode::Interior {
+            bound: all_bound,
+            children: (left_node, right_node),
+            split_axis: max_dim as u8,
+        })
+    }
+}
+
+// This is the bucket used for SAH splitting:
+#[derive(Clone, Copy)]
+struct Bucket {
+    // Number of items in the current bucket:
+    pub count: u32,
+    // Bound for the current bucket:
+    pub bound: BBox3f,
+}
+
+// Structure used to construct the BVH:
+#[derive(Clone, Copy)]
+struct TriangleInfo {
+    pub tri_index: u32,
+    pub centroid: Vec3f,
+    pub bound: BBox3f,
+}
+
+// This is the internal representation we have when initially building the tree.
+// We later "flatten" the tree for efficient traversal.
+#[derive(Clone, Copy)]
+enum TreeNode<'a> {
+    Leaf {
+        bound: BBox3f,
+        tri_index: u32,
+        num_tri: u32,
+    },
+    Interior {
+        bound: BBox3f,
+        children: (&'a TreeNode<'a>, &'a TreeNode<'a>),
+        split_axis: u8,
     }
 }
 
@@ -451,61 +491,4 @@ enum LinearNode {
         right_child_index: u32,
         split_axis: u8,
     },
-}
-
-// This is the bucket used for SAH splitting:
-#[derive(Clone, Copy)]
-struct Bucket {
-    // Number of items in the current bucket:
-    pub count: u32,
-    // Bound for the current bucket:
-    pub bound: BBox3f,
-}
-
-// This is a node used for the "unflattened" tree.
-#[derive(Clone, Copy)]
-struct TreeNode<'a> {
-    pub bound: BBox3f,
-    // children that index into the nodes vector
-    pub children: Option<(&'a TreeNode<'a>, &'a TreeNode<'a>)>,
-
-    // index into the triangle array now used:
-    pub tri_index: u32,
-    pub num_tri: u32,
-    pub split_axis: u8,
-}
-
-impl<'a> TreeNode<'a> {
-    // Simple stuff we care about:
-    pub fn create_leaf(bound: BBox3f, tri_index: u32, num_tri: u32) -> Self {
-        TreeNode {
-            bound,
-            tri_index,
-            num_tri,
-            children: None,
-            split_axis: 0,
-        }
-    }
-
-    pub fn create_interior(
-        split_axis: u8,
-        left: &'a TreeNode<'a>,
-        right: &'a TreeNode<'a>,
-    ) -> Self {
-        TreeNode {
-            split_axis,
-            children: Some((left, right)),
-            bound: left.bound.combine_bnd(right.bound),
-            tri_index: 0,
-            num_tri: 0,
-        }
-    }
-}
-
-// Structure used to construct the BVH:
-#[derive(Clone, Copy)]
-struct TriangleInfo {
-    pub tri_index: u32,
-    pub centroid: Vec3f,
-    pub bound: BBox3f,
 }
