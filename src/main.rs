@@ -1,7 +1,7 @@
+mod alloc;
 mod geometry;
 mod math;
 mod util;
-mod memory;
 
 use geometry::loader::ply;
 use geometry::mesh::{calc_rayintinfo, Mesh};
@@ -11,7 +11,7 @@ use math::vector::Vec3f;
 
 fn main() {
     let mesh =
-        ply::load_path("E:/Development/cpp_projects/prism/Prism/test_files/sphere.ply").unwrap();
+        ply::load_path("C:/Users/jan/Downloads/sphere.ply").unwrap();
 
     let org = Vec3f {
         x: 0f32,

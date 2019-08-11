@@ -1,10 +1,10 @@
 // The BVH is used to efficiently intersect the mesh.
 
+use crate::alloc::StackAlloc;
 use crate::geometry::mesh::{Intersection, Mesh, RayIntInfo, Triangle};
 use crate::math::bbox::BBox3f;
 use crate::math::ray::Ray;
 use crate::math::vector::Vec3f;
-use crate::memory::stack_alloc::StackAlloc;
 
 use arrayvec::ArrayVec;
 use order_stat::kth_by;
@@ -18,10 +18,7 @@ pub struct MeshBVH {
 impl MeshBVH {
     // Number of buckets used for SAH:
     const BUCKET_COUNT: usize = 12;
-
-    //
-    // MeshBVH Public Interface
-    //
+    const ALLOC_STACK_SIZE: usize = 1024 * 1024 / 32; // I might specify something else later
 
     // Constructs a BVH given a mesh and the max number of triangles per leaf node.
     // The BVH will become the owner of the mesh when doing this.
@@ -112,8 +109,6 @@ impl MeshBVH {
                 curr_node = unsafe { *self.linear_nodes.get_unchecked(curr_node_index) };
             }
         }
-
-        None
     }
 
     pub fn intersect(
@@ -209,73 +204,68 @@ impl MeshBVH {
     ) -> Self {
         // It would probably make more sense to create a better allocator for nodes then by doing
         // it this way, that way we could maintain pointers instead.
-        let mut allocator = StackAlloc::new(32768);
+        let allocator = StackAlloc::new(Self::ALLOC_STACK_SIZE);
         // The new triangles that will replace the ones in Mesh (they will be ordered
         // in the correct manner):
         let mut new_tris = Vec::with_capacity(mesh.num_tris() as usize);
 
-        // Construct the regular tree first:
+        // Construct the regular tree first (that isn't flat):
         let root_node = Self::recursive_construct_tree(
             max_tri_per_node,
             &mesh,
             &mut tris_info,
             &mut new_tris,
-            &mut allocator,
+            &allocator,
         );
 
-        // Now construct the linear tree (which should be more efficient):
-        // We already know how many nodes we will be allocating:
-        let mut linear_nodes = Vec::with_capacity(allocator.get_num_alloc());
-        // Use the new triangles in their better position:
+        // Repalce the trianlges in the mesh with the reordered triangles:
         mesh.update_tris(new_tris);
-        // Create the linear nodes:
-        //Self::flatten_tree(&mut linear_nodes, root_node);
+
+        // Now we flatten the nodes for better memory and performance later down the line:
+        let mut linear_nodes = Vec::with_capacity(allocator.get_alloc_count());
+        Self::flatten_tree(&mut linear_nodes, root_node);
+
         MeshBVH { mesh, linear_nodes }
     }
 
     // Given a tree represented as a "tree node", we can "flatten" it in a specific manner that
     // would allow for more efficient traversal (technically, the tree_nodes are already flat in
     // the sense that they are contigiously in memory).
-    fn flatten_tree(
-        linear_nodes: &mut Vec<LinearNode>,
-        curr_tree_node: &TreeNode,
-    ) -> usize {
+    fn flatten_tree(linear_nodes: &mut Vec<LinearNode>, curr_tree_node: &TreeNode) -> usize {
         match curr_tree_node.children {
             // There are no children, so it must be a leaf:
             None => {
-                linear_nodes.push(LinearNode::create_leaf(
-                    curr_tree_node.tri_index,
-                    curr_tree_node.num_tri,
-                    curr_tree_node.bound,
-                ));
+                linear_nodes.push(LinearNode::Leaf {
+                    bound: curr_tree_node.bound,
+                    tri_index: curr_tree_node.tri_index,
+                    num_tri: curr_tree_node.num_tri,
+                });
                 linear_nodes.len() - 1
             }
             // There are children, so it must be a leaf:
             Some((left_child, right_child)) => {
                 let curr_pos = linear_nodes.len();
-                linear_nodes.push(LinearNode::create_interior(
-                    curr_tree_node.split_axis,
-                    0,
-                    curr_tree_node.bound,
-                ));
+                linear_nodes.push(LinearNode::Interior {
+                    bound: curr_tree_node.bound,
+                    right_child_index: 0, // temporary for now
+                    split_axis: curr_tree_node.split_axis,
+                });
                 Self::flatten_tree(linear_nodes, left_child);
                 linear_nodes[curr_pos].tri_index =
-                    Self::flatten_tree(linear_nodes, right_child)
-                        as u32;
+                    Self::flatten_tree(linear_nodes, right_child) as u32;
                 curr_pos
             }
         }
     }
 
-    // Recursively constructs the tree:
-    // Returns the index of the node created in the next call, that node will be on the vector
-    // That one passes to it.
+    // Recursively constructs the tree.
+    // Returns a reference to the root node of the tree:
     fn recursive_construct_tree<'a>(
-        max_tri_per_node: u32,                 // The maximum number of triangles per node.
-        mesh: &Mesh,                           // The mesh we are currently constructing a BVH for.
-        tri_infos: &mut [TriangleInfo],        // The current slice of triangles we are working on.
-        new_tris: &mut Vec<Triangle>,          // The correct order for the new triangles we care about.
-        allocator: &'a mut StackAlloc<TreeNode<'a>>,  // Allocator used to allocate the nodes.
+        max_tri_per_node: u32,          // The maximum number of triangles per node.
+        mesh: &Mesh,                    // The mesh we are currently constructing a BVH for.
+        tri_infos: &mut [TriangleInfo], // The current slice of triangles we are working on.
+        new_tris: &mut Vec<Triangle>,   // The correct order for the new triangles we care about.
+        allocator: &'a StackAlloc<TreeNode<'a>>, // Allocator used to allocate the nodes. The lifetime of the nodes is that of the allocator
     ) -> &'a TreeNode<'a> {
         // A bound over all of the triangles we are currently working with:
         let all_bound = tri_infos.iter().fold(BBox3f::new(), |all_bound, tri_info| {
@@ -285,7 +275,11 @@ impl MeshBVH {
         // If we only have one triangle, make a leaf:
         if tri_infos.len() == 1 {
             new_tris.push(mesh.get_tri(tri_infos[0].tri_index));
-            return allocator.push(TreeNode::create_leaf(all_bound, (new_tris.len() - 1) as u32, 1));
+            return allocator.push(TreeNode::create_leaf(
+                all_bound,
+                (new_tris.len() - 1) as u32,
+                1,
+            ));
         }
 
         // Otherwise, we want to split the tree into smaller parts:
@@ -353,7 +347,7 @@ impl MeshBVH {
             // Iterate over everything backwards, but ignore the first element to get the right
             // surface area values:
             let mut right_sa = [0f32; Self::BUCKET_COUNT - 1];
-            let (right_bound, right_count) = buckets[1..].iter().enumerate().rev().fold(
+            let (_, right_count) = buckets[1..].iter().enumerate().rev().fold(
                 (BBox3f::new(), 0u32),
                 |(right_bound, right_count), (i, bucket)| {
                     // Have to do this because enumerate starts at 0, always, not the index of the slice:
@@ -369,21 +363,20 @@ impl MeshBVH {
             // We also must modify the right count as we decrement it over time:
             let mut costs = [0f32; Self::BUCKET_COUNT - 1];
             let total_sa = all_bound.surface_area();
-            let (left_bound, left_count, _) =
-                buckets[..Self::BUCKET_COUNT - 1].iter().enumerate().fold(
-                    (BBox3f::new(), 0u32, right_count),
-                    |(left_bound, left_count, right_count), (i, bucket)| {
-                        let left_bound = left_bound.combine_bnd(bucket.bound);
-                        let left_count = left_count + bucket.count;
-                        // Calculate the heuristic here:
-                        costs[i] = 0.125f32
-                            * ((left_count as f32) * left_bound.surface_area()
-                                + (right_count as f32) * right_sa[i])
-                            / total_sa;
-                        let right_count = right_count - buckets[i + 1].count;
-                        (left_bound, left_count, right_count)
-                    },
-                );
+            buckets[..Self::BUCKET_COUNT - 1].iter().enumerate().fold(
+                (BBox3f::new(), 0u32, right_count),
+                |(left_bound, left_count, right_count), (i, bucket)| {
+                    let left_bound = left_bound.combine_bnd(bucket.bound);
+                    let left_count = left_count + bucket.count;
+                    // Calculate the heuristic here:
+                    costs[i] = 0.125f32
+                        * ((left_count as f32) * left_bound.surface_area()
+                            + (right_count as f32) * right_sa[i])
+                        / total_sa;
+                    let right_count = right_count - buckets[i + 1].count;
+                    (left_bound, left_count, right_count)
+                },
+            );
 
             let (min_cost_index, &min_cost) = costs
                 .iter() // returns a reference to the elements (so a &x essentially).
@@ -444,36 +437,20 @@ impl MeshBVH {
     }
 }
 
-// Align to 32 bytes to make it more cache-friendly:
-#[repr(align(32))]
+//#[repr(align(32))] <- experimental, TODOL: add once not experimental
 #[derive(Clone, Copy)]
-struct LinearNode {
-    pub bound: BBox3f,
-    // Either the index into the triangles array, or the index of the second child,
-    // depends on the value of the number of children:
-    pub tri_index: u32,
-    pub num_tri: u32,
-    pub split_axis: u8,
-}
-
-impl LinearNode {
-    pub fn create_leaf(tri_index: u32, num_tri: u32, bound: BBox3f) -> Self {
-        LinearNode {
-            tri_index,
-            num_tri,
-            bound,
-            split_axis: 0,
-        }
-    }
-
-    pub fn create_interior(split_axis: u8, tri_index: u32, bound: BBox3f) -> Self {
-        LinearNode {
-            split_axis,
-            tri_index,
-            bound,
-            num_tri: 0,
-        }
-    }
+enum LinearNode {
+    Leaf {
+        bound: BBox3f,
+        tri_index: u32,
+        num_tri: u32,
+    },
+    Interior {
+        bound: BBox3f,
+        // left_child_index: it's always next to it in the array
+        right_child_index: u32,
+        split_axis: u8,
+    },
 }
 
 // This is the bucket used for SAH splitting:
@@ -510,7 +487,11 @@ impl<'a> TreeNode<'a> {
         }
     }
 
-    pub fn create_interior(split_axis: u8, left: &'a TreeNode<'a>, right: &'a TreeNode<'a>) -> Self {
+    pub fn create_interior(
+        split_axis: u8,
+        left: &'a TreeNode<'a>,
+        right: &'a TreeNode<'a>,
+    ) -> Self {
         TreeNode {
             split_axis,
             children: Some((left, right)),
