@@ -57,14 +57,24 @@ impl MeshBVH {
                 .intersect_test(ray, max_time, inv_dir, is_dir_neg)
             {
                 match curr_node.kind {
-                    LinearNodeKind::Leaf { tri_index, num_tri } => {
-                        let tri_start = tri_index as usize;
-                        let tri_end = tri_start + (num_tri as usize);
-                        for tri in (&self.mesh.get_tri_raw()[tri_start..tri_end]).iter() {
-                            if let Some(time) =
-                                tri.intersect_test(ray, max_time, int_info, &self.mesh)
+                    LinearNodeKind::Leaf {
+                        tri_start_index,
+                        tri_end_index,
+                    } => {
+                        let tri_start = tri_start_index as usize;
+                        let tri_end = tri_end_index as usize;
+                        unsafe {
+                            for tri in self
+                                .mesh
+                                .get_tri_raw()
+                                .get_unchecked(tri_start..tri_end)
+                                .iter()
                             {
-                                return Some(time);
+                                if let Some(time) =
+                                    tri.intersect_test(ray, max_time, int_info, &self.mesh)
+                                {
+                                    return Some(time);
+                                }
                             }
                         }
 
@@ -132,17 +142,27 @@ impl MeshBVH {
                 .intersect_test(ray, max_time, inv_dir, is_dir_neg)
             {
                 match curr_node.kind {
-                    LinearNodeKind::Leaf { tri_index, num_tri } => {
-                        let tri_start = tri_index as usize;
-                        let tri_end = tri_start + (num_tri as usize);
-                        for tri in (&self.mesh.get_tri_raw()[tri_start..tri_end]).iter() {
-                            if let Some(intersection) =
-                                tri.intersect(ray, max_time, int_info, &self.mesh)
+                    LinearNodeKind::Leaf {
+                        tri_start_index,
+                        tri_end_index,
+                    } => {
+                        let tri_start = tri_start_index as usize;
+                        let tri_end = tri_end_index as usize;
+                        unsafe {
+                            for tri in self
+                                .mesh
+                                .get_tri_raw()
+                                .get_unchecked(tri_start..tri_end)
+                                .iter()
                             {
-                                // Update the max time for more efficient culling:
-                                max_time = intersection.time;
-                                // Can't return immediately, have to make sure this is the closest intersection
-                                result = Some(intersection);
+                                if let Some(intersection) =
+                                    tri.intersect(ray, max_time, int_info, &self.mesh)
+                                {
+                                    // Update the max time for more efficient culling:
+                                    max_time = intersection.time;
+                                    // Can't return immediately, have to make sure this is the closest intersection
+                                    result = Some(intersection);
+                                }
                             }
                         }
 
@@ -233,7 +253,10 @@ impl MeshBVH {
                 } => {
                     linear_nodes.push(LinearNode {
                         bound,
-                        kind: LinearNodeKind::Leaf { tri_index, num_tri },
+                        kind: LinearNodeKind::Leaf {
+                            tri_start_index: tri_index,
+                            tri_end_index: tri_index + num_tri,
+                        },
                     });
                     linear_nodes.len() - 1
                 }
@@ -478,8 +501,8 @@ enum TreeNode<'a> {
 #[derive(Clone, Copy)]
 enum LinearNodeKind {
     Leaf {
-        tri_index: u32,
-        num_tri: u32,
+        tri_start_index: u32,
+        tri_end_index: u32,
     },
     Interior {
         // left_child_index: it's always next to it in the array

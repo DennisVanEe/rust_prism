@@ -9,6 +9,8 @@ use geometry::mesh_bvh::MeshBVH;
 use math::ray::Ray;
 use math::vector::Vec3f;
 
+use std::time::{Duration, Instant};
+
 fn main() {
     let mesh =
         ply::load_path("E:/Development/cpp_projects/prism/Prism/test_files/sphere.ply").unwrap();
@@ -29,10 +31,23 @@ fn main() {
 
     // Now let's try to intersect it:
 
+    let now = Instant::now();
     let bvh = MeshBVH::new(mesh, 32);
-    if let Some(int) = bvh.intersect(ray, max_time, int_info) {
-        println!("intersection found! {:?}", int.p);
+    let later = now.elapsed();
+
+    let now2 = Instant::now();
+    let result = bvh.intersect(ray, max_time, int_info);
+    let later2 = now2.elapsed();
+
+    if let Some(int) = result {
+        println!("intersection found!");
     }
 
-    println!("end of line has been reached");
+    // 138840
+
+    println!(
+        "construction: {}, intersection: {}",
+        later.as_micros(),
+        later2.as_micros()
+    );
 }
