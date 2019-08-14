@@ -6,9 +6,10 @@ use crate::math::bbox::BBox3f;
 use crate::math::ray::Ray;
 use crate::math::vector::Vec3f;
 
-use arrayvec::ArrayVec;
 use order_stat::kth_by;
 use partition::partition;
+
+use std::mem::MaybeUninit;
 
 pub struct MeshBVH {
     mesh: Mesh,                    // The mesh of the BVH (the BVH owns the mesh)
@@ -38,21 +39,19 @@ impl MeshBVH {
         Self::construct_tree(mesh, tris_info, max_tri_per_node)
     }
 
-    pub fn intersect_test(&self, ray: Ray, mut max_time: f32, int_info: RayIntInfo) -> Option<f32> {
-        let mut curr_node = match self.linear_nodes.first() {
-            Some(&val) => val,
-            None => return None,
-        };
+    pub fn intersect_test(&self, ray: Ray, max_time: f32, int_info: RayIntInfo) -> Option<f32> {
+        // This function has to be very efficient, so I'll be using a lot of unsafe code
+        // here (but everything I'm doing should still be defined behavior).
 
         let inv_dir = ray.dir.inv_scale(1f32);
         let is_dir_neg = ray.dir.comp_wise_is_neg();
 
-        // This is the stack used to traverse the tree (it's set to 64, not sure
-        // if we should do anything if it goes deeper):
-        let mut node_index_stack = ArrayVec::<[usize; 64]>::new();
+        let mut node_stack: [usize; 64] = unsafe { MaybeUninit::uninit().assume_init() };
+        let mut node_stack_index = 0usize;
         let mut curr_node_index = 0usize;
+
         loop {
-            // First we check for an intersection:
+            let curr_node = *unsafe { self.linear_nodes.get_unchecked(curr_node_index) };
             if let Some(_) = curr_node
                 .bound
                 .intersect_test(ray, max_time, inv_dir, is_dir_neg)
@@ -62,21 +61,19 @@ impl MeshBVH {
                         let tri_start = tri_index as usize;
                         let tri_end = tri_start + (num_tri as usize);
                         for tri in (&self.mesh.get_tri_raw()[tri_start..tri_end]).iter() {
-                            max_time = match tri.intersect_test(ray, max_time, int_info, &self.mesh)
+                            if let Some(time) =
+                                tri.intersect_test(ray, max_time, int_info, &self.mesh)
                             {
-                                Some(time) => time,
-                                None => return None,
-                            };
+                                return Some(time);
+                            }
                         }
 
                         // Pop the stack (if it's empty, we are done):
-                        curr_node_index = match node_index_stack.pop() {
-                            Some(val) => val,
-                            None => return None,
-                        } as usize;
-
-                        // We can do this because we are guaranteed the algorithm works:
-                        curr_node = unsafe { *self.linear_nodes.get_unchecked(curr_node_index) };
+                        if node_stack_index == 0usize {
+                            return None;
+                        }
+                        node_stack_index -= 1;
+                        curr_node_index = *unsafe { node_stack.get_unchecked(node_stack_index) };
                     }
                     LinearNodeKind::Interior {
                         right_child_index,
@@ -85,113 +82,109 @@ impl MeshBVH {
                         // Check which child it's most likely to be:
                         if is_dir_neg[split_axis as usize] {
                             // Push the first child onto the stack to perform later:
-                            node_index_stack.push(curr_node_index + 1);
-                            curr_node = unsafe {
-                                *self.linear_nodes.get_unchecked(right_child_index as usize)
-                            };
+                            *unsafe { node_stack.get_unchecked_mut(node_stack_index) } =
+                                curr_node_index + 1;
+                            node_stack_index += 1;
+                            curr_node_index = right_child_index as usize;
                         } else {
                             // Push the second child onto the stack to perform later:
-                            node_index_stack.push(right_child_index as usize);
-                            // Get the first child (unsafe because it's gauranteed to work):
-                            curr_node =
-                                unsafe { *self.linear_nodes.get_unchecked(curr_node_index + 1) };
+                            *unsafe { node_stack.get_unchecked_mut(node_stack_index) } =
+                                right_child_index as usize;
+                            node_stack_index += 1;
+                            curr_node_index += 1; // the first child
                         }
                     }
                 }
             // If we don't hit it, then we try another item from the stack:
             } else {
-                curr_node_index = match node_index_stack.pop() {
-                    Some(val) => val,
-                    None => return None,
-                } as usize;
-                curr_node = unsafe { *self.linear_nodes.get_unchecked(curr_node_index) };
+                if node_stack_index == 0usize {
+                    return None;
+                }
+                node_stack_index -= 1;
+                curr_node_index = *unsafe { node_stack.get_unchecked(node_stack_index) };
             }
         }
     }
 
-    // pub fn intersect(
-    //     &self,
-    //     mut max_time: f32,
-    //     ray: Ray,
-    //     int_info: RayIntInfo,
-    // ) -> Option<Intersection> {
-    //     let mut curr_node = match self.linear_nodes.first() {
-    //         Some(&val) => val,
-    //         None => return None,
-    //     };
+    pub fn intersect(
+        &self,
+        ray: Ray,
+        mut max_time: f32,
+        int_info: RayIntInfo,
+    ) -> Option<Intersection> {
+        // This function has to be very efficient, so I'll be using a lot of unsafe code
+        // here (but everything I'm doing should still be defined behavior).
 
-    //     // Some values we would need before we start:
-    //     let inv_dir = ray.dir.inv_scale(1f32);
-    //     let is_dir_neg = ray.dir.comp_wise_is_neg();
+        let inv_dir = ray.dir.inv_scale(1f32);
+        let is_dir_neg = ray.dir.comp_wise_is_neg();
 
-    //     // We could do this recursively, but a loop is more efficient in this case:
+        let mut node_stack: [usize; 64] = unsafe { MaybeUninit::uninit().assume_init() };
+        let mut node_stack_index = 0usize;
+        let mut curr_node_index = 0usize;
 
-    //     // This is the stack used to traverse the tree:
-    //     let mut node_index_stack = ArrayVec::<[usize; 64]>::new();
-    //     let mut curr_node_index = 0usize;
-    //     let mut intersection = None;
-    //     loop {
-    //         // We don't care where our ray intersects in time:
-    //         if let Some(_) = curr_node
-    //             .bound
-    //             .intersect_test(ray, max_time, inv_dir, is_dir_neg)
-    //         {
-    //             // Check if it is a leaf node (and thus, we can traverse the nodes):
-    //             if curr_node.num_tri > 0 {
-    //                 // Traverse over the triangles we want to check an intersection for:
-    //                 let begin = curr_node.tri_index as usize;
-    //                 let end = begin + (curr_node.num_tri as usize);
-    //                 let triangles = &self.mesh.get_tri_raw()[begin..end];
+        // This is the final result:
+        let mut result = None;
 
-    //                 // Update the hit and the max_time (so we can ignore values that are too far).
-    //                 // Unlike before, we can't return instantly, because there might be a closer intersection.
-    //                 for tri in triangles.iter() {
-    //                     if let Some(int) = tri.intersect(ray, max_time, int_info, &self.mesh) {
-    //                         intersection = Some(int);
-    //                         max_time = int.time;
-    //                     }
-    //                 }
+        loop {
+            let curr_node = *unsafe { self.linear_nodes.get_unchecked(curr_node_index) };
+            if let Some(_) = curr_node
+                .bound
+                .intersect_test(ray, max_time, inv_dir, is_dir_neg)
+            {
+                match curr_node.kind {
+                    LinearNodeKind::Leaf { tri_index, num_tri } => {
+                        let tri_start = tri_index as usize;
+                        let tri_end = tri_start + (num_tri as usize);
+                        for tri in (&self.mesh.get_tri_raw()[tri_start..tri_end]).iter() {
+                            if let Some(intersection) =
+                                tri.intersect(ray, max_time, int_info, &self.mesh)
+                            {
+                                // Update the max time for more efficient culling:
+                                max_time = intersection.time;
+                                // Can't return immediately, have to make sure this is the closest intersection
+                                result = Some(intersection);
+                            }
+                        }
 
-    //                 // Pop the stack:
-    //                 curr_node_index = match node_index_stack.pop() {
-    //                     Some(val) => val,
-    //                     None => return None,
-    //                 } as usize;
-    //                 // We can do this because we are guaranteed the algorithm works:
-    //                 curr_node = unsafe { *self.linear_nodes.get_unchecked(curr_node_index) };
-    //             } else {
-    //                 // Check which child it's most likely to be:
-    //                 if is_dir_neg[curr_node.split_axis as usize] {
-    //                     // Push the first child onto the stack to perform later:
-    //                     node_index_stack.push(curr_node_index + 1);
-    //                     // Get the second child (unsafe because it's gauranteed to work):
-    //                     curr_node = unsafe {
-    //                         *self
-    //                             .linear_nodes
-    //                             .get_unchecked(curr_node.tri_index as usize)
-    //                     };
-    //                 } else {
-    //                     // Push the second child onto the stack to perform later:
-    //                     node_index_stack.push(curr_node.tri_index as usize);
-    //                     // Get the first child (unsafe because it's gauranteed to work):
-    //                     curr_node =
-    //                         unsafe { *self.linear_nodes.get_unchecked(curr_node_index + 1) };
-    //                 }
-    //             }
-    //         } else {
-    //             // Pop the stack:
-    //             curr_node_index = match node_index_stack.pop() {
-    //                 Some(val) => val,
-    //                 None => return None,
-    //             } as usize;
-    //             // We can do this because we are guaranteed the algorithm works:
-    //             curr_node = unsafe { *self.linear_nodes.get_unchecked(curr_node_index) };
-    //         }
-    //     }
+                        // Pop the stack (if it's empty, we are done):
+                        if node_stack_index == 0usize {
+                            break;
+                        }
+                        node_stack_index -= 1;
+                        curr_node_index = *unsafe { node_stack.get_unchecked(node_stack_index) };
+                    }
+                    LinearNodeKind::Interior {
+                        right_child_index,
+                        split_axis,
+                    } => {
+                        // Check which child it's most likely to be:
+                        if is_dir_neg[split_axis as usize] {
+                            // Push the first child onto the stack to perform later:
+                            *unsafe { node_stack.get_unchecked_mut(node_stack_index) } =
+                                curr_node_index + 1;
+                            node_stack_index += 1;
+                            curr_node_index = right_child_index as usize;
+                        } else {
+                            // Push the second child onto the stack to perform later:
+                            *unsafe { node_stack.get_unchecked_mut(node_stack_index) } =
+                                right_child_index as usize;
+                            node_stack_index += 1;
+                            curr_node_index += 1; // the first child
+                        }
+                    }
+                }
+            // If we don't hit it, then we try another item from the stack:
+            } else {
+                if node_stack_index == 0usize {
+                    break;
+                }
+                node_stack_index -= 1;
+                curr_node_index = *unsafe { node_stack.get_unchecked(node_stack_index) };
+            }
+        }
 
-    //     // If we were lucky enough to hit something, it'll be returned here:
-    //     intersection
-    // }
+        result
+    }
 
     // Given a mesh, triangle info (as passed by new), and the number of triangles per node,
     // construct a tree:
@@ -250,9 +243,7 @@ impl MeshBVH {
                     split_axis,
                 } => {
                     let curr_pos = linear_nodes.len();
-                    // We can do this because we allocated with capacity before so we should always have enough.
-                    // We need to do this to maintain the order of the nodes in the vector, but we can't complete
-                    // this position until we have all of the information.
+                    // Temporarily "push" a value:
                     unsafe { linear_nodes.set_len(curr_pos + 1) };
                     generate_linear_nodes(linear_nodes, left);
                     let right_child_index = generate_linear_nodes(linear_nodes, right) as u32;
@@ -270,7 +261,7 @@ impl MeshBVH {
 
         // First create a vector with the correct number of nodes:
         let mut linear_nodes = Vec::with_capacity(num_nodes);
-        generate_linear_nodes(&mut linear_nodes, root_node);
+        let cnt = generate_linear_nodes(&mut linear_nodes, root_node);
         linear_nodes
     }
 
@@ -356,7 +347,7 @@ impl MeshBVH {
                 };
 
                 let curr_bucket = &mut buckets[bucket_index];
-                curr_bucket.count = curr_bucket.count + 1;
+                curr_bucket.count += 1;
                 curr_bucket.bound = curr_bucket.bound.combine_bnd(tri_info.bound);
             }
 
@@ -367,11 +358,9 @@ impl MeshBVH {
                 (BBox3f::new(), 0u32),
                 |(right_bound, right_count), (i, bucket)| {
                     // Have to do this because enumerate starts at 0, always, not the index of the slice:
-                    let i = i + 1;
                     let right_bound = right_bound.combine_bnd(bucket.bound);
-                    right_sa[i - 1] = right_bound.surface_area();
-                    let right_count = right_count + bucket.count;
-                    (right_bound, right_count)
+                    right_sa[i] = right_bound.surface_area();
+                    (right_bound, right_count + bucket.count)
                 },
             );
 
@@ -379,7 +368,7 @@ impl MeshBVH {
             // We also must modify the right count as we decrement it over time:
             let mut costs = [0f32; Self::BUCKET_COUNT - 1];
             let total_sa = all_bound.surface_area();
-            buckets[..Self::BUCKET_COUNT - 1].iter().enumerate().fold(
+            buckets[..(Self::BUCKET_COUNT - 1)].iter().enumerate().fold(
                 (BBox3f::new(), 0u32, right_count),
                 |(left_bound, left_count, right_count), (i, bucket)| {
                     let left_bound = left_bound.combine_bnd(bucket.bound);
@@ -389,15 +378,14 @@ impl MeshBVH {
                         * ((left_count as f32) * left_bound.surface_area()
                             + (right_count as f32) * right_sa[i])
                         / total_sa;
-                    let right_count = right_count - buckets[i + 1].count;
-                    (left_bound, left_count, right_count)
+                    (left_bound, left_count, right_count - buckets[i + 1].count)
                 },
             );
 
             let (min_cost_index, &min_cost) = costs
                 .iter() // returns a reference to the elements (so a &x essentially).
                 .enumerate() // returns (i, &x), and max_by's lambda takes a reference. But coercion helps here:
-                .max_by(|(_, x), (_, y)| x.partial_cmp(y).unwrap())
+                .min_by(|(_, x), (_, y)| x.partial_cmp(y).unwrap())
                 .unwrap();
 
             // If this happens, then we should split more and continue our operations:

@@ -10,7 +10,8 @@ use math::ray::Ray;
 use math::vector::Vec3f;
 
 fn main() {
-    let mesh = ply::load_path("C:/Users/jan/Downloads/sphere.ply").unwrap();
+    let mesh =
+        ply::load_path("E:/Development/cpp_projects/prism/Prism/test_files/sphere.ply").unwrap();
 
     let org = Vec3f {
         x: 0f32,
@@ -19,8 +20,8 @@ fn main() {
     };
     let dir = Vec3f {
         x: -1f32,
-        y: 0f32,
-        z: 0f32,
+        y: 1f32,
+        z: -1f32,
     };
     let max_time = 100f32;
     let ray = Ray { org, dir };
@@ -29,8 +30,8 @@ fn main() {
     // Now let's try to intersect it:
 
     let bvh = MeshBVH::new(mesh, 32);
-    if let Some(_) = bvh.intersect_test(ray, max_time, int_info) {
-        println!("intersection found!");
+    if let Some(int) = bvh.intersect(ray, max_time, int_info) {
+        println!("intersection found! {:?}", int.p);
     }
 
     println!("end of line has been reached");

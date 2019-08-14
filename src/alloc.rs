@@ -28,15 +28,17 @@ impl<T: Copy> StackAlloc<T> {
         // Check if we should allocate more memory:
         let stacks = unsafe { &mut *self.data.get() };
         let stacks_end_index = stacks.len() - 1;
-
         let stack_len = unsafe { stacks.get_unchecked(stacks_end_index).len() };
 
-        // Check if we should deallocate:
-        if self.curr_pos.get() == stack_len {
+        // Check if we should allocate another stack value:
+        let stacks_end_index = if self.curr_pos.get() == stack_len {
             // Allocate the new array and push it:
             unsafe { stacks.push(alloc_array(stack_len)) };
             self.curr_pos.set(0);
-        }
+            stacks_end_index + 1
+        } else {
+            stacks_end_index
+        };
 
         // Get the current box we care about.
         // We are guaranteed that data is at least length 1:
