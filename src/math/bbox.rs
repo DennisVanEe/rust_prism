@@ -221,7 +221,7 @@ impl BBox3<f32> {
         max_time: f32,
         inv_dir: Vec3f,
         is_dir_neg: Vec3<bool>,
-    ) -> Option<f32> {
+    ) -> bool {
         // Use as indices:
         let i_dir_neg = [
             usize::from(is_dir_neg.x),
@@ -239,7 +239,7 @@ impl BBox3<f32> {
         let ty_max = ty_max * (1f32 + 2f32 * gamma_f32(3));
 
         if t_min > ty_max || ty_min > t_max {
-            return None;
+            return false;
         }
 
         let t_min = if ty_min > t_min { ty_min } else { t_min };
@@ -250,17 +250,13 @@ impl BBox3<f32> {
 
         let tz_max = tz_max * (1f32 + 2f32 * gamma_f32(3));
         if t_min > tz_max || tz_min > t_max {
-            return None;
+            return false;
         }
 
         let t_min = if tz_min > t_min { tz_min } else { t_min };
         let t_max = if tz_max < t_max { tz_max } else { t_max };
 
-        if t_min < max_time && t_max > 0f32 {
-            Some(t_min)
-        } else {
-            None
-        }
+        t_min < max_time && t_max > 0f32
     }
 }
 

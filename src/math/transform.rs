@@ -41,3 +41,5 @@ impl Transform {
         }
     }
 }
+
+pub struct AnimatedTransform {}

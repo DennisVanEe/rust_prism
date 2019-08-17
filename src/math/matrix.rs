@@ -5,9 +5,9 @@ use std::ops::{Add, Index, Mul, Neg, Sub};
 use super::vector::Vec3;
 use super::vector::Vec4;
 
-// Not copyable, as Matrices are expensive.
 #[derive(Clone, Copy, Debug)]
 pub struct Mat4<T: Signed + Float> {
+    // Array of rows
     m: [Vec4<T>; 4],
 }
 
@@ -117,71 +117,8 @@ impl<T: Signed + Float> Mat4<T> {
         let w = vec.dot(self.m[3]);
         Vec4 { x, y, z, w }
     }
-}
 
-impl<T: Signed + Float> Index<usize> for Mat4<T> {
-    type Output = Vec4<T>;
-
-    // One would have to use [r][c]
-    fn index(&self, i: usize) -> &Vec4<T> {
-        &self.m[i]
-    }
-}
-
-impl<T: Signed + Float> Neg for Mat4<T> {
-    type Output = Mat4<T>;
-
-    fn neg(self) -> Mat4<T> {
-        Mat4 {
-            m: [-self.m[0], -self.m[1], -self.m[2], -self.m[3]],
-        }
-    }
-}
-
-impl<T: Signed + Float> Add for Mat4<T> {
-    type Output = Mat4<T>;
-
-    fn add(self, o: Mat4<T>) -> Mat4<T> {
-        let r0 = self.m[0] + o.m[0];
-        let r1 = self.m[1] + o.m[1];
-        let r2 = self.m[2] + o.m[2];
-        let r3 = self.m[3] + o.m[3];
-        Mat4 {
-            m: [r0, r1, r2, r3],
-        }
-    }
-}
-
-impl<T: Signed + Float> Sub for Mat4<T> {
-    type Output = Mat4<T>;
-
-    fn sub(self, o: Mat4<T>) -> Mat4<T> {
-        let r0 = self.m[0] - o.m[0];
-        let r1 = self.m[1] - o.m[1];
-        let r2 = self.m[2] - o.m[2];
-        let r3 = self.m[3] - o.m[3];
-        Mat4 {
-            m: [r0, r1, r2, r3],
-        }
-    }
-}
-
-impl<T: Signed + Float> Mul for Mat4<T> {
-    type Output = Mat4<T>;
-
-    fn mul(self, o: Mat4<T>) -> Mat4<T> {
-        let r0 = self.m[0] - o.m[0];
-        let r1 = self.m[1] - o.m[1];
-        let r2 = self.m[2] - o.m[2];
-        let r3 = self.m[3] - o.m[3];
-        Mat4 {
-            m: [r0, r1, r2, r3],
-        }
-    }
-}
-
-impl<T: Signed + Float> Mat4<T> {
-    pub fn at(&self, r: usize, c: usize) -> &T {
+        pub fn at(&self, r: usize, c: usize) -> &T {
         &self.m[r][c]
     }
 
@@ -242,6 +179,88 @@ impl<T: Signed + Float> Mat4<T> {
             z: T::zero(),
             w: T::one(),
         };
+        Mat4 {
+            m: [r0, r1, r2, r3],
+        }
+    }
+}
+
+impl<T: Signed + Float> Index<usize> for Mat4<T> {
+    type Output = Vec4<T>;
+
+    // One would have to use [r][c]
+    fn index(&self, i: usize) -> &Vec4<T> {
+        &self.m[i]
+    }
+}
+
+impl<T: Signed + Float> Neg for Mat4<T> {
+    type Output = Mat4<T>;
+
+    fn neg(self) -> Mat4<T> {
+        Mat4 {
+            m: [-self.m[0], -self.m[1], -self.m[2], -self.m[3]],
+        }
+    }
+}
+
+impl<T: Signed + Float> Add for Mat4<T> {
+    type Output = Mat4<T>;
+
+    fn add(self, o: Mat4<T>) -> Mat4<T> {
+        let r0 = self.m[0] + o.m[0];
+        let r1 = self.m[1] + o.m[1];
+        let r2 = self.m[2] + o.m[2];
+        let r3 = self.m[3] + o.m[3];
+        Mat4 {
+            m: [r0, r1, r2, r3],
+        }
+    }
+}
+
+impl<T: Signed + Float> Sub for Mat4<T> {
+    type Output = Mat4<T>;
+
+    fn sub(self, o: Mat4<T>) -> Mat4<T> {
+        let r0 = self.m[0] - o.m[0];
+        let r1 = self.m[1] - o.m[1];
+        let r2 = self.m[2] - o.m[2];
+        let r3 = self.m[3] - o.m[3];
+        Mat4 {
+            m: [r0, r1, r2, r3],
+        }
+    }
+}
+
+impl<T: Signed + Float> Mul for Mat4<T> {
+    type Output = Mat4<T>;
+
+    fn mul(self, o: Mat4<T>) -> Mat4<T> {
+        let r0 = Vec4 {
+            x: self.m[0].dot(o.m[0]),
+            y: self.m[0].dot(o.m[1]),
+            z: self.m[0].dot(o.m[2]),
+            w: self.m[0].dot(o.m[3]),
+        };
+        let r1 = Vec4 {
+            x: self.m[1].dot(o.m[0]),
+            y: self.m[1].dot(o.m[1]),
+            z: self.m[1].dot(o.m[2]),
+            w: self.m[1].dot(o.m[3]),
+        };
+        let r2 = Vec4 {
+            x: self.m[2].dot(o.m[0]),
+            y: self.m[2].dot(o.m[1]),
+            z: self.m[2].dot(o.m[2]),
+            w: self.m[2].dot(o.m[3]),
+        };
+        let r3 = Vec4 {
+            x: self.m[3].dot(o.m[0]),
+            y: self.m[3].dot(o.m[1]),
+            z: self.m[3].dot(o.m[2]),
+            w: self.m[3].dot(o.m[3]),
+        };
+
         Mat4 {
             m: [r0, r1, r2, r3],
         }

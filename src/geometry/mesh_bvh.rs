@@ -39,7 +39,7 @@ impl MeshBVH {
         Self::construct_tree(mesh, tris_info, max_tri_per_node)
     }
 
-    pub fn intersect_test(&self, ray: Ray, max_time: f32, int_info: RayIntInfo) -> Option<f32> {
+    pub fn intersect_test(&self, ray: Ray, max_time: f32, int_info: RayIntInfo) -> bool {
         // This function has to be very efficient, so I'll be using a lot of unsafe code
         // here (but everything I'm doing should still be defined behavior).
 
@@ -52,7 +52,7 @@ impl MeshBVH {
 
         loop {
             let curr_node = *unsafe { self.linear_nodes.get_unchecked(curr_node_index) };
-            if let Some(_) = curr_node
+            if curr_node
                 .bound
                 .intersect_test(ray, max_time, inv_dir, is_dir_neg)
             {
@@ -70,17 +70,15 @@ impl MeshBVH {
                                 .get_unchecked(tri_start..tri_end)
                                 .iter()
                             {
-                                if let Some(time) =
-                                    tri.intersect_test(ray, max_time, int_info, &self.mesh)
-                                {
-                                    return Some(time);
+                                if tri.intersect_test(ray, max_time, int_info, &self.mesh) {
+                                    return true;
                                 }
                             }
                         }
 
                         // Pop the stack (if it's empty, we are done):
                         if node_stack_index == 0usize {
-                            return None;
+                            return false;
                         }
                         node_stack_index -= 1;
                         curr_node_index = *unsafe { node_stack.get_unchecked(node_stack_index) };
@@ -108,7 +106,7 @@ impl MeshBVH {
             // If we don't hit it, then we try another item from the stack:
             } else {
                 if node_stack_index == 0usize {
-                    return None;
+                    return false;
                 }
                 node_stack_index -= 1;
                 curr_node_index = *unsafe { node_stack.get_unchecked(node_stack_index) };
@@ -137,7 +135,7 @@ impl MeshBVH {
 
         loop {
             let curr_node = *unsafe { self.linear_nodes.get_unchecked(curr_node_index) };
-            if let Some(_) = curr_node
+            if curr_node
                 .bound
                 .intersect_test(ray, max_time, inv_dir, is_dir_neg)
             {

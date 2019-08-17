@@ -300,7 +300,7 @@ impl Triangle {
         max_time: f32,
         int_info: RayIntInfo,
         mesh: &Mesh,
-    ) -> Option<f32> {
+    ) -> bool {
         let poss = self.get_poss(mesh);
 
         // // NOTE: if you decide to include this, dp is used somewhere else in the code
@@ -372,13 +372,13 @@ impl Triangle {
         if (e[0] < 0f32 || e[1] < 0f32 || e[2] < 0f32)
             && (e[0] > 0f32 || e[1] > 0f32 || e[2] > 0f32)
         {
-            return None;
+            return false;
         };
 
         let sum_e = e[0] + e[1] + e[2];
         // Checks if it's a degenerate triangle:
         if sum_e == 0f32 {
-            return None;
+            return false;
         };
 
         // Now we finish transforming the z value:
@@ -406,7 +406,7 @@ impl Triangle {
         if (sum_e < 0f32 && (time_scaled >= 0f32 || time_scaled < max_time * sum_e))
             || (sum_e > 0f32 && (time_scaled <= 0f32 || time_scaled > max_time * sum_e))
         {
-            return None;
+            return false;
         };
 
         let inv_sum_e = 1f32 / sum_e;
@@ -433,11 +433,7 @@ impl Triangle {
             * (gamma_f32(3) * max_e * max_z + delta_e * max_z + delta_z * max_e)
             * inv_sum_e.abs();
 
-        if time > delta_t {
-            Some(time)
-        } else {
-            None
-        }
+        time > delta_t
     }
 
     pub fn intersect(
