@@ -12,7 +12,73 @@ pub struct Mat4<T: Signed + Float> {
 }
 
 impl<T: Signed + Float> Mat4<T> {
-    pub fn transpose(&self) -> Mat4<T> {
+    pub fn new(m: [Vec4<T>; 4]) -> Self {
+        Mat4 { m }
+    }
+
+    // Creates an identity matrix:
+    pub fn identity() -> Self {
+        let r0 = Vec4 {
+            x: T::one(),
+            y: T::zero(),
+            z: T::zero(),
+            w: T::zero(),
+        };
+        let r1 = Vec4 {
+            x: T::zero(),
+            y: T::one(),
+            z: T::zero(),
+            w: T::zero(),
+        };
+        let r2 = Vec4 {
+            x: T::zero(),
+            y: T::zero(),
+            z: T::one(),
+            w: T::zero(),
+        };
+        let r3 = Vec4 {
+            x: T::zero(),
+            y: T::zero(),
+            z: T::zero(),
+            w: T::one(),
+        };
+        Mat4 {
+            m: [r0, r1, r2, r3],
+        }
+    }
+
+    // Creates translation matrix:
+    pub fn translation(trans: Vec3<T>) -> Self {
+        let r0 = Vec4 {
+            x: T::one(),
+            y: T::zero(),
+            z: T::zero(),
+            w: trans.x,
+        };
+        let r1 = Vec4 {
+            x: T::zero(),
+            y: T::one(),
+            z: T::zero(),
+            w: trans.y,
+        };
+        let r2 = Vec4 {
+            x: T::zero(),
+            y: T::zero(),
+            z: T::one(),
+            w: trans.z,
+        };
+        let r3 = Vec4 {
+            x: T::zero(),
+            y: T::zero(),
+            z: T::zero(),
+            w: T::one(),
+        };
+        Mat4 {
+            m: [r0, r1, r2, r3],
+        }
+    }
+
+    pub fn transpose(self) -> Self {
         let r0 = Vec4 {
             x: self.m[0].x,
             y: self.m[1].x,
@@ -44,7 +110,7 @@ impl<T: Signed + Float> Mat4<T> {
 
     /// Calculates the inverse of a matrix. Note that, because
     /// the inverse can be undefined, it retuns an option.
-    pub fn inverse(&self) -> Option<Mat4<T>> {
+    pub fn inverse(self) -> Option<Self> {
         let a2323 = self.m[2][2] * self.m[3][3] - self.m[2][3] * self.m[3][2];
         let a1323 = self.m[2][1] * self.m[3][3] - self.m[2][3] * self.m[3][1];
         let a1223 = self.m[2][1] * self.m[3][2] - self.m[2][2] * self.m[3][1];
@@ -110,7 +176,7 @@ impl<T: Signed + Float> Mat4<T> {
     }
 
     /// Performs a matrix multiplication with a vector:
-    pub fn vec_mul(&self, vec: Vec4<T>) -> Vec4<T> {
+    pub fn vec_mul(self, vec: Vec4<T>) -> Vec4<T> {
         let x = vec.dot(self.m[0]);
         let y = vec.dot(self.m[1]);
         let z = vec.dot(self.m[2]);
@@ -118,70 +184,8 @@ impl<T: Signed + Float> Mat4<T> {
         Vec4 { x, y, z, w }
     }
 
-        pub fn at(&self, r: usize, c: usize) -> &T {
+    pub fn at(&self, r: usize, c: usize) -> &T {
         &self.m[r][c]
-    }
-
-    // Creates an identity matrix:
-    pub fn identity() -> Mat4<T> {
-        let r0 = Vec4 {
-            x: T::one(),
-            y: T::zero(),
-            z: T::zero(),
-            w: T::zero(),
-        };
-        let r1 = Vec4 {
-            x: T::zero(),
-            y: T::one(),
-            z: T::zero(),
-            w: T::zero(),
-        };
-        let r2 = Vec4 {
-            x: T::zero(),
-            y: T::zero(),
-            z: T::one(),
-            w: T::zero(),
-        };
-        let r3 = Vec4 {
-            x: T::zero(),
-            y: T::zero(),
-            z: T::zero(),
-            w: T::one(),
-        };
-        Mat4 {
-            m: [r0, r1, r2, r3],
-        }
-    }
-
-    // Creates translation matrix:
-    pub fn translation(trans: Vec3<T>) -> Mat4<T> {
-        let r0 = Vec4 {
-            x: T::one(),
-            y: T::zero(),
-            z: T::zero(),
-            w: trans.x,
-        };
-        let r1 = Vec4 {
-            x: T::zero(),
-            y: T::one(),
-            z: T::zero(),
-            w: trans.y,
-        };
-        let r2 = Vec4 {
-            x: T::zero(),
-            y: T::zero(),
-            z: T::one(),
-            w: trans.z,
-        };
-        let r3 = Vec4 {
-            x: T::zero(),
-            y: T::zero(),
-            z: T::zero(),
-            w: T::one(),
-        };
-        Mat4 {
-            m: [r0, r1, r2, r3],
-        }
     }
 }
 

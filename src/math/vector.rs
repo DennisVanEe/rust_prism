@@ -6,7 +6,7 @@ use crate::math::util::{max, min};
 use num_traits::{Float, Signed, Zero};
 
 use std::cmp::PartialOrd;
-use std::ops::{Add, Div, Index, Mul, Neg, Sub};
+use std::ops::{Add, Div, Index, IndexMut, Mul, Neg, Sub};
 
 #[derive(Copy, Clone, Debug)]
 pub struct Vec2<T: Copy> {
@@ -475,6 +475,17 @@ impl<T: Copy> Index<usize> for Vec3<T> {
             0 => &self.x,
             1 => &self.y,
             2 => &self.z,
+            _ => panic!("Index out of range for Vec"),
+        }
+    }
+}
+
+impl<T: Copy> IndexMut<usize> for Vec3<T> {
+    fn index_mut(&mut self, i: usize) -> &mut T {
+        match i {
+            0 => &mut self.x,
+            1 => &mut self.y,
+            2 => &mut self.z,
             _ => panic!("Index out of range for Vec"),
         }
     }

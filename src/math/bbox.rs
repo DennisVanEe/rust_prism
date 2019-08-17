@@ -6,7 +6,7 @@ use num_traits::{Bounded, Float};
 
 use std::cmp::PartialOrd;
 use std::mem::swap;
-use std::ops::{Add, Index, Mul, Neg, Sub};
+use std::ops::{Index, Sub};
 
 #[derive(Clone, Copy)]
 pub struct BBox2<T>
