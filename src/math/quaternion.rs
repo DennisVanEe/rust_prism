@@ -1,23 +1,23 @@
-use crate::math::vector::{Vec3, Vec4};
 use crate::math::matrix::Mat4;
+use crate::math::vector::{Vec3, Vec4};
 
-use num_traits::{clamp, Signed, FromPrimitive, Float};
+use num_traits::{clamp, Float};
 
-use std::ops::{Add, Mul, Sub};
 use std::mem::MaybeUninit;
+use std::ops::{Add, Mul, Sub, Neg};
 
 #[derive(Clone, Copy, Debug)]
-pub struct Quat<T: Copy + Signed + Float> {
+pub struct Quat<T: Float> {
     pub xyz: Vec3<T>,
     pub w: T,
 }
 
-impl<T: Copy + FromPrimitive + Signed + Float> Quat<T> {
+impl<T: Float> Quat<T> {
     pub fn from_mat4(mat: Mat4<T>) -> Self {
         let tr = mat[0][0] + mat[1][1] + mat[2][2];
 
-        let two = T::from_f64(2.0).unwrap();
-        let half = T::from_f64(0.5).unwrap();
+        let two = T::from::<f64>(2.0).unwrap();
+        let half = T::from::<f64>(0.5).unwrap();
 
         if tr > T::zero() {
             let s = (tr + T::one()).sqrt();
@@ -29,7 +29,6 @@ impl<T: Copy + FromPrimitive + Signed + Float> Quat<T> {
             };
 
             Quat { xyz, w }
-
         } else {
             let (i, j, k) = if mat[0][0] > mat[1][1] && mat[0][0] > mat[2][2] {
                 (0, 1, 2)
@@ -48,7 +47,7 @@ impl<T: Copy + FromPrimitive + Signed + Float> Quat<T> {
             xyz[k] = s * (mat[k][i] + mat[i][k]);
 
             let w = s * (mat[k][j] - mat[j][k]);
-            
+
             Quat { xyz, w }
         }
     }
@@ -66,9 +65,9 @@ impl<T: Copy + FromPrimitive + Signed + Float> Quat<T> {
         let wy = self.xyz.y * self.w;
         let wz = self.xyz.z * self.w;
 
-        // I know this is dumb, I'll figure something out for 
+        // I know this is dumb, I'll figure something out for
         // this later:
-        let two = T::from_f64(2.0).unwrap();
+        let two = T::from::<f64>(2.0).unwrap();
 
         let r0 = Vec4 {
             x: T::one() - two * (y2 + z2),
@@ -104,7 +103,7 @@ impl<T: Copy + FromPrimitive + Signed + Float> Quat<T> {
     pub fn slerp(self, q2: Self, t: T) -> Self {
         let cos_theta = self.dot(q2);
         // This constant is used in pbrt. So I'll just use it here:
-        if cos_theta > T::from_f32(0.9995f32).unwrap() {
+        if cos_theta > T::from::<f32>(0.9995f32).unwrap() {
             (self.scale(T::one() - t) + q2.scale(t)).normalize()
         } else {
             let theta = clamp(cos_theta, -T::one(), T::one()).acos();
@@ -140,7 +139,18 @@ impl<T: Copy + FromPrimitive + Signed + Float> Quat<T> {
     }
 }
 
-impl<T: Copy + Signed + Float> Mul for Quat<T> {
+impl<T: Float> Neg for Quat<T> {
+    type Output = Self;
+
+    fn neg(self) -> Self {
+        Quat {
+            xyz: -self.xyz,
+            w: -self.w,
+        }
+    }
+}
+
+impl<T: Float> Mul for Quat<T> {
     type Output = Self;
 
     fn mul(self, o: Quat<T>) -> Self {
@@ -151,7 +161,7 @@ impl<T: Copy + Signed + Float> Mul for Quat<T> {
     }
 }
 
-impl<T: Copy + Signed + Float> Add for Quat<T> {
+impl<T: Float> Add for Quat<T> {
     type Output = Self;
 
     fn add(self, o: Quat<T>) -> Self {
@@ -162,7 +172,7 @@ impl<T: Copy + Signed + Float> Add for Quat<T> {
     }
 }
 
-impl<T: Copy + Signed + Float> Sub for Quat<T> {
+impl<T: Float> Sub for Quat<T> {
     type Output = Self;
 
     fn sub(self, o: Quat<T>) -> Self {

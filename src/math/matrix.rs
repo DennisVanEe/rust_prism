@@ -1,17 +1,20 @@
-use num_traits::{Float, Signed};
+use crate::math::vector::Vec3;
+use crate::math::vector::Vec4;
+
+use num_traits::{Float};
 
 use std::ops::{Add, Index, Mul, Neg, Sub};
 
-use super::vector::Vec3;
-use super::vector::Vec4;
-
 #[derive(Clone, Copy, Debug)]
-pub struct Mat4<T: Signed + Float> {
+pub struct Mat4<T: Float> {
     // Array of rows
     m: [Vec4<T>; 4],
 }
 
-impl<T: Signed + Float> Mat4<T> {
+pub type Mat4f = Mat4<f32>;
+pub type Mat4d = Mat4<f64>;
+
+impl<T: Float> Mat4<T> {
     pub fn new(m: [Vec4<T>; 4]) -> Self {
         Mat4 { m }
     }
@@ -108,6 +111,16 @@ impl<T: Signed + Float> Mat4<T> {
         }
     }
 
+    // returns a column in the matrix:
+    pub fn get_column(self, i: usize) -> Vec4<T> {
+        Vec4 {
+            x: self[0][i],
+            y: self[1][i],
+            z: self[2][i],
+            w: self[3][i],
+        }
+    }
+
     /// Calculates the inverse of a matrix. Note that, because
     /// the inverse can be undefined, it retuns an option.
     pub fn inverse(self) -> Option<Self> {
@@ -184,12 +197,30 @@ impl<T: Signed + Float> Mat4<T> {
         Vec4 { x, y, z, w }
     }
 
-    pub fn at(&self, r: usize, c: usize) -> &T {
-        &self.m[r][c]
+    pub fn scale(self, s: T) -> Self {
+        Mat4 {
+            m: [
+                self.m[0].scale(s),
+                self.m[1].scale(s),
+                self.m[2].scale(s),
+                self.m[3].scale(s),
+            ],
+        }
+    }
+
+    pub fn lerp(self, m1: Self, time: T) -> Self {
+        Mat4 {
+            m: [
+                self[0].lerp(m1[0], time),
+                self[1].lerp(m1[1], time),
+                self[2].lerp(m1[2], time),
+                self[3].lerp(m1[3], time),
+            ]
+        }
     }
 }
 
-impl<T: Signed + Float> Index<usize> for Mat4<T> {
+impl<T: Float> Index<usize> for Mat4<T> {
     type Output = Vec4<T>;
 
     // One would have to use [r][c]
@@ -198,7 +229,7 @@ impl<T: Signed + Float> Index<usize> for Mat4<T> {
     }
 }
 
-impl<T: Signed + Float> Neg for Mat4<T> {
+impl<T: Float> Neg for Mat4<T> {
     type Output = Mat4<T>;
 
     fn neg(self) -> Mat4<T> {
@@ -208,7 +239,7 @@ impl<T: Signed + Float> Neg for Mat4<T> {
     }
 }
 
-impl<T: Signed + Float> Add for Mat4<T> {
+impl<T: Float> Add for Mat4<T> {
     type Output = Mat4<T>;
 
     fn add(self, o: Mat4<T>) -> Mat4<T> {
@@ -222,7 +253,7 @@ impl<T: Signed + Float> Add for Mat4<T> {
     }
 }
 
-impl<T: Signed + Float> Sub for Mat4<T> {
+impl<T: Float> Sub for Mat4<T> {
     type Output = Mat4<T>;
 
     fn sub(self, o: Mat4<T>) -> Mat4<T> {
@@ -236,7 +267,7 @@ impl<T: Signed + Float> Sub for Mat4<T> {
     }
 }
 
-impl<T: Signed + Float> Mul for Mat4<T> {
+impl<T: Float> Mul for Mat4<T> {
     type Output = Mat4<T>;
 
     fn mul(self, o: Mat4<T>) -> Mat4<T> {
@@ -268,5 +299,88 @@ impl<T: Signed + Float> Mul for Mat4<T> {
         Mat4 {
             m: [r0, r1, r2, r3],
         }
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct Mat3<T: Float> {
+    // Array of rows
+    m: [Vec3<T>; 3],
+}
+
+pub type Mat3f = Mat3<f32>;
+pub type Mat3d = Mat3<f64>;
+
+impl<T: Float> Mat3<T> {
+    pub fn new(m: [Vec3<T>; 3]) -> Self {
+        Mat3 { m }
+    }
+
+    // Extracts the upper 3x3 matrix from a mat4
+    pub fn from_mat4(m: Mat4<T>) -> Self {
+        let r0 = Vec3 {
+            x: m[0][0],
+            y: m[1][1],
+            z: m[2][2],
+        };
+
+        let r1 = Vec3 {
+            x: m[1][0],
+            y: m[1][1],
+            z: m[1][2],
+        };
+
+        let r2 = Vec3 {
+            x: m[2][0],
+            y: m[2][1],
+            z: m[2][2],
+        };
+
+        Mat3 { m: [r0, r1, r2] }
+    }
+
+    // Creates an identity matrix:
+    pub fn identity() -> Self {
+        let r0 = Vec3 {
+            x: T::one(),
+            y: T::zero(),
+            z: T::zero(),
+        };
+        let r1 = Vec3 {
+            x: T::zero(),
+            y: T::one(),
+            z: T::zero(),
+        };
+        let r2 = Vec3 {
+            x: T::zero(),
+            y: T::zero(),
+            z: T::one(),
+        };
+        Mat3 { m: [r0, r1, r2] }
+    }
+
+    // returns a column in the matrix:
+    pub fn get_column(self, i: usize) -> Vec3<T> {
+        Vec3 {
+            x: self[0][i],
+            y: self[1][i],
+            z: self[2][i],
+        }
+    }
+
+    pub fn vec_mul(self, vec: Vec3<T>) -> Vec3<T> {
+        let x = vec.dot(self.m[0]);
+        let y = vec.dot(self.m[1]);
+        let z = vec.dot(self.m[2]);
+        Vec3 { x, y, z }
+    }
+}
+
+impl<T: Float> Index<usize> for Mat3<T> {
+    type Output = Vec3<T>;
+
+    // One would have to use [r][c]
+    fn index(&self, i: usize) -> &Vec3<T> {
+        &self.m[i]
     }
 }
