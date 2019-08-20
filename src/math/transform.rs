@@ -7,10 +7,9 @@ use num_traits::{Bounded, Float, Signed};
 
 use std::ops::Mul;
 
-/// Transforms, being a massive 32 floats, can't be copied
-/// willy nilly. To do that you have to clone it.
-/// Transforms are always gauranteed to be invertible.
 #[derive(Clone, Copy, Debug)]
+// A Transform needs to be bounded in order to handle transformations
+// on bboxes.
 pub struct Transform<T: Bounded + Float> {
     nrm: Mat4<T>,
     inv: Mat4<T>,
@@ -77,7 +76,7 @@ impl<T: Bounded + Float> Transform<T> {
     }
 }
 
-impl<T: Float> Mul for Transform<T> {
+impl<T: Bounded + Float> Mul for Transform<T> {
     type Output = Self;
 
     fn mul(self, o: Self) -> Self {
@@ -89,9 +88,9 @@ impl<T: Float> Mul for Transform<T> {
 }
 
 #[derive(Clone, Copy, Debug)]
-pub struct AnimatedTransform<T: Signed + Float> {
-    start_transform: Transform<T>,
-    end_transform: Transform<T>,
+pub struct AnimatedTransform<T: Bounded + Signed + Float> {
+    start_transf: Transform<T>,
+    end_transf: Transform<T>,
     
     start_time: T,
     end_time: T,
@@ -111,9 +110,24 @@ pub struct AnimatedTransform<T: Signed + Float> {
     is_animated: bool,
 }
 
-impl<T: Signed + Float> AnimatedTransform<T> {
-    // mat must be an affine transformation
+impl<T: Bounded + Signed + Float> AnimatedTransform<T> {
+    // Number of time samples to calculate the bounding box
+    // for the motion:
+    const NUM_BOUND_SAMPLES: usize = 32;
+
+    // mat must be an affine transformation.
+    // It returns an option because the matrix could potentially not be invertible
     pub fn new(start_mat: Mat4<T>, end_mat: Mat4<T>, start_time: T, end_time: T) -> Option<Self> {
+        let start_transf = match Transform::new(start_mat) {
+            Some(result) => result,
+            _ => return None,
+        };
+
+        let end_transf = match Transform::new(end_mat) {
+            Some(result) => result,
+            _ => return None,
+        };
+
         let (start_trans, start_rot, start_scale) = match Self::decompose(start_mat) {
             Some(result) => result,
             _ => return None,
@@ -127,26 +141,51 @@ impl<T: Signed + Float> AnimatedTransform<T> {
         let end_rot = if start_rot.dot(end_rot).is_negative() { -end_rot } else { end_rot };
         let has_rot = start_rot.dot(end_rot) < T::from::<f32>(0.9995f32).unwrap();
 
-        // This is code I just copied from pbrt...
-        if has_rot {
-
-        }
+        Some(AnimatedTransform {
+            start_transf,
+            end_transf,
+            start_time,
+            end_time,
+            start_trans,
+            end_trans,
+            start_rot,
+            end_rot,
+            start_scale,
+            end_scale,
+            has_rot,
+            is_animated: true,
+        })
     }
 
-    // If given a bounding box, will bound the entire motion of this bounding box
-    pub fn motion_bound(self, bound: BBox3<T>) -> BBox3<T> {
-        // If it isn't animated, then just transform the bound itself:
+    // If given a bounding box, will bound the entire motion of this bounding box.
+    // This could potentially be a very costly operation, so, try not to call this
+    // too often (really, one shouldn't be calling this very often).
+    pub fn motion_bound(self, bbox: BBox3<T>) -> BBox3<T> {
+        // These are the cases that are efficient to calculate:
         if !self.is_animated {
-
+             self.start_transf.transf_bbox3(bbox)
+        } else if !self.has_rot {
+            self.start_transf.transf_bbox3(bbox).combine_bnd(self.end_transf.transf_bbox3(bbox))
+        } else {
+            // I could do what pbrt does, but I'm too lazy. This bound transform should
+            // only get called once in the preprocess step anyways, so it would only get called once.
+            // This should be robust enough to handle most everything:
+            let mut final_bbox = bbox;
+            for i in 1..=Self::NUM_BOUND_SAMPLES {
+                let t = T::from(i).unwrap() / T::from(Self::NUM_BOUND_SAMPLES).unwrap();
+                let dt = (T::one() - t) * self.start_time + t * self.end_time;
+                final_bbox = self.interpolate(dt).transf_bbox3(bbox).combine_bnd(final_bbox);
+            }
+            final_bbox
         }
     }
 
     pub fn interpolate(self, time: T) -> Transform<T> {
         // Check if we even have an end transform:
         if !self.is_animated || time <= self.start_time {
-            self.start_transform
+            self.start_transf
         } else if time >= self.end_time {
-            self.end_transform
+            self.end_transf
         } else {
             let dt = (time - self.start_time) / (self.end_time - self.start_time);
             let trans = self.start_trans.lerp(self.end_trans, dt);

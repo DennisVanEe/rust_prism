@@ -2,6 +2,7 @@ mod alloc;
 mod geometry;
 mod math;
 mod util;
+mod scene_loading;
 
 use geometry::loader::ply;
 use geometry::mesh::{calc_rayintinfo, Mesh};

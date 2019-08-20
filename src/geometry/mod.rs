@@ -1,6 +1,7 @@
 pub mod loader;
 pub mod mesh;
 pub mod mesh_bvh;
+pub mod sphere;
 
 use crate::geometry::mesh::Intersection;
 use crate::math::bbox::BBox3f;
