@@ -1,5 +1,5 @@
-use crate::math::vector::Vec3;
-use crate::math::vector::Vec4;
+use crate::math::vector::{Vec3, Vec4};
+use crate::math::util::to_radians;
 
 use num_traits::{Float};
 
@@ -19,39 +19,8 @@ impl<T: Float> Mat4<T> {
         Mat4 { m }
     }
 
-    // Creates an identity matrix:
-    pub fn identity() -> Self {
-        let r0 = Vec4 {
-            x: T::one(),
-            y: T::zero(),
-            z: T::zero(),
-            w: T::zero(),
-        };
-        let r1 = Vec4 {
-            x: T::zero(),
-            y: T::one(),
-            z: T::zero(),
-            w: T::zero(),
-        };
-        let r2 = Vec4 {
-            x: T::zero(),
-            y: T::zero(),
-            z: T::one(),
-            w: T::zero(),
-        };
-        let r3 = Vec4 {
-            x: T::zero(),
-            y: T::zero(),
-            z: T::zero(),
-            w: T::one(),
-        };
-        Mat4 {
-            m: [r0, r1, r2, r3],
-        }
-    }
-
     // Creates translation matrix:
-    pub fn translation(trans: Vec3<T>) -> Self {
+    pub fn new_translate(trans: Vec3<T>) -> Self {
         let r0 = Vec4 {
             x: T::one(),
             y: T::zero(),
@@ -69,6 +38,103 @@ impl<T: Float> Mat4<T> {
             y: T::zero(),
             z: T::one(),
             w: trans.z,
+        };
+        let r3 = Vec4 {
+            x: T::zero(),
+            y: T::zero(),
+            z: T::zero(),
+            w: T::one(),
+        };
+        Mat4 {
+            m: [r0, r1, r2, r3],
+        }
+    }
+
+    // Creates a scale matrix:
+    pub fn new_scale(scale: Vec3<T>) -> Self {
+        let r0 = Vec4 {
+            x: scale.x,
+            y: T::zero(),
+            z: T::zero(),
+            w: T::zero(),
+        };
+        let r1 = Vec4 {
+            x: T::zero(),
+            y: scale.y,
+            z: T::zero(),
+            w: T::zero(),
+        };
+        let r2 = Vec4 {
+            x: T::zero(),
+            y: T::zero(),
+            z: scale.z,
+            w: T::zero(),
+        };
+        let r3 = Vec4 {
+            x: T::zero(),
+            y: T::zero(),
+            z: T::zero(),
+            w: T::one(),
+        };
+        Mat4 {
+            m: [r0, r1, r2, r3]
+        }
+    }
+
+    // Creates a rotation matrix:
+    pub fn new_rotate(deg: T, axis: Vec3<T>) -> Self {
+        let axis = axis.normalize();
+        let rad = to_radians(deg);
+        let (sin, cos) = rad.sin_cos();
+
+        let r0 = Vec4 {
+            x: axis.x * axis.x + (T::one() - axis.x * axis.x) * cos,
+            y: axis.x * axis.y * (T::one() - cos) - axis.z * sin,
+            z: axis.x * axis.z * (T::one() - cos) + axis.y * sin,
+            w: T::zero(),
+        };
+        let r1 = Vec4 {
+            x: axis.x * axis.y * (T::one() - cos) + axis.z * sin,
+            y: axis.y * axis.y + (T::one() - axis.y * axis.y) * cos,
+            z: axis.y * axis.z * (T::one() - cos) - axis.x * sin,
+            w: T::zero(),
+        };
+        let r2 = Vec4 {
+            x: axis.x * axis.z * (T::one() - cos) - axis.y * sin,
+            y: axis.y * axis.z * (T::one() - cos) + axis.x * sin,
+            z: axis.z * axis.z + (T::one() - axis.z * axis.z) * cos,
+            w: T::zero(),
+        };
+        let r3 = Vec4 {
+            x: T::zero(),
+            y: T::zero(),
+            z: T::zero(),
+            w: T::one(),
+        };
+        Mat4 {
+            m: [r0, r1, r2, r3]
+        }
+    }
+
+    // Creates an identity matrix:
+    pub fn new_identity() -> Self {
+        let r0 = Vec4 {
+            x: T::one(),
+            y: T::zero(),
+            z: T::zero(),
+            w: T::zero(),
+        };
+        let r1 = Vec4 {
+            x: T::zero(),
+            y: T::one(),
+            z: T::zero(),
+            w: T::zero(),
+        };
+        let r2 = Vec4 {
+            x: T::zero(),
+            y: T::zero(),
+            z: T::one(),
+            w: T::zero(),
         };
         let r3 = Vec4 {
             x: T::zero(),
@@ -189,7 +255,7 @@ impl<T: Float> Mat4<T> {
     }
 
     /// Performs a matrix multiplication with a vector:
-    pub fn vec_mul(self, vec: Vec4<T>) -> Vec4<T> {
+    pub fn mul_vec(self, vec: Vec4<T>) -> Vec4<T> {
         let x = vec.dot(self.m[0]);
         let y = vec.dot(self.m[1]);
         let z = vec.dot(self.m[2]);

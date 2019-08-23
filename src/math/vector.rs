@@ -14,9 +14,6 @@ pub struct Vec2<T: Copy> {
     pub y: T,
 }
 
-pub type Vec2f = Vec2<f32>;
-pub type Vec2i = Vec2<i32>;
-
 impl<T: Signed + Copy> Vec2<T> {
     pub fn abs(self) -> Self {
         Vec2 {
@@ -161,10 +158,6 @@ pub enum Vec3Perm {
     ZXY,
     ZYX,
 }
-
-pub type Vec3f = Vec3<f32>;
-pub type Vec3d = Vec3<f64>;
-pub type Vec3i = Vec3<i32>;
 
 impl<T: Copy> Vec3<T> {
     pub fn from_vec4(v: Vec4<T>) -> Self {
@@ -436,9 +429,6 @@ pub struct Vec4<T: Copy> {
     pub z: T,
     pub w: T,
 }
-
-pub type Vec4f = Vec4<f32>;
-pub type Vec4i = Vec4<i32>;
 
 impl<T: Copy> Vec4<T> {
     pub fn from_vec3(v: Vec3<T>, w: T) -> Self {

@@ -1,5 +1,4 @@
-// This file has general util functions defined in it that could be used
-// throughout the program:
+// A bunch of useful functions when dealing with memory:
 
 // Reinterprets the memory of a vector to that of another:
 pub unsafe fn transmute_vec<U, T>(mut src: Vec<U>) -> Vec<T> {

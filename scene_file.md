@@ -14,14 +14,14 @@ Every transform has a type specified with it. Let's go over the different types 
     ```json
     "transform": {
         "type": "translate",
-        "vec": [34.3, 89.1, 90.8],
+        "trans": [34.3, 89.1, 90.8],
     }
     ```
 - **Rotation**: Rotates by degrees (in degrees, obviously) around the specified axis:
     ```json
     "transform": {
         "type": "rotate",
-        "degrees": 275,
+        "degrees": 275.0,
         "axis": [1, 0, 08],
     }
     ```
@@ -29,17 +29,17 @@ Every transform has a type specified with it. Let's go over the different types 
     ```json
     "transform": {
         "type": "scale",
-        "vec": [34.3, 89.1, 90.8],
+        "scale": [34.3, 89.1, 90.8],
     }
     ```
 - **Matrix**: If you want to specify the matrix itself, you can do so. Be mindful that if it isn't affine and invertible, you might get problems. PRISM performs a check to make sure that this is the case and tells you if it's a problem. Matrices are represented in row-major order (an array of arrays, each of which is a row):
     ```json
     "transform": {
         "type": "matrix",
-        "mat": [[1, 0, 0, 34],
-                [0, 1, 0, 29],
-                [0, 0, 1, 09],
-                [0, 0, 0, 01]],
+        "mat": [1.0, 0.0, 0.0, 34.0,
+                0.0, 1.0, 0.0, 29.0,
+                0.0, 0.0, 1.0, 09.0,
+                0.0, 0.0, 0.0, 01.0],
     }
     ```
 - **Composite**: A single transformation defined as a number of transformations. This is essentially represented as an array of transformations. The order of the transformations defines the order in which they are applied (not necessarily the order in which the transformation's matrix representation is multiplied). So, the bottom example would first scale the object, then translate it:
@@ -70,7 +70,7 @@ Every transform has a type specified with it. Let's go over the different types 
                 "type": "translate",
                 "vec": [34.3, 89.1, 90.8],
         },
-        "start_time": 0,
-        "end_time": 1,
+        "start_time": 0.0,
+        "end_time": 1.0,
     }
     ```

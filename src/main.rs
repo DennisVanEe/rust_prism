@@ -3,12 +3,13 @@ mod geometry;
 mod math;
 mod util;
 mod scene_loading;
+mod transform;
 
 use geometry::loader::ply;
 use geometry::mesh::{calc_rayintinfo, Mesh};
 use geometry::mesh_bvh::MeshBVH;
 use math::ray::Ray;
-use math::vector::Vec3f;
+use math::vector::Vec3;
 
 use std::time::{Duration, Instant};
 

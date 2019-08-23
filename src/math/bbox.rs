@@ -1,6 +1,6 @@
 use crate::math::ray::Ray;
-use crate::math::util::gamma_f32;
-use crate::math::vector::{Vec2, Vec3, Vec3f};
+use crate::math::util::gamma_f64;
+use crate::math::vector::{Vec2, Vec3};
 
 use num_traits::{Bounded, Float};
 
@@ -8,41 +8,13 @@ use std::cmp::PartialOrd;
 use std::mem::swap;
 use std::ops::{Index, Sub};
 
-#[derive(Clone, Copy)]
-pub struct BBox2<T>
-where
-    T: PartialOrd + Bounded + Copy,
-{
+#[derive(Clone, Copy, Debug)]
+pub struct BBox2<T: PartialOrd + Bounded + Copy> {
     pub pmin: Vec2<T>,
     pub pmax: Vec2<T>,
 }
 
-pub type BBox2f = BBox2<f32>;
-pub type BBox2d = BBox2<f64>;
-pub type BBox2i = BBox2<i32>;
-
-// 3D Axis-Aligned bounding box:
-#[derive(Clone, Copy)]
-pub struct BBox3<T>
-where
-    T: PartialOrd + Bounded + Copy,
-{
-    pub pmin: Vec3<T>,
-    pub pmax: Vec3<T>,
-}
-
-pub type BBox3f = BBox3<f32>;
-pub type BBox3d = BBox3<f64>;
-pub type BBox3i = BBox3<i32>;
-
-//
-// -------------------------------------------------------------
-//
-
-impl<T> BBox2<T>
-where
-    T: PartialOrd + Bounded + Copy,
-{
+impl<T: PartialOrd + Bounded + Copy> BBox2<T> {
     pub fn new() -> Self {
         BBox2 {
             pmin: Vec2 {
@@ -83,10 +55,7 @@ where
     }
 }
 
-impl<T> Index<usize> for BBox2<T>
-where
-    T: PartialOrd + Bounded + Copy,
-{
+impl<T: PartialOrd + Bounded + Copy> Index<usize> for BBox2<T> {
     type Output = Vec2<T>;
 
     fn index(&self, i: usize) -> &Vec2<T> {
@@ -98,14 +67,13 @@ where
     }
 }
 
-//
-// -------------------------------------------------------------
-//
+#[derive(Clone, Copy, Debug)]
+pub struct BBox3<T: PartialOrd + Bounded + Copy> {
+    pub pmin: Vec3<T>,
+    pub pmax: Vec3<T>,
+}
 
-impl<T> BBox3<T>
-where
-    T: PartialOrd + Bounded + Copy,
-{
+impl<T: PartialOrd + Bounded + Copy> BBox3<T> {
     pub fn new() -> Self {
         BBox3 {
             pmin: Vec3 {
@@ -155,10 +123,7 @@ where
     }
 }
 
-impl<T> BBox3<T>
-where
-    T: Float + PartialOrd + Bounded + Copy,
-{
+impl<T: Float + PartialOrd + Bounded + Copy> BBox3<T> {
     // Continious position of a point relative to the corners of the BBox.
     // That is, if pnt is at pmin is (0,0,0), and if pnt is at pmax is (1,1,1)
     pub fn offset(self, pnt: Vec3<T>) -> Vec3<T> {
@@ -184,20 +149,40 @@ where
 
     pub fn surface_area(self) -> T {
         let d = self.diagonal();
-        // Not sure if there is a way to get a two, so
-        (T::one() + T::one()) * (d.x * d.y + d.x * d.y + d.y * d.z)
+        T::from(2).unwrap() * (d.x * d.y + d.x * d.y + d.y * d.z)
     }
 }
 
-// Because intersections are always done with f32, we only implement the intersection
-// algorithm for BBox3s that are made up of floats:
-impl BBox3<f32> {
-    pub fn intersect(&self, ray: Ray, max_time: f32) -> Option<(f32, f32)> {
-        let mut t0 = 0f32;
+impl<T: Sub<Output = T> + PartialOrd + Bounded + Copy> BBox3<T> {
+    pub fn diagonal(self) -> Vec3<T> {
+        self.pmax - self.pmin
+    }
+
+    pub fn max_dim(self) -> usize {
+        self.diagonal().max_dim()
+    }
+}
+
+impl<T: PartialOrd + Bounded + Copy> Index<usize> for BBox3<T> {
+    type Output = Vec3<T>;
+
+    fn index(&self, i: usize) -> &Vec3<T> {
+        match i {
+            0 => &self.pmin,
+            1 => &self.pmax,
+            _ => panic!("Index out of range for BBox2"),
+        }
+    }
+}
+
+// We only need to worry about intersections with f64 levels of percision:
+impl BBox3<f64> {
+    pub fn intersect(&self, ray: Ray<f64>, max_time: f64) -> Option<(f64, f64)> {
+        let mut t0 = 0.;
         let mut t1 = max_time;
 
         for i in 0..3 {
-            let inv_dir = 1f32 / ray.dir[i];
+            let inv_dir = 1. / ray.dir[i];
             let mut t_near = (self.pmin[i] - ray.org[i]) * inv_dir;
             let mut t_far = (self.pmax[i] - ray.org[i]) * inv_dir;
             if t_near > t_far {
@@ -217,9 +202,9 @@ impl BBox3<f32> {
 
     pub fn intersect_test(
         &self,
-        ray: Ray,
-        max_time: f32,
-        inv_dir: Vec3f,
+        ray: Ray<f64>,
+        max_time: f64,
+        inv_dir: Vec3<f64>,
         is_dir_neg: Vec3<bool>,
     ) -> bool {
         // Use as indices:
@@ -235,8 +220,8 @@ impl BBox3<f32> {
         let ty_max = (self[1 - i_dir_neg[1]].y - ray.org.y) * inv_dir.y;
 
         // Use this to take into account error connection:
-        let t_max = t_max * (1f32 + 2f32 * gamma_f32(3));
-        let ty_max = ty_max * (1f32 + 2f32 * gamma_f32(3));
+        let t_max = t_max * (1. + 2. * gamma_f64(3));
+        let ty_max = ty_max * (1. + 2. * gamma_f64(3));
 
         if t_min > ty_max || ty_min > t_max {
             return false;
@@ -248,7 +233,7 @@ impl BBox3<f32> {
         let tz_min = (self[i_dir_neg[2]].z - ray.org.z) * inv_dir.z;
         let tz_max = (self[1 - i_dir_neg[2]].z - ray.org.z) * inv_dir.z;
 
-        let tz_max = tz_max * (1f32 + 2f32 * gamma_f32(3));
+        let tz_max = tz_max * (1. + 2. * gamma_f64(3));
         if t_min > tz_max || tz_min > t_max {
             return false;
         }
@@ -256,34 +241,6 @@ impl BBox3<f32> {
         let t_min = if tz_min > t_min { tz_min } else { t_min };
         let t_max = if tz_max < t_max { tz_max } else { t_max };
 
-        t_min < max_time && t_max > 0f32
-    }
-}
-
-impl<T> BBox3<T>
-where
-    T: Sub<Output = T> + PartialOrd + Bounded + Copy,
-{
-    pub fn diagonal(self) -> Vec3<T> {
-        self.pmax - self.pmin
-    }
-
-    pub fn max_dim(self) -> usize {
-        self.diagonal().max_dim()
-    }
-}
-
-impl<T> Index<usize> for BBox3<T>
-where
-    T: PartialOrd + Bounded + Copy,
-{
-    type Output = Vec3<T>;
-
-    fn index(&self, i: usize) -> &Vec3<T> {
-        match i {
-            0 => &self.pmin,
-            1 => &self.pmax,
-            _ => panic!("Index out of range for BBox2"),
-        }
+        t_min < max_time && t_max > 0.
     }
 }

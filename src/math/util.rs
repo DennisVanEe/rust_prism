@@ -3,6 +3,7 @@ use crate::math::vector::Vec3;
 use num_traits::{Float, FromPrimitive};
 
 use std::cmp::PartialOrd;
+use std::f64;
 
 // This creates a coordinate system given only a single vector.
 pub fn coord_system<T: Float>(v1: Vec3<T>) -> (Vec3<T>, Vec3<T>) {
@@ -36,7 +37,8 @@ pub fn align<T: Float>(refv: Vec3<T>, vec: Vec3<T>) -> Vec3<T> {
     }
 }
 
-// Used for error detection:
+// Used for handling errors:
+
 pub fn gamma_f32(n: i32) -> f32 {
     let n = n as f32;
     let half_eps = std::f32::EPSILON / 2f32;
@@ -49,7 +51,9 @@ pub fn gamma_f64(n: i64) -> f64 {
     (n * half_eps) / (1f64 - n * half_eps)
 }
 
-// Used for comparison between partial and non-partial items:
+// This is used so that we can have efficient comparisons
+// with PartialOrd types:
+
 pub fn min<T: PartialOrd>(v0: T, v1: T) -> T {
     if v0 < v1 {
         v0
@@ -64,4 +68,14 @@ pub fn max<T: PartialOrd>(v0: T, v1: T) -> T {
     } else {
         v1
     }
+}
+
+pub fn to_degrees<T: Float>(rad: T) -> T {
+    const conv_const: f64 = 180f64 / f64::consts::PI;
+    rad * T::from(conv_const).unwrap()
+}
+
+pub fn to_radians<T: Float>(deg: T) -> T {
+    const conv_const: f64 = f64::consts::PI / 180f64;
+    deg * T::from(conv_const).unwrap()
 }
