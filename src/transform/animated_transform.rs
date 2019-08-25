@@ -46,6 +46,30 @@ impl AnimatedTransform {
             Some(result) => result,
             _ => return None,
         };
+
+        
+    }
+
+    // This function is used to interpolate the transformation
+    // so that we can apply it later to the functions that require them.
+    fn interpolate(&self, time: f64) -> StaticTransform {
+        // Check if the time is out of bounds, in which case we just return 
+        // the transform we care about:
+        if time <= self.start_time {
+            self.start_transf
+        } else if time >= self.end_time {
+            self.end_transf
+        } else {
+            let dt = (time - self.start_time) / (self.end_time - self.start_time);
+            let trans = self.start_trans.lerp(self.end_trans, dt);
+            let rot = self.start_rot.slerp(self.end_rot, dt);
+            let scale = self.start_scale.lerp(self.end_scale, dt);
+
+            // We can unwrap the check because we know that the matrix will
+            // be invertible:
+            let transf_mat = Mat4::new_translate(trans) * rot.to_mat4() * scale;
+            Transform::new(transf_mat).unwrap()
+        }
     }
 
     // Given a matrix, this will decompose it into a translation, rotation, and scale component.
@@ -101,6 +125,7 @@ impl AnimatedTransform {
             
             norm = n0.max(n1.max(n2));
             r_mat = r_next;
+            count += 1;
         }
 
         let rot = Quat::from_mat4(r_mat);
