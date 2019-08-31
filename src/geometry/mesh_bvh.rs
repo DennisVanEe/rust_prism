@@ -1,10 +1,12 @@
-// The BVH is used to efficiently intersect the mesh.
+// This file contains a BVH implementation specifically designed for a mesh.
+// The BVH is the owner of the mesh itself, but is not a geometry object.
 
-use crate::alloc::StackAlloc;
-use crate::geometry::mesh::{Intersection, Mesh, RayIntInfo, Triangle};
-use crate::math::bbox::BBox3f;
+use crate::geometry::mesh::{Mesh, RayIntInfo, Triangle};
+use crate::geometry::Interaction;
+use crate::math::bbox::BBox3;
 use crate::math::ray::Ray;
-use crate::math::vector::Vec3f;
+use crate::math::vector::Vec3;
+use crate::memory::stack_alloc::StackAlloc;
 
 use order_stat::kth_by;
 use partition::partition;
@@ -14,6 +16,7 @@ use std::mem::MaybeUninit;
 pub struct MeshBVH {
     mesh: Mesh,                    // The mesh of the BVH (the BVH owns the mesh)
     linear_nodes: Vec<LinearNode>, // The nodes that make up the tree
+    bound: BBox3<f64>,             // The overall bounding box of the entire BVH
 }
 
 impl MeshBVH {
@@ -39,11 +42,15 @@ impl MeshBVH {
         Self::construct_tree(mesh, tris_info, max_tri_per_node)
     }
 
-    pub fn intersect_test(&self, ray: Ray, max_time: f32, int_info: RayIntInfo) -> bool {
+    pub fn object_bound(&self) -> BBox3<f64> {
+        self.bound
+    }
+
+    pub fn intersect_test(&self, ray: Ray<f64>, max_time: f64, int_info: RayIntInfo) -> bool {
         // This function has to be very efficient, so I'll be using a lot of unsafe code
         // here (but everything I'm doing should still be defined behavior).
 
-        let inv_dir = ray.dir.inv_scale(1f32);
+        let inv_dir = ray.dir.inv_scale(1.);
         let is_dir_neg = ray.dir.comp_wise_is_neg();
 
         let mut node_stack: [usize; 64] = unsafe { MaybeUninit::uninit().assume_init() };
@@ -116,14 +123,14 @@ impl MeshBVH {
 
     pub fn intersect(
         &self,
-        ray: Ray,
-        mut max_time: f32,
+        ray: Ray<f64>,
+        mut max_time: f64,
         int_info: RayIntInfo,
-    ) -> Option<Intersection> {
+    ) -> Option<Interaction> {
         // This function has to be very efficient, so I'll be using a lot of unsafe code
         // here (but everything I'm doing should still be defined behavior).
 
-        let inv_dir = ray.dir.inv_scale(1f32);
+        let inv_dir = ray.dir.inv_scale(1.);
         let is_dir_neg = ray.dir.comp_wise_is_neg();
 
         let mut node_stack: [usize; 64] = unsafe { MaybeUninit::uninit().assume_init() };
@@ -219,7 +226,7 @@ impl MeshBVH {
         let mut new_tris = Vec::with_capacity(mesh.num_tris() as usize);
 
         // Construct the regular tree first (that isn't flat):
-        let root_node = Self::recursive_construct_tree(
+        let (root_node, bound) = Self::recursive_construct_tree(
             max_tri_per_node,
             &mesh,
             &mut tris_info,
@@ -232,7 +239,11 @@ impl MeshBVH {
         // Now we flatten the nodes for better memory and performance later down the line:
         let linear_nodes = Self::flatten_tree(allocator.get_alloc_count(), root_node);
 
-        MeshBVH { mesh, linear_nodes }
+        MeshBVH {
+            mesh,
+            linear_nodes,
+            bound,
+        }
     }
 
     // Need to specify the tree node and the total number of nodes.
@@ -287,27 +298,30 @@ impl MeshBVH {
     }
 
     // Recursively constructs the tree.
-    // Returns a reference to the root node of the tree:
+    // Returns a reference to the root node of the tree and the bound of the entire tree:
     fn recursive_construct_tree<'a>(
         max_tri_per_node: u32,          // The maximum number of triangles per node.
         mesh: &Mesh,                    // The mesh we are currently constructing a BVH for.
         tri_infos: &mut [TriangleInfo], // The current slice of triangles we are working on.
         new_tris: &mut Vec<Triangle>,   // The correct order for the new triangles we care about.
         allocator: &'a StackAlloc<TreeNode<'a>>, // Allocator used to allocate the nodes. The lifetime of the nodes is that of the allocator
-    ) -> &'a TreeNode<'a> {
+    ) -> (&'a TreeNode<'a>, BBox3<f64>) {
         // A bound over all of the triangles we are currently working with:
-        let all_bound = tri_infos.iter().fold(BBox3f::new(), |all_bound, tri_info| {
+        let all_bound = tri_infos.iter().fold(BBox3::new(), |all_bound, tri_info| {
             all_bound.combine_bnd(tri_info.bound)
         });
 
         // If we only have one triangle, make a leaf:
         if tri_infos.len() == 1 {
             new_tris.push(mesh.get_tri(tri_infos[0].tri_index));
-            return allocator.push(TreeNode::Leaf {
-                bound: all_bound,
-                tri_index: (new_tris.len() - 1) as u32,
-                num_tri: 1,
-            });
+            return (
+                allocator.push(TreeNode::Leaf {
+                    bound: all_bound,
+                    tri_index: (new_tris.len() - 1) as u32,
+                    num_tri: 1,
+                }),
+                all_bound,
+            );
         }
 
         // Otherwise, we want to split the tree into smaller parts:
@@ -315,7 +329,7 @@ impl MeshBVH {
         // The bound covering all of the centroids (used for SAH BVH construction):
         let centroid_bound = tri_infos
             .iter()
-            .fold(BBox3f::new(), |centroid_bound, tri_info| {
+            .fold(BBox3::new(), |centroid_bound, tri_info| {
                 centroid_bound.combine_pnt(tri_info.centroid)
             });
 
@@ -330,11 +344,14 @@ impl MeshBVH {
                 new_tris.push(mesh.get_tri(tri_info.tri_index));
             }
             // Allocate the a new leaf node and push it:
-            return allocator.push(TreeNode::Leaf {
-                bound: all_bound,
-                tri_index: curr_tri_index,
-                num_tri: tri_infos.len() as u32,
-            });
+            return (
+                allocator.push(TreeNode::Leaf {
+                    bound: all_bound,
+                    tri_index: curr_tri_index,
+                    num_tri: tri_infos.len() as u32,
+                }),
+                all_bound,
+            );
         }
 
         // Figure out how to split the elements:
@@ -355,16 +372,16 @@ impl MeshBVH {
             // Otherwise, we perform this split based on surface-area heuristics:
             let mut buckets = [Bucket {
                 count: 0,
-                bound: BBox3f::new(),
+                bound: BBox3::new(),
             }; Self::BUCKET_COUNT];
 
             for tri_info in tri_infos.iter() {
                 // Get an index into where we are among the buckets:
                 let bucket_ratio = centroid_bound.offset(tri_info.centroid)[max_dim];
-                let bucket_index = if bucket_ratio == 1f32 {
+                let bucket_index = if bucket_ratio == 1. {
                     Self::BUCKET_COUNT - 1
                 } else {
-                    ((Self::BUCKET_COUNT as f32) * bucket_ratio) as usize
+                    ((Self::BUCKET_COUNT as f64) * bucket_ratio) as usize
                 };
 
                 let curr_bucket = &mut buckets[bucket_index];
@@ -374,9 +391,9 @@ impl MeshBVH {
 
             // Iterate over everything backwards, but ignore the first element to get the right
             // surface area values:
-            let mut right_sa = [0f32; Self::BUCKET_COUNT - 1];
+            let mut right_sa = [0f64; Self::BUCKET_COUNT - 1];
             let (_, right_count) = buckets[1..].iter().enumerate().rev().fold(
-                (BBox3f::new(), 0u32),
+                (BBox3::new(), 0u32),
                 |(right_bound, right_count), (i, bucket)| {
                     // Have to do this because enumerate starts at 0, always, not the index of the slice:
                     let right_bound = right_bound.combine_bnd(bucket.bound);
@@ -387,17 +404,17 @@ impl MeshBVH {
 
             // Now we can compute the values going forward to fill in the buckets.
             // We also must modify the right count as we decrement it over time:
-            let mut costs = [0f32; Self::BUCKET_COUNT - 1];
+            let mut costs = [0f64; Self::BUCKET_COUNT - 1];
             let total_sa = all_bound.surface_area();
             buckets[..(Self::BUCKET_COUNT - 1)].iter().enumerate().fold(
-                (BBox3f::new(), 0u32, right_count),
+                (BBox3::new(), 0u32, right_count),
                 |(left_bound, left_count, right_count), (i, bucket)| {
                     let left_bound = left_bound.combine_bnd(bucket.bound);
                     let left_count = left_count + bucket.count;
                     // Calculate the heuristic here:
-                    costs[i] = 0.125f32
-                        * ((left_count as f32) * left_bound.surface_area()
-                            + (right_count as f32) * right_sa[i])
+                    costs[i] = 0.125
+                        * ((left_count as f64) * left_bound.surface_area()
+                            + (right_count as f64) * right_sa[i])
                         / total_sa;
                     (left_bound, left_count, right_count - buckets[i + 1].count)
                 },
@@ -410,15 +427,15 @@ impl MeshBVH {
                 .unwrap();
 
             // If this happens, then we should split more and continue our operations:
-            if tri_infos.len() > (max_tri_per_node as usize) || min_cost < (tri_infos.len() as f32)
+            if tri_infos.len() > (max_tri_per_node as usize) || min_cost < (tri_infos.len() as f64)
             {
                 // Split (partition) based on bucket with min cost:
                 partition(tri_infos, |tri_info| {
                     let bucket_ratio = centroid_bound.offset(tri_info.centroid)[max_dim];
-                    let bucket_index = if bucket_ratio == 1f32 {
+                    let bucket_index = if bucket_ratio == 1. {
                         Self::BUCKET_COUNT - 1
                     } else {
-                        ((Self::BUCKET_COUNT as f32) * bucket_ratio) as usize
+                        ((Self::BUCKET_COUNT as f64) * bucket_ratio) as usize
                     };
                     bucket_index <= min_cost_index
                 })
@@ -429,23 +446,26 @@ impl MeshBVH {
                 for tri_info in tri_infos.iter() {
                     new_tris.push(mesh.get_tri(tri_info.tri_index));
                 }
-                return allocator.push(TreeNode::Leaf {
-                    bound: all_bound,
-                    tri_index: curr_tri_index,
-                    num_tri: tri_infos.len() as u32,
-                });
+                return (
+                    allocator.push(TreeNode::Leaf {
+                        bound: all_bound,
+                        tri_index: curr_tri_index,
+                        num_tri: tri_infos.len() as u32,
+                    }),
+                    all_bound,
+                );
             }
         };
 
         // Build the left and right nodes now:
-        let left_node = Self::recursive_construct_tree(
+        let (left_node, _) = Self::recursive_construct_tree(
             max_tri_per_node,
             mesh,
             tri_infos_left,
             new_tris,
             allocator,
         );
-        let right_node = Self::recursive_construct_tree(
+        let (right_node, _) = Self::recursive_construct_tree(
             max_tri_per_node,
             mesh,
             tri_infos_right,
@@ -454,11 +474,14 @@ impl MeshBVH {
         );
 
         // Create a node and push it on:
-        allocator.push(TreeNode::Interior {
-            bound: all_bound,
-            children: (left_node, right_node),
-            split_axis: max_dim as u8,
-        })
+        (
+            allocator.push(TreeNode::Interior {
+                bound: all_bound,
+                children: (left_node, right_node),
+                split_axis: max_dim as u8,
+            }),
+            all_bound,
+        )
     }
 }
 
@@ -468,15 +491,15 @@ struct Bucket {
     // Number of items in the current bucket:
     pub count: u32,
     // Bound for the current bucket:
-    pub bound: BBox3f,
+    pub bound: BBox3<f64>,
 }
 
 // Structure used to construct the BVH:
 #[derive(Clone, Copy)]
 struct TriangleInfo {
     pub tri_index: u32,
-    pub centroid: Vec3f,
-    pub bound: BBox3f,
+    pub centroid: Vec3<f64>,
+    pub bound: BBox3<f64>,
 }
 
 // This is the internal representation we have when initially building the tree.
@@ -484,12 +507,12 @@ struct TriangleInfo {
 #[derive(Clone, Copy)]
 enum TreeNode<'a> {
     Leaf {
-        bound: BBox3f,
+        bound: BBox3<f64>,
         tri_index: u32,
         num_tri: u32,
     },
     Interior {
-        bound: BBox3f,
+        bound: BBox3<f64>,
         children: (&'a TreeNode<'a>, &'a TreeNode<'a>),
         split_axis: u8,
     },
@@ -511,6 +534,6 @@ enum LinearNodeKind {
 
 #[derive(Clone, Copy)]
 struct LinearNode {
-    bound: BBox3f,
+    bound: BBox3<f64>,
     kind: LinearNodeKind,
 }

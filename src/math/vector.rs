@@ -162,7 +162,7 @@ pub enum Vec3Perm {
 impl<T: Copy> Vec3<T> {
     pub fn from_vec4(v: Vec4<T>) -> Self {
         Vec3 {
-            x: v.x, 
+            x: v.x,
             y: v.y,
             z: v.z,
         }
@@ -436,7 +436,7 @@ impl<T: Copy> Vec4<T> {
             x: v.x,
             y: v.y,
             z: v.z,
-            w
+            w,
         }
     }
 }

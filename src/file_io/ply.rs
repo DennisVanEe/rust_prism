@@ -8,8 +8,8 @@ use ply_rs::{parser, ply};
 use simple_error::{bail, try_with, SimpleResult};
 
 use crate::geometry::mesh::{Mesh, Triangle};
-use crate::math::vector::{Vec2f, Vec3f};
-use crate::util::transmute_vec;
+use crate::math::vector::{Vec2, Vec3};
+use crate::memory::util::transmute_vec;
 
 use std::fs::File;
 use std::io::BufReader;
@@ -17,47 +17,47 @@ use std::io::BufReader;
 // Implement for different combinations of properties:
 #[repr(C)]
 struct VertexPos {
-    pos: Vec3f,
+    pos: Vec3<f32>,
 }
 
 #[repr(C)]
 struct VertexPosUV {
-    pos: Vec3f,
-    uv: Vec2f,
+    pos: Vec3<f32>,
+    uv: Vec2<f32>,
 }
 
 #[repr(C)]
 struct VertexPosNrm {
-    pos: Vec3f,
-    nrm: Vec3f,
+    pos: Vec3<f32>,
+    nrm: Vec3<f32>,
 }
 
 #[repr(C)]
 struct VertexPosNrmUV {
-    pos: Vec3f,
-    nrm: Vec3f,
-    uv: Vec2f,
+    pos: Vec3<f32>,
+    nrm: Vec3<f32>,
+    uv: Vec2<f32>,
 }
 
 #[repr(C)]
 struct VertexPosNrmTan {
-    pos: Vec3f,
-    nrm: Vec3f,
-    tan: Vec3f,
+    pos: Vec3<f32>,
+    nrm: Vec3<f32>,
+    tan: Vec3<f32>,
 }
 
 #[repr(C)]
 struct VertexPosNrmTanUV {
-    pos: Vec3f,
-    nrm: Vec3f,
-    tan: Vec3f,
-    uv: Vec2f,
+    pos: Vec3<f32>,
+    nrm: Vec3<f32>,
+    tan: Vec3<f32>,
+    uv: Vec2<f32>,
 }
 
 // Only position information in this case:
 impl ply::PropertyAccess for VertexPos {
     fn new() -> Self {
-        let pos = Vec3f {
+        let pos = Vec3 {
             x: 0f32,
             y: 0f32,
             z: 0f32,
@@ -77,12 +77,12 @@ impl ply::PropertyAccess for VertexPos {
 
 impl ply::PropertyAccess for VertexPosUV {
     fn new() -> Self {
-        let pos = Vec3f {
+        let pos = Vec3 {
             x: 0f32,
             y: 0f32,
             z: 0f32,
         };
-        let uv = Vec2f { x: 0f32, y: 0f32 };
+        let uv = Vec2 { x: 0f32, y: 0f32 };
         VertexPosUV { pos, uv }
     }
 
@@ -106,12 +106,12 @@ impl ply::PropertyAccess for VertexPosUV {
 
 impl ply::PropertyAccess for VertexPosNrm {
     fn new() -> Self {
-        let pos = Vec3f {
+        let pos = Vec3 {
             x: 0f32,
             y: 0f32,
             z: 0f32,
         };
-        let nrm = Vec3f {
+        let nrm = Vec3 {
             x: 0f32,
             y: 0f32,
             z: 0f32,
@@ -134,17 +134,17 @@ impl ply::PropertyAccess for VertexPosNrm {
 
 impl ply::PropertyAccess for VertexPosNrmUV {
     fn new() -> Self {
-        let pos = Vec3f {
+        let pos = Vec3 {
             x: 0f32,
             y: 0f32,
             z: 0f32,
         };
-        let nrm = Vec3f {
+        let nrm = Vec3 {
             x: 0f32,
             y: 0f32,
             z: 0f32,
         };
-        let uv = Vec2f { x: 0f32, y: 0f32 };
+        let uv = Vec2 { x: 0f32, y: 0f32 };
         VertexPosNrmUV { pos, nrm, uv }
     }
 
@@ -171,17 +171,17 @@ impl ply::PropertyAccess for VertexPosNrmUV {
 
 impl ply::PropertyAccess for VertexPosNrmTan {
     fn new() -> Self {
-        let pos = Vec3f {
+        let pos = Vec3 {
             x: 0f32,
             y: 0f32,
             z: 0f32,
         };
-        let nrm = Vec3f {
+        let nrm = Vec3 {
             x: 0f32,
             y: 0f32,
             z: 0f32,
         };
-        let tan = Vec3f {
+        let tan = Vec3 {
             x: 0f32,
             y: 0f32,
             z: 0f32,
@@ -207,22 +207,22 @@ impl ply::PropertyAccess for VertexPosNrmTan {
 
 impl ply::PropertyAccess for VertexPosNrmTanUV {
     fn new() -> Self {
-        let pos = Vec3f {
+        let pos = Vec3 {
             x: 0f32,
             y: 0f32,
             z: 0f32,
         };
-        let nrm = Vec3f {
+        let nrm = Vec3 {
             x: 0f32,
             y: 0f32,
             z: 0f32,
         };
-        let tan = Vec3f {
+        let tan = Vec3 {
             x: 0f32,
             y: 0f32,
             z: 0f32,
         };
-        let uv = Vec2f { x: 0f32, y: 0f32 };
+        let uv = Vec2 { x: 0f32, y: 0f32 };
         VertexPosNrmTanUV { pos, nrm, tan, uv }
     }
 

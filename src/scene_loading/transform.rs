@@ -1,11 +1,10 @@
-
+use crate::math::matrix::Mat4;
 use crate::math::transform::{AnimatedTransform, Transform};
 use crate::math::vector::{Vec3, Vec4};
-use crate::math::matrix::Mat4;
 
 use std::mem::MaybeUninit;
 
-use serde_json::{Value, Map, Number};
+use serde_json::{Map, Number, Value};
 use simple_error::{bail, try_with, SimpleResult};
 
 // Used to specify the type of transformation
@@ -17,7 +16,9 @@ pub enum TransformType {
 
 // Given a json object that is a transform, this will parse it into one:
 pub fn parse_transform(json_transf: &Map<String, Value>) -> SimpleResult<TransformType> {
-    pub fn parse_non_animated_transform(json_transf: &Map<String, Value>) -> SimpleResult<Transform<f64>> {
+    pub fn parse_non_animated_transform(
+        json_transf: &Map<String, Value>,
+    ) -> SimpleResult<Transform<f64>> {
         // First we check what the top level transform is:
         let json_transf_type = match json_transf.get("type") {
             Some(t) => t,
@@ -45,7 +46,7 @@ pub fn parse_transform(json_transf: &Map<String, Value>) -> SimpleResult<Transfo
             for j_transf in json_transf_array.iter() {
                 let j_transf = match j_transf {
                     Value::Object(t) => t,
-                    _ =>bail!("ill-formed composite transform transf property"),
+                    _ => bail!("ill-formed composite transform transf property"),
                 };
                 let transf = match parse_non_animated_transform(j_transf) {
                     Ok(t) => t,
@@ -61,7 +62,9 @@ pub fn parse_transform(json_transf: &Map<String, Value>) -> SimpleResult<Transfo
             "translate" => parse_translate(json_transf),
             "rotate" => parse_rotate(json_transf),
             "scale" => parse_scale(json_transf),
-            "animated" => bail!("animated transforms can only appear as a top-level transformation"),
+            "animated" => {
+                bail!("animated transforms can only appear as a top-level transformation")
+            }
             _ => bail!("unknown transform type detected"),
         }
     }
@@ -148,7 +151,7 @@ fn parse_vec3(json_vec: &Vec<Value>) -> Option<Vec3<f64>> {
         return None;
     }
 
-    unsafe { 
+    unsafe {
         Some(Vec3 {
             x: match parse_number(json_vec.get_unchecked(0)) {
                 Some(n) => n,
@@ -162,7 +165,7 @@ fn parse_vec3(json_vec: &Vec<Value>) -> Option<Vec3<f64>> {
                 Some(n) => n,
                 _ => return None,
             },
-        }) 
+        })
     }
 }
 
@@ -253,7 +256,7 @@ fn parse_translate(json_transf: &Map<String, Value>) -> SimpleResult<Transform<f
 fn parse_scale(json_transf: &Map<String, Value>) -> SimpleResult<Transform<f64>> {
     let json_scale = match json_transf.get("scale") {
         Some(s) => s,
-         _ => bail!("scale transform missing scale property"),
+        _ => bail!("scale transform missing scale property"),
     };
 
     let json_scale = match json_scale {
@@ -278,7 +281,7 @@ fn parse_rotate(json_transf: &Map<String, Value>) -> SimpleResult<Transform<f64>
 
     let degrees = match parse_number(json_degrees) {
         Some(d) => d,
-         _ => bail!("rotate transform missing degrees property"),
+        _ => bail!("rotate transform missing degrees property"),
     };
 
     let json_axis = match json_transf.get("axis") {

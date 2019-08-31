@@ -1,7 +1,6 @@
 use crate::math::vector::{Vec3, Vec4};
-use crate::math::util::to_radians;
 
-use num_traits::{Float};
+use num_traits::Float;
 
 use std::ops::{Add, Index, Mul, Neg, Sub};
 
@@ -77,14 +76,14 @@ impl<T: Float> Mat4<T> {
             w: T::one(),
         };
         Mat4 {
-            m: [r0, r1, r2, r3]
+            m: [r0, r1, r2, r3],
         }
     }
 
     // Creates a rotation matrix:
     pub fn new_rotate(deg: T, axis: Vec3<T>) -> Self {
         let axis = axis.normalize();
-        let rad = to_radians(deg);
+        let rad = deg.to_radians();
         let (sin, cos) = rad.sin_cos();
 
         let r0 = Vec4 {
@@ -112,7 +111,7 @@ impl<T: Float> Mat4<T> {
             w: T::one(),
         };
         Mat4 {
-            m: [r0, r1, r2, r3]
+            m: [r0, r1, r2, r3],
         }
     }
 
@@ -187,8 +186,8 @@ impl<T: Float> Mat4<T> {
         }
     }
 
-    /// Calculates the inverse of a matrix. Note that, because
-    /// the inverse can be undefined, it retuns an option.
+    // Calculates the inverse of a matrix. Note that, because
+    // the inverse can be undefined, it retuns an option.
     pub fn inverse(self) -> Option<Self> {
         let a2323 = self.m[2][2] * self.m[3][3] - self.m[2][3] * self.m[3][2];
         let a1323 = self.m[2][1] * self.m[3][3] - self.m[2][3] * self.m[3][1];
@@ -281,7 +280,7 @@ impl<T: Float> Mat4<T> {
                 self[1].lerp(m1[1], time),
                 self[2].lerp(m1[2], time),
                 self[3].lerp(m1[3], time),
-            ]
+            ],
         }
     }
 }

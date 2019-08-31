@@ -1,10 +1,22 @@
+// This file stores the implementation of Mesh, which is just a collection of face
+// indices and vertex positions. It also describes the triangle intersection algorithm
+// used by PRISM (basically pbrt's version).
+
+use crate::geometry::{Geometry, Interaction};
 use crate::math::bbox::BBox3;
 use crate::math::ray::Ray;
 use crate::math::util::{align, coord_system, gamma_f64};
-use crate::math::vector::{Vec2, Vec3Perm, Vec3};
+use crate::math::vector::{Vec2, Vec3, Vec3Perm};
+use crate::memory::stack_alloc::StackAlloc;
+use crate::transform::Transform;
 
-// Mesh stores everything as f32, even though most of the rest of the renderer
-// uses f64 to perform most of the operations. This is to save on memory.
+use order_stat::kth_by;
+use partition::partition;
+
+use std::mem::MaybeUninit;
+
+// A Mesh is not a geometric object. Instead it just stores a collection
+// of points.
 #[derive(Clone, Debug)]
 pub struct Mesh {
     tris: Vec<Triangle>,
@@ -41,10 +53,8 @@ impl Mesh {
 
         // Performs a logical right shift because it's unsigned:
         // Always add 3 (the position information, which must always be present):
-        let num_prop = 3
-            + ((has_nrm >> 7) * 3)
-            + ((has_tan >> 7) * 3)
-            + if has_uvs { 2 } else { 0 };
+        let num_prop =
+            3 + ((has_nrm >> 7) * 3) + ((has_tan >> 7) * 3) + if has_uvs { 2 } else { 0 };
         // Down casts value, we are guaranteed it's a multiple:
         let num_vert = (data.len() / (num_prop as usize)) as u32;
 
@@ -228,28 +238,6 @@ impl Mesh {
     }
 }
 
-// A struct that stores information about the intersection
-// of a mesh:
-#[derive(Clone, Copy, Debug)]
-pub struct Intersection {
-    pub p: Vec3<f64>,     // intersection point
-    pub n: Vec3<f64>,     // geometric normal (of triangle)
-    pub wo: Vec3<f64>,    // direction of intersection leaving the point
-    pub p_err: Vec3<f64>, // error at the intersection point
-
-    pub time: f64, // time when the intersection occured
-
-    pub uv: Vec2<f64>,   // uv coordinate at the intersection
-    pub dpdu: Vec3<f64>, // vectors parallel to the triangle
-    pub dpdv: Vec3<f64>,
-
-    pub shading_n: Vec3<f64>,    // the shading normal at this point
-    pub shading_dpdu: Vec3<f64>, // the shading dpdu, dpdv at this point
-    pub shading_dpdv: Vec3<f64>,
-    pub shading_dndu: Vec3<f64>, // the shading dndu, dndv at this point
-    pub shading_dndv: Vec3<f64>,
-}
-
 // Stores extra information used to speed up ray intersection calculations:
 #[derive(Clone, Copy)]
 pub struct RayIntInfo {
@@ -303,13 +291,6 @@ impl Triangle {
     ) -> bool {
         let poss = self.get_poss(mesh);
 
-        // // NOTE: if you decide to include this, dp is used somewhere else in the code
-        // // Check for bad triangles:
-        // let dp = (poss[2] - poss[0]).cross(poss[1] - poss[0]);
-        // if (dp.length2() == 0f32) {
-        //     return false;
-        // }
-
         let pt = [poss[0] - ray.org, poss[1] - ray.org, poss[2] - ray.org];
         let pt = [
             pt[0].permute(int_info.perm),
@@ -342,9 +323,7 @@ impl Triangle {
         ];
 
         // Check if our ray lands outside of the edges of the triangle:
-        if (e[0] < 0. || e[1] < 0. || e[2] < 0.)
-            && (e[0] > 0. || e[1] > 0. || e[2] > 0.)
-        {
+        if (e[0] < 0. || e[1] < 0. || e[2] < 0.) && (e[0] > 0. || e[1] > 0. || e[2] > 0.) {
             return false;
         };
 
@@ -383,30 +362,8 @@ impl Triangle {
         };
 
         let inv_sum_e = 1. / sum_e;
-        // The time of the intersection:
-        let time = time_scaled * inv_sum_e;
-
-        // Perform some error detection:
-        let abs_pt = [pt[0].abs(), pt[1].abs(), pt[2].abs()];
-        let abs_e = [e[0].abs(), e[1].abs(), e[2].abs()];
-
-        let max_z = abs_pt[0].z.max(abs_pt[1].z.max(abs_pt[2].z));
-        let delta_z = gamma_f64(3) * max_z;
-
-        let max_x = abs_pt[0].x.max(abs_pt[1].x.max(abs_pt[2].x));
-        let delta_x = gamma_f64(5) * (max_x + max_z);
-
-        let max_y = abs_pt[0].y.max(abs_pt[1].y.max(abs_pt[2].y));
-        let delta_y = gamma_f64(5) * (max_y + max_z);
-
-        let delta_e = 2. * (gamma_f64(2) * max_x * max_y + delta_y * max_x + delta_x * max_y);
-
-        let max_e = abs_e[0].max(abs_e[1].max(abs_e[2]));
-        let delta_t = 3.
-            * (gamma_f64(3) * max_e * max_z + delta_e * max_z + delta_z * max_e)
-            * inv_sum_e.abs();
-
-        time > delta_t
+        // The time of the intersection (make sure it's positive):
+        time_scaled * inv_sum_e > 0.
     }
 
     pub fn intersect(
@@ -415,15 +372,8 @@ impl Triangle {
         max_time: f64,
         int_info: RayIntInfo,
         mesh: &Mesh,
-    ) -> Option<Intersection> {
+    ) -> Option<Interaction> {
         let poss = self.get_poss(mesh);
-
-        // // NOTE: if you decide to include this, dp is used somewhere else in the code
-        // // Check for bad triangles:
-        // let dp = (poss[2] - poss[0]).cross(poss[1] - poss[0]);
-        // if (dp.length2() == 0f32) {
-        //     return false;
-        // }
 
         let pt = [poss[0] - ray.org, poss[1] - ray.org, poss[2] - ray.org];
         let pt = [
@@ -457,9 +407,7 @@ impl Triangle {
         ];
 
         // Check if our ray lands outside of the edges of the triangle:
-        if (e[0] < 0. || e[1] < 0. || e[2] < 0.)
-            && (e[0] > 0. || e[1] > 0. || e[2] > 0.)
-        {
+        if (e[0] < 0. || e[1] < 0. || e[2] < 0.) && (e[0] > 0. || e[1] > 0. || e[2] > 0.) {
             return None;
         };
 
@@ -501,44 +449,14 @@ impl Triangle {
         // The time of the intersection:
         let time = time_scaled * inv_sum_e;
 
-        // Perform some error detection:
-        {
-            let abs_pt = [pt[0].abs(), pt[1].abs(), pt[2].abs()];
-            let abs_e = [e[0].abs(), e[1].abs(), e[2].abs()];
-
-            let max_z = abs_pt[0].z.max(abs_pt[1].z.max(abs_pt[2].z));
-            let delta_z = gamma_f64(3) * max_z;
-
-            let max_x = abs_pt[0].x.max(abs_pt[1].x.max(abs_pt[2].x));
-            let delta_x = gamma_f64(5) * (max_x + max_z);
-
-            let max_y = abs_pt[0].y.max(abs_pt[1].y.max(abs_pt[2].y));
-            let delta_y = gamma_f64(5) * (max_y + max_z);
-
-            let delta_e = 2. * (gamma_f64(2) * max_x * max_y + delta_y * max_x + delta_x * max_y);
-
-            let max_e = abs_e[0].max(abs_e[1].max(abs_e[2]));
-            let delta_t = 3.
-                * (gamma_f64(3) * max_e * max_z + delta_e * max_z + delta_z * max_e)
-                * inv_sum_e.abs();
-
-            if time <= delta_t {
-                return None;
-            }
+        if time <= 0. {
+            return None;
         }
 
         // Baycentric coordinates:
         let b = [e[0] * inv_sum_e, e[1] * inv_sum_e, e[2] * inv_sum_e];
         // The hit point:
         let p = poss[0].scale(b[0]) + poss[1].scale(b[1]) + poss[2].scale(b[2]);
-
-        // Calculate the error at this point now:
-        let p_err = {
-            let x = (b[0] * poss[0].x).abs() + (b[1] * poss[1].x).abs() + (b[2] * poss[2].x).abs();
-            let y = (b[0] * poss[0].y).abs() + (b[1] * poss[1].y).abs() + (b[2] * poss[2].y).abs();
-            let z = (b[0] * poss[0].z).abs() + (b[1] * poss[1].z).abs() + (b[2] * poss[2].z).abs();
-            (Vec3 { x, y, z }).scale(gamma_f64(7))
-        };
 
         // The edges along the triangle:
         let dp02 = poss[0] - poss[2];
@@ -637,11 +555,10 @@ impl Triangle {
 
         let wo = -ray.dir;
 
-        Some(Intersection {
+        Some(Interaction {
             p,
             n,
             wo,
-            p_err,
             time,
             uv,
             dpdu,

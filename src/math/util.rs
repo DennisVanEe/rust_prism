@@ -47,8 +47,8 @@ pub fn gamma_f32(n: i32) -> f32 {
 
 pub fn gamma_f64(n: i64) -> f64 {
     let n = n as f64;
-    let half_eps = std::f64::EPSILON / 2f64;
-    (n * half_eps) / (1f64 - n * half_eps)
+    let half_eps = std::f64::EPSILON / 2.;
+    (n * half_eps) / (1. - n * half_eps)
 }
 
 // This is used so that we can have efficient comparisons
@@ -70,12 +70,22 @@ pub fn max<T: PartialOrd>(v0: T, v1: T) -> T {
     }
 }
 
-pub fn to_degrees<T: Float>(rad: T) -> T {
-    const conv_const: f64 = 180f64 / f64::consts::PI;
-    rad * T::from(conv_const).unwrap()
-}
+// Solves the quadratic equation robustly:
+pub fn quadratic<T: Float>(a: T, b: T, c: T) -> Option<(T, T)> {
+    let disc = b * b - T::from(4).unwrap() * a * c;
+    if disc < T::zero() {
+        return None;
+    }
+    let root_disc = disc.sqrt();
 
-pub fn to_radians<T: Float>(deg: T) -> T {
-    const conv_const: f64 = f64::consts::PI / 180f64;
-    deg * T::from(conv_const).unwrap()
+    let q = if b < T::zero() { 
+        -T::from(0.5).unwrap() * (b - root_disc) 
+    } else {
+        -T::from(0.5).unwrap() * (b + root_disc)
+    };
+
+    let t0 = q / a;
+    let t1 = c / q;
+
+    Some((t0.min(t1), t0.max(t1)))
 }

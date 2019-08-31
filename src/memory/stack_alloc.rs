@@ -2,7 +2,7 @@
 // It is essentialy a bunch of stacks linked by a linked list.
 // It uses a bunch of unsafe code because it's suppose to be as fast as possible.
 
-use crate::util::alloc_array;
+use crate::memory::util::alloc_array;
 use std::cell::{Cell, UnsafeCell};
 
 // This only works with copyable data for now so we don't have to worry about dropping:

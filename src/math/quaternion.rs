@@ -4,7 +4,7 @@ use crate::math::vector::{Vec3, Vec4};
 use num_traits::{clamp, Float};
 
 use std::mem::MaybeUninit;
-use std::ops::{Add, Mul, Sub, Neg};
+use std::ops::{Add, Mul, Neg, Sub};
 
 #[derive(Clone, Copy, Debug)]
 pub struct Quat<T: Float> {

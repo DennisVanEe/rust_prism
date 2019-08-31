@@ -7,6 +7,7 @@ pub unsafe fn transmute_vec<U, T>(mut src: Vec<U>) -> Vec<T> {
     let src_len = src.len();
     let src_cap = src.capacity();
 
+    // Get the size of the information:
     let size_u = std::mem::size_of::<U>();
     let size_t = std::mem::size_of::<T>();
 
@@ -21,7 +22,8 @@ pub unsafe fn transmute_vec<U, T>(mut src: Vec<U>) -> Vec<T> {
     Vec::from_raw_parts(src_ptr, src_len, src_cap)
 }
 
-// Allocates an array of UNINITIALIZED data:
+// Allocates an array of UNINITIALIZED data. Not the most efficient
+// thing in the world (probably). I'll have to look into it.
 pub unsafe fn alloc_array<T: Sized>(len: usize) -> Box<[T]> {
     // Allocate the space using vector (I know I know...)
     let mut array = Vec::with_capacity(len);

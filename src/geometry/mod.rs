@@ -1,18 +1,44 @@
-pub mod loader;
 pub mod mesh;
 pub mod mesh_bvh;
 pub mod sphere;
 
-use crate::geometry::mesh::Intersection;
 use crate::math::bbox::BBox3;
 use crate::math::ray::Ray;
+use crate::math::vector::{Vec2, Vec3};
+
+// Stores the result of an intersection:
+#[derive(Clone, Copy, Debug)]
+pub struct Interaction {
+    pub p: Vec3<f64>,     // intersection point
+    pub n: Vec3<f64>,     // geometric normal (of triangle)
+    pub wo: Vec3<f64>,    // direction of intersection leaving the point
+
+    pub time: f64, // time when the intersection occured
+
+    pub uv: Vec2<f64>,   // uv coordinate at the intersection
+    pub dpdu: Vec3<f64>, // vectors parallel to the triangle
+    pub dpdv: Vec3<f64>,
+
+    pub shading_n: Vec3<f64>,    // the shading normal at this point
+    pub shading_dpdu: Vec3<f64>, // the shading dpdu, dpdv at this point
+    pub shading_dpdv: Vec3<f64>,
+    pub shading_dndu: Vec3<f64>, // the shading dndu, dndv at this point
+    pub shading_dndv: Vec3<f64>,
+}
 
 // The basic geometry trait defines the geometry that PRISM can intersect.
 
 pub trait Geometry {
-    fn object_bound(&self) -> BBox3<f64>;
-    fn world_bound(&self) -> BBox3<f64>;
+    // The bounds in geometry space:
+    fn geom_bound(&self) -> BBox3<f64>;
+    // The bouds in world space (this will be the bound of the motion
+    // if it is animated):
+    fn world_bound(&self, t: f64) -> BBox3<f64>;
 
-    fn intersect_test(&self, ray: Ray<f64>, max_time: f64) -> bool;
-    fn intersect(&self, ray: Ray<f64>, max_time: f64) -> Option<Intersection>;
+    // Need to specify max_time so we can potentially return early if
+    // the intersection is beyond. Curr_time is also needed if the
+    // object moves.
+
+    fn intersect_test(&self, ray: Ray<f64>, max_time: f64, curr_time: f64) -> bool;
+    fn intersect(&self, ray: Ray<f64>, max_time: f64, curr_time: f64) -> Option<Interaction>;
 }
