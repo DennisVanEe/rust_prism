@@ -1,8 +1,8 @@
 use crate::geometry::{Geometry, Interaction};
 use crate::math::bbox::BBox3;
 use crate::math::ray::Ray;
-use crate::math::vector::Vec3;
 use crate::math::util::quadratic;
+use crate::math::vector::{Vec2, Vec3};
 use crate::transform::Transform;
 
 use num_traits::clamp;
@@ -72,7 +72,11 @@ impl<T: Transform> Geometry for Sphere<T> {
     }
 
     fn world_bound(&self, t: f64) -> BBox3<f64> {
-        self.geom_to_world.bbox(self.geom_bound(), t)
+        self.geom_to_world.bound_motion(self.geom_bound(), t)
+    }
+
+    fn surface_area(&self) -> f64 {
+        self.phi_max * self.radius * (self.z_max - self.z_min)
     }
 
     fn intersect(&self, ray: Ray<f64>, max_time: f64, curr_time: f64) -> Option<Interaction> {
@@ -81,7 +85,7 @@ impl<T: Transform> Geometry for Sphere<T> {
 
         // Transform the ray to the appropriate space:
         let ray = int_geom_to_world.inverse().ray(ray);
-        
+
         // Now we need to solve the following quadratic equation:
         let a = ray.dir.dot(ray.dir);
         let b = 2. * ray.dir.dot(ray.org);
@@ -96,24 +100,247 @@ impl<T: Transform> Geometry for Sphere<T> {
             return None;
         }
 
-        let t = if t0 <= 0. { t1 } else { t0 };
+        let time = if t0 <= 0. { t1 } else { t0 };
 
-        let p_hit = ray.org + ray.dir.scale(t);
-        // To generate a more robust intersection
-        let p_hit = p_hit.scale(self.radius / p_hit.length());
-        let p_hit = if p_hit.x == 0. && p_hit.y == 0. {
-            Vec3 { x: 1e-5 * self.radius, y: p_hit.y, z: p_hit.z }
+        if time > max_time {
+            return None;
+        }
+
+        // Get the hit point of the intersection in a robust manner:
+        let p = ray.org + ray.dir.scale(time);
+        let p = p.scale(self.radius / p.length());
+        let p = if p.x == 0. && p.y == 0. {
+            Vec3 {
+                x: 1e-5 * self.radius,
+                y: p.y,
+                z: p.z,
+            }
         } else {
-            p_hit
+            p
         };
 
-        let phi = p_hit.y.atan2(p_hit.x);
+        let phi = p.y.atan2(p.x);
         let phi = if phi < 0. {
             phi + 2. * f64::consts::PI
         } else {
             phi
         };
 
+        // Check against the climping values of the sphere. If this doesn't
+        // work, we might have to update the values we just calculated using
+        // t1 instead of t0 (if t1 was already being used, we are done):
+        let (time, p, phi) = if (self.z_min > -self.radius && p.z < self.z_min)
+            || (self.z_max < self.radius && p.z > self.z_max)
+            || phi > self.phi_max
+        {
+            // Make sure that t1 is a valid choice:
+            if time == t1 {
+                return None;
+            }
+            if t1 > max_time {
+                return None;
+            }
+            // Calculate p_hit and phi with the new t values here:
+            let time = t1;
+            let p = ray.org + ray.dir.scale(time);
+            let p = p.scale(self.radius / p.length());
+            let p = if p.x == 0. && p.y == 0. {
+                Vec3 {
+                    x: 1e-5 * self.radius,
+                    y: p.y,
+                    z: p.z,
+                }
+            } else {
+                p
+            };
 
+            let phi = p.y.atan2(p.x);
+            let phi = if phi < 0. {
+                phi + 2. * f64::consts::PI
+            } else {
+                phi
+            };
+
+            if (self.z_min > -self.radius && p.z < self.z_min)
+                || (self.z_max < self.radius && p.z > self.z_max)
+                || phi > self.phi_max
+            {
+                return None;
+            }
+
+            (time, p, phi)
+        // We intersected the correct point:
+        } else {
+            (time, p, phi)
+        };
+
+        // Calculate the u,v coordinates:
+        let u = phi / self.phi_max;
+        let theta = clamp(p.z / self.radius, -1., 1.).acos();
+        let v = (theta - self.theta_min) / (self.theta_max - self.theta_min);
+
+        // Calculate the dpdu and dpdv values:
+        let z_radius = (p.x * p.x + p.y * p.y).sqrt();
+        let inv_z_radius = 1. / z_radius;
+        let cos_phi = p.x * inv_z_radius;
+        let sin_phi = p.y * inv_z_radius;
+        let dpdu = Vec3 {
+            x: -self.phi_max * p.y,
+            y: self.phi_max * p.x,
+            z: 0.,
+        };
+        let dpdv = Vec3 {
+            x: p.z * cos_phi,
+            y: p.z * sin_phi,
+            z: -self.radius * theta.sin(),
+        }
+        .scale(self.theta_max - self.theta_min);
+
+        // Calculate the dndu and dndv values:
+        let d2pduu = Vec3 {
+            x: p.x,
+            y: p.y,
+            z: 0.,
+        }
+        .scale(-self.phi_max * self.phi_max);
+        let d2pduv = Vec3 {
+            x: -sin_phi,
+            y: cos_phi,
+            z: 0.,
+        }
+        .scale((self.theta_max - self.theta_min) * p.z * self.phi_max);
+        let d2pdvv =
+            p.scale(-(self.theta_max - self.theta_min) * (self.theta_max - self.theta_min));
+
+        // Fundemental forms (see work on diff geometry):
+        let be = dpdu.dot(dpdu);
+        let bf = dpdu.dot(dpdv);
+        let bg = dpdv.dot(dpdv);
+        let n = dpdu.cross(dpdv).normalize();
+        let e = n.dot(d2pduu);
+        let f = n.dot(d2pduv);
+        let g = n.dot(d2pdvv);
+
+        // We can now calculate dndu and dndv:
+        let inv_begf2 = 1. / (be * bg - bf * bf);
+        let dndu = (dpdu.scale(inv_begf2 * (f * bf - e * bg))
+            + dpdv.scale(inv_begf2 * (e * bf - f * be)))
+        .normalize();
+        let dndv = (dpdu.scale(inv_begf2 * (g * bf - f * bg))
+            + dpdv.scale(inv_begf2 * (f * bf - g * be)))
+        .normalize();
+
+        let geom_interaction = Interaction {
+            p,
+            n,
+            wo: -ray.dir,
+            time,
+            uv: Vec2 { x: u, y: v },
+            dpdu,
+            dpdv,
+            // Because it's already a perfect sphere,
+            // we just use the same values here:
+            shading_n: n,
+            shading_dpdu: dpdu,
+            shading_dpdv: dpdv,
+            shading_dndu: dndu,
+            shading_dndv: dndv,
+        };
+
+        // Don't forget to transform it back to world space:
+        Some(int_geom_to_world.interaction(geom_interaction))
+    }
+
+    fn intersect_test(&self, ray: Ray<f64>, max_time: f64, curr_time: f64) -> bool {
+        // Because of the way this works, we perform this operation first:
+        let int_geom_to_world = self.geom_to_world.interpolate(curr_time);
+
+        // Transform the ray to the appropriate space:
+        let ray = int_geom_to_world.inverse().ray(ray);
+
+        // Now we need to solve the following quadratic equation:
+        let a = ray.dir.dot(ray.dir);
+        let b = 2. * ray.dir.dot(ray.org);
+        let c = ray.org.dot(ray.org) - self.radius * self.radius;
+
+        let (t0, t1) = match quadratic(a, b, c) {
+            Some(t) => t,
+            _ => return false,
+        };
+
+        if t0 > max_time || t1 <= 0. {
+            return false;
+        }
+
+        let time = if t0 <= 0. { t1 } else { t0 };
+
+        if time > max_time {
+            return false;
+        }
+
+        // Get the hit point of the intersection in a robust manner:
+        let p = ray.org + ray.dir.scale(time);
+        let p = p.scale(self.radius / p.length());
+        let p = if p.x == 0. && p.y == 0. {
+            Vec3 {
+                x: 1e-5 * self.radius,
+                y: p.y,
+                z: p.z,
+            }
+        } else {
+            p
+        };
+
+        let phi = p.y.atan2(p.x);
+        let phi = if phi < 0. {
+            phi + 2. * f64::consts::PI
+        } else {
+            phi
+        };
+
+        // Check against the climping values of the sphere. If this doesn't
+        // work, we might have to update the values we just calculated using
+        // t1 instead of t0 (if t1 was already being used, we are done):
+        if (self.z_min > -self.radius && p.z < self.z_min)
+            || (self.z_max < self.radius && p.z > self.z_max)
+            || phi > self.phi_max
+        {
+            // Make sure that t1 is a valid choice:
+            if time == t1 {
+                return false;
+            }
+            if t1 > max_time {
+                return false;
+            }
+            // Calculate p_hit and phi with the new t values here:
+            let time = t1;
+            let p = ray.org + ray.dir.scale(time);
+            let p = p.scale(self.radius / p.length());
+            let p = if p.x == 0. && p.y == 0. {
+                Vec3 {
+                    x: 1e-5 * self.radius,
+                    y: p.y,
+                    z: p.z,
+                }
+            } else {
+                p
+            };
+
+            let phi = p.y.atan2(p.x);
+            let phi = if phi < 0. {
+                phi + 2. * f64::consts::PI
+            } else {
+                phi
+            };
+
+            if (self.z_min > -self.radius && p.z < self.z_min)
+                || (self.z_max < self.radius && p.z > self.z_max)
+                || phi > self.phi_max
+            {
+                return false;
+            }
+        }
+
+        true
     }
 }

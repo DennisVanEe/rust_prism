@@ -2,18 +2,11 @@
 // indices and vertex positions. It also describes the triangle intersection algorithm
 // used by PRISM (basically pbrt's version).
 
-use crate::geometry::{Geometry, Interaction};
+use crate::geometry::Interaction;
 use crate::math::bbox::BBox3;
 use crate::math::ray::Ray;
-use crate::math::util::{align, coord_system, gamma_f64};
+use crate::math::util::{align, coord_system};
 use crate::math::vector::{Vec2, Vec3, Vec3Perm};
-use crate::memory::stack_alloc::StackAlloc;
-use crate::transform::Transform;
-
-use order_stat::kth_by;
-use partition::partition;
-
-use std::mem::MaybeUninit;
 
 // A Mesh is not a geometric object. Instead it just stores a collection
 // of points.
@@ -137,47 +130,49 @@ impl Mesh {
         self.has_uvs
     }
 
-    pub fn get_pos(&self, index: u32) -> Vec3<f64> {
+    pub fn get_surface_area(&self) -> f64 {
+        self.tris.iter().fold(0., |area, tri| { area + tri.area(self) })
+    }
+
+    // The functions below are unsafe because there is no check for
+    // whether or not the property exists and tha the triangle index
+    // given is present:
+
+    pub unsafe fn get_pos(&self, index: u32) -> Vec3<f64> {
         let index = (self.num_prop as usize) * (index as usize);
-        unsafe {
-            Vec3 {
-                x: *self.data.get_unchecked(index + 0) as f64,
-                y: *self.data.get_unchecked(index + 1) as f64,
-                z: *self.data.get_unchecked(index + 2) as f64,
-            }
+        Vec3 {
+            x: *self.data.get_unchecked(index + 0) as f64,
+            y: *self.data.get_unchecked(index + 1) as f64,
+            z: *self.data.get_unchecked(index + 2) as f64,
         }
     }
 
     // make sure you have normals first...
-    pub fn get_nrm(&self, index: u32) -> Vec3<f64> {
+    pub unsafe fn get_nrm(&self, index: u32) -> Vec3<f64> {
         debug_assert!(self.has_nrm());
 
         // If we have normal information, it'll always follow the position:
         let index = (self.num_prop as usize) * (index as usize) + 3;
-        unsafe {
-            Vec3 {
-                x: *self.data.get_unchecked(index + 0) as f64,
-                y: *self.data.get_unchecked(index + 1) as f64,
-                z: *self.data.get_unchecked(index + 2) as f64,
-            }
+        Vec3 {
+            x: *self.data.get_unchecked(index + 0) as f64,
+            y: *self.data.get_unchecked(index + 1) as f64,
+            z: *self.data.get_unchecked(index + 2) as f64,
         }
     }
 
-    pub fn get_tan(&self, index: u32) -> Vec3<f64> {
+    pub unsafe fn get_tan(&self, index: u32) -> Vec3<f64> {
         debug_assert!(self.has_tan());
 
         // If we have tangent information, it will always follow normal position:
         let index = (self.num_prop as usize) * (index as usize) + 6;
-        unsafe {
-            Vec3 {
-                x: *self.data.get_unchecked(index + 0) as f64,
-                y: *self.data.get_unchecked(index + 1) as f64,
-                z: *self.data.get_unchecked(index + 2) as f64,
-            }
+        Vec3 {
+            x: *self.data.get_unchecked(index + 0) as f64,
+            y: *self.data.get_unchecked(index + 1) as f64,
+            z: *self.data.get_unchecked(index + 2) as f64,
         }
     }
 
-    pub fn get_uvs(&self, index: u32) -> Vec2<f64> {
+    pub unsafe fn get_uvs(&self, index: u32) -> Vec2<f64> {
         debug_assert!(self.has_uvs());
 
         // Here we have to do a bit more work, because UVs cana technically belong anywhere:
@@ -185,56 +180,46 @@ impl Mesh {
             + 3
             + ((self.has_nrm & 3) as usize)
             + ((self.has_tan & 3) as usize);
-        unsafe {
-            Vec2 {
-                x: *self.data.get_unchecked(index + 0) as f64,
-                y: *self.data.get_unchecked(index + 1) as f64,
-            }
+        Vec2 {
+            x: *self.data.get_unchecked(index + 0) as f64,
+            y: *self.data.get_unchecked(index + 1) as f64,
         }
     }
 
-    pub fn set_pos(&mut self, index: u32, vec: Vec3<f64>) {
+    pub unsafe fn set_pos(&mut self, index: u32, vec: Vec3<f64>) {
         let index = (self.num_prop as usize) * (index as usize);
-        unsafe {
-            *self.data.get_unchecked_mut(index + 0) = vec.x as f32;
-            *self.data.get_unchecked_mut(index + 1) = vec.y as f32;
-            *self.data.get_unchecked_mut(index + 2) = vec.z as f32;
-        }
+        *self.data.get_unchecked_mut(index + 0) = vec.x as f32;
+        *self.data.get_unchecked_mut(index + 1) = vec.y as f32;
+        *self.data.get_unchecked_mut(index + 2) = vec.z as f32;
     }
 
-    pub fn set_nrm(&mut self, index: u32, vec: Vec3<f64>) {
+    pub unsafe fn set_nrm(&mut self, index: u32, vec: Vec3<f64>) {
         debug_assert!(self.has_nrm());
 
         let index = (self.num_prop as usize) * (index as usize) + 3;
-        unsafe {
-            *self.data.get_unchecked_mut(index + 0) = vec.x as f32;
-            *self.data.get_unchecked_mut(index + 1) = vec.y as f32;
-            *self.data.get_unchecked_mut(index + 2) = vec.z as f32;
-        }
+        *self.data.get_unchecked_mut(index + 0) = vec.x as f32;
+        *self.data.get_unchecked_mut(index + 1) = vec.y as f32;
+        *self.data.get_unchecked_mut(index + 2) = vec.z as f32;
     }
 
-    pub fn set_tan(&mut self, index: u32, vec: Vec3<f32>) {
+    pub unsafe fn set_tan(&mut self, index: u32, vec: Vec3<f32>) {
         debug_assert!(self.has_tan());
 
         let index = (self.num_prop as usize) * (index as usize) + 6;
-        unsafe {
-            *self.data.get_unchecked_mut(index + 0) = vec.x as f32;
-            *self.data.get_unchecked_mut(index + 1) = vec.y as f32;
-            *self.data.get_unchecked_mut(index + 2) = vec.z as f32;
-        }
+        *self.data.get_unchecked_mut(index + 0) = vec.x as f32;
+        *self.data.get_unchecked_mut(index + 1) = vec.y as f32;
+        *self.data.get_unchecked_mut(index + 2) = vec.z as f32;
     }
 
-    pub fn set_uvs(&mut self, index: u32, vec: Vec2<f64>) {
+    pub unsafe fn set_uvs(&mut self, index: u32, vec: Vec2<f64>) {
         debug_assert!(self.has_uvs());
 
         let index = (self.num_prop as usize) * (index as usize)
             + 3
             + ((self.has_nrm & 3) as usize)
             + ((self.has_tan & 3) as usize);
-        unsafe {
-            *self.data.get_unchecked_mut(index + 0usize) = vec.x as f32;
-            *self.data.get_unchecked_mut(index + 1usize) = vec.y as f32;
-        }
+        *self.data.get_unchecked_mut(index + 0usize) = vec.x as f32;
+        *self.data.get_unchecked_mut(index + 1usize) = vec.y as f32;
     }
 }
 
@@ -465,7 +450,15 @@ impl Triangle {
         let n = dp02.cross(dp12).normalize();
 
         // Get the UV coordinates:
-        let uvs = self.get_uvs(mesh);
+        let uvs = if mesh.has_uvs() {
+            self.get_uvs(mesh)
+        } else {
+            [
+                Vec2 { x: 0., y: 0. },
+                Vec2 { x: 1., y: 0. },
+                Vec2 { x: 1., y: 1. },
+            ]
+        };
         // Calculate the uv point where we intersect now:
         let uv = uvs[0].scale(b[0]) + uvs[1].scale(b[1]) + uvs[2].scale(b[2]);
 
@@ -581,10 +574,17 @@ impl Triangle {
         (poss[0] + poss[1] + poss[2]).scale(1. / 3.)
     }
 
-    // All of these are marked as unsafe because we always assume that the
-    // mesh objects are created with correct triangle informations:
+    pub fn area(&self, mesh: &Mesh) -> f64 {
+        let poss = self.get_poss(mesh);
+        (poss[0] - poss[1]).cross(poss[0] - poss[2]).length() * 0.5
+    }
 
-    fn get_poss(&self, mesh: &Mesh) -> [Vec3<f64>; 3] {
+    // All of these are marked as unsafe because we always assume that the
+    // mesh objects are created with correct triangle informations.
+    // NOTE: only call these if you are certain that these values are present:
+
+    // Returns the positions that make up a triangle:
+    pub fn get_poss(&self, mesh: &Mesh) -> [Vec3<f64>; 3] {
         unsafe {
             [
                 mesh.get_pos(self.indices[0]),
@@ -594,34 +594,35 @@ impl Triangle {
         }
     }
 
-    fn get_nrms(&self, mesh: &Mesh) -> [Vec3<f64>; 3] {
-        [
-            mesh.get_nrm(self.indices[0]),
-            mesh.get_nrm(self.indices[1]),
-            mesh.get_nrm(self.indices[2]),
-        ]
+    // Returns the normals that make up a triangle:
+    pub fn get_nrms(&self, mesh: &Mesh) -> [Vec3<f64>; 3] {
+        unsafe {
+            [
+                mesh.get_nrm(self.indices[0]),
+                mesh.get_nrm(self.indices[1]),
+                mesh.get_nrm(self.indices[2]),
+            ]
+        }
     }
 
-    fn get_tans(&self, mesh: &Mesh) -> [Vec3<f64>; 3] {
-        [
-            mesh.get_tan(self.indices[0]),
-            mesh.get_tan(self.indices[1]),
-            mesh.get_tan(self.indices[2]),
-        ]
+    // Returns the tangents that make up a triangle:
+    pub fn get_tans(&self, mesh: &Mesh) -> [Vec3<f64>; 3] {
+        unsafe {
+            [
+                mesh.get_tan(self.indices[0]),
+                mesh.get_tan(self.indices[1]),
+                mesh.get_tan(self.indices[2]),
+            ]
+        }
     }
 
-    fn get_uvs(&self, mesh: &Mesh) -> [Vec2<f64>; 3] {
-        if mesh.has_uvs() {
+    // Returns the uv's at that location:
+    pub fn get_uvs(&self, mesh: &Mesh) -> [Vec2<f64>; 3] {
+        unsafe {
             [
                 mesh.get_uvs(self.indices[0]),
                 mesh.get_uvs(self.indices[1]),
                 mesh.get_uvs(self.indices[2]),
-            ]
-        } else {
-            [
-                Vec2 { x: 0., y: 0. },
-                Vec2 { x: 1., y: 0. },
-                Vec2 { x: 1., y: 1. },
             ]
         }
     }

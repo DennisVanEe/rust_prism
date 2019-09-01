@@ -1,5 +1,6 @@
 pub mod mesh;
 pub mod mesh_bvh;
+pub mod mesh_geometry;
 pub mod sphere;
 
 use crate::math::bbox::BBox3;
@@ -9,9 +10,9 @@ use crate::math::vector::{Vec2, Vec3};
 // Stores the result of an intersection:
 #[derive(Clone, Copy, Debug)]
 pub struct Interaction {
-    pub p: Vec3<f64>,     // intersection point
-    pub n: Vec3<f64>,     // geometric normal (of triangle)
-    pub wo: Vec3<f64>,    // direction of intersection leaving the point
+    pub p: Vec3<f64>,  // intersection point
+    pub n: Vec3<f64>,  // geometric normal (of triangle)
+    pub wo: Vec3<f64>, // direction of intersection leaving the point
 
     pub time: f64, // time when the intersection occured
 
@@ -34,6 +35,8 @@ pub trait Geometry {
     // The bouds in world space (this will be the bound of the motion
     // if it is animated):
     fn world_bound(&self, t: f64) -> BBox3<f64>;
+    // This just calculates the surface area of whatever geometry we care about:
+    fn surface_area(&self) -> f64;
 
     // Need to specify max_time so we can potentially return early if
     // the intersection is beyond. Curr_time is also needed if the

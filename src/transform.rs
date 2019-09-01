@@ -1,21 +1,21 @@
+use crate::geometry::Interaction;
 use crate::math::bbox::BBox3;
 use crate::math::matrix::{Mat3, Mat4};
 use crate::math::quaternion::Quat;
 use crate::math::ray::{Ray, RayDiff};
-use crate::math::util::gamma_f64;
 use crate::math::vector::{Vec3, Vec4};
-use crate::geometry::Interaction;
 
 use std::f64;
+use std::ops::Mul;
 
-// A transform is a simple trait that has an interpolate function so that
-// we can get a static transform as a result to perform operations on:
+// A transform is something that can be interpolated given a time and, thus, provides
+// a StaticTransform. A StaticTransform is also a transform, and interpolating over it
+// always returns the same value:
 pub trait Transform {
     // We need to be able to interpolate it:
     fn interpolate(&self, t: f64) -> StaticTransform;
-    // And, we need for it to be able to transform in this manner.
-    // The reason is that we are bounding the motion of the box.
-    fn bbox(&self, b: BBox3<f64>, t: f64) -> BBox3<f64>;
+    // And we need to be able to bound it's motion:
+    fn bound_motion(&self, b: BBox3<f64>, t: f64) -> BBox3<f64>;
 }
 
 #[derive(Clone, Copy)]
@@ -96,7 +96,7 @@ impl StaticTransform {
     }
 
     pub fn ray(self, r: Ray<f64>) -> Ray<f64> {
-        Ray { 
+        Ray {
             org: self.point(r.dir),
             dir: self.vector(r.dir),
         }
@@ -125,14 +125,8 @@ impl StaticTransform {
             shading_dndv: self.normal(i.shading_dndv),
         }
     }
-}
 
-impl Transform for StaticTransform {
-    fn interpolate(&self, _: f64) -> StaticTransform {
-        *self
-    }
-
-    fn bbox(&self, b: BBox3<f64>, _: f64) -> BBox3<f64> {
+    pub fn bbox(&self, b: BBox3<f64>) -> BBox3<f64> {
         // From Arvo 1990 Graphics Gems 1
 
         let pmin = Vec3::from_vec4(self.mat.get_column(3));
@@ -156,6 +150,27 @@ impl Transform for StaticTransform {
         let pmax = pmax + a0.max(a1);
 
         BBox3 { pmin, pmax }
+    }
+}
+
+impl Transform for StaticTransform {
+    fn interpolate(&self, _: f64) -> StaticTransform {
+        *self
+    }
+
+    fn bound_motion(&self, b: BBox3<f64>, _: f64) -> BBox3<f64> {
+        self.bbox(b)
+    }
+}
+
+impl Mul for StaticTransform {
+    type Output = Self;
+
+    fn mul(self, rhs: Self) -> Self {
+        StaticTransform {
+            mat: self.mat * rhs.mat,
+            inv: self.inv * rhs.inv,
+        }
     }
 }
 
@@ -197,7 +212,7 @@ impl AnimatedTransform {
             Self::decompose(start_transf.get_mat()).unwrap();
         let (end_trans, end_rot, end_scale) = Self::decompose(end_transf.get_mat()).unwrap();
 
-        let end_rot = if start_rot.dot(end_rot).is_negative() {
+        let end_rot = if start_rot.dot(end_rot).is_sign_negative() {
             -end_rot
         } else {
             end_rot
@@ -308,12 +323,15 @@ impl Transform for AnimatedTransform {
         }
     }
 
-    fn bbox(&self, b: BBox3<f64>, _: f64) -> BBox3<f64> {
-        // If there is no rotation, we can just do this:
+    // This function is time costly, but should only really be called during the
+    // preprocess step anyways:
+    fn bound_motion(&self, b: BBox3<f64>, _: f64) -> BBox3<f64> {
+        // If there is no rotation, we can just combine the transformations
+        // of the two bounding boxes:
         if !self.has_rot {
             self.start_transf
-                .bbox(b, 0.)
-                .combine_bnd(self.end_transf.bbox(b, 0.))
+                .bbox(b)
+                .combine_bnd(self.end_transf.bbox(b))
         } else {
             // I could do what pbrt does, but I'm too lazy. This bound transform should
             // only get called once in the preprocess step anyways, so it would only get called once.
@@ -322,7 +340,7 @@ impl Transform for AnimatedTransform {
             for i in 1..=Self::NUM_BOUND_SAMPLES {
                 let t = (i as f64) / (Self::NUM_BOUND_SAMPLES as f64);
                 let dt = (1. - t) * self.start_time + t * self.end_time;
-                final_bbox = self.interpolate(dt).bbox(b, 0.).combine_bnd(final_bbox);
+                final_bbox = self.interpolate(dt).bbox(b).combine_bnd(final_bbox);
             }
             final_bbox
         }

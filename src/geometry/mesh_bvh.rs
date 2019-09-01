@@ -14,7 +14,7 @@ use partition::partition;
 use std::mem::MaybeUninit;
 
 pub struct MeshBVH {
-    mesh: Mesh,                    // The mesh of the BVH (the BVH owns the mesh)
+    mesh: Mesh,                    // The mesh of the BVH (the BVH owns the mesh as it's specially modified)
     linear_nodes: Vec<LinearNode>, // The nodes that make up the tree
     bound: BBox3<f64>,             // The overall bounding box of the entire BVH
 }
@@ -40,6 +40,10 @@ impl MeshBVH {
 
         // Now we can go ahead and construct the tree:
         Self::construct_tree(mesh, tris_info, max_tri_per_node)
+    }
+
+    pub fn mesh(&self) -> &Mesh {
+        &self.mesh
     }
 
     pub fn object_bound(&self) -> BBox3<f64> {

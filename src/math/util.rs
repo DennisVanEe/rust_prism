@@ -78,8 +78,8 @@ pub fn quadratic<T: Float>(a: T, b: T, c: T) -> Option<(T, T)> {
     }
     let root_disc = disc.sqrt();
 
-    let q = if b < T::zero() { 
-        -T::from(0.5).unwrap() * (b - root_disc) 
+    let q = if b < T::zero() {
+        -T::from(0.5).unwrap() * (b - root_disc)
     } else {
         -T::from(0.5).unwrap() * (b + root_disc)
     };
