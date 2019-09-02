@@ -1,6 +1,6 @@
 use crate::math::vector::Vec3;
 
-use num_traits::{Float, FromPrimitive};
+use num_traits::Float;
 
 use std::cmp::PartialOrd;
 use std::f64;

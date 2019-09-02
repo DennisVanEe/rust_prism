@@ -1,6 +1,4 @@
 pub mod mesh;
-pub mod mesh_bvh;
-pub mod mesh_geometry;
 pub mod sphere;
 
 use crate::math::bbox::BBox3;

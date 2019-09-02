@@ -1,2 +1,2 @@
-pub mod stack_alloc;
+pub mod allocators;
 pub mod util;
