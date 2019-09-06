@@ -176,7 +176,7 @@ fn parse_array16(json_vec: &Vec<Value>) -> Option<[f64; 16]> {
         return None;
     }
 
-    let mut result: [f64; 16] = MaybeUninit::uninit().assume_init();
+    let mut result: [f64; 16] = unsafe { MaybeUninit::uninit().assume_init() };
     for (i, json_num) in json_vec.iter().enumerate() {
         *unsafe { result.get_unchecked_mut(i) } = match parse_number(json_num) {
             Some(v) => v,

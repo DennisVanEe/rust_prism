@@ -1,101 +1,130 @@
-// A spectrum object is a special object that stores
-// information regarding the spectrum.
+// Represents color in the renderer:
 
 use num_traits::{clamp, Float};
 
 use std::mem::MaybeUninit;
-use std::ops::{Add, Sub, Index};
+use std::ops::{Add, Index, Sub};
 
-const NUM_SPECTRUM_SAMPLES: usize = 24;
-
+// The CIE XYZ color space: 
 #[derive(Clone, Copy)]
-struct Spectrum<T: Float> {
-    data: [T; NUM_SPECTRUM_SAMPLES],
+pub struct XYZColor {
+    pub x: f64,
+    pub y: f64,
+    pub z: f64,
 }
 
-impl<T: Float> Spectrum<T> {
+#[derive(Clone, Copy)]
+pub struct RGBColor {
+    pub r: f64,
+    pub g: f64,
+    pub b: f64,
+}
+
+impl RGBColor {
     pub fn is_black(self) -> bool {
-        for &x in &self.data {
-            if x != T::zero() {
-                return false;
-            }
-        }
-        true
+        self.r == 0. && self.g == 0. && self.b == 0.
     }
 
     pub fn sqrt(self) -> Self {
-        let mut data: [T; NUM_SPECTRUM_SAMPLES] = unsafe { MaybeUninit::uninit().assume_init() };
-        for (result, d) in data.iter_mut().zip(&self.data) {
-            *result = d.sqrt();
+        RGBColor {
+            r: self.r.sqrt(),
+            g: self.g.sqrt(),
+            b: self.b.sqrt(),
         }
-        Spectrum { data }
     }
 
-    pub fn pow(self, p: T) -> Self {
-        let mut data: [T; NUM_SPECTRUM_SAMPLES] = unsafe { MaybeUninit::uninit().assume_init() };
-        for (result, d) in data.iter_mut().zip(&self.data) {
-            *result = d.powf(p);
+    pub fn pow(self, p: f64) -> Self {
+        RGBColor {
+            r: self.r.powf(p),
+            g: self.g.powf(p),
+            b: self.b.powf(p),
         }
-        Spectrum { data }
     }
 
     pub fn exp(self) -> Self {
-        let mut data: [T; NUM_SPECTRUM_SAMPLES] = unsafe { MaybeUninit::uninit().assume_init() };
-        for (result, d) in data.iter_mut().zip(&self.data) {
-            *result = d.exp();
+        RGBColor {
+            r: self.r.exp(),
+            g: self.g.exp(),
+            b: self.b.exp(),
         }
-        Spectrum { data }
     }
 
-    pub fn scale(self, s: T) -> Self {
-        let mut data: [T; NUM_SPECTRUM_SAMPLES] = unsafe { MaybeUninit::uninit().assume_init() };
-        for (result, &d) in data.iter_mut().zip(&self.data) {
-            *result = d * s;
+    pub fn scale(self, s: f64) -> Self {
+        RGBColor {
+            r: self.r * s,
+            g: self.g * s,
+            b: self.b * s,
         }
-        Spectrum { data }
     }
 
-    pub fn lerp(self, s2: Self, t: T) -> Self {
-        self.scale(T::one() - t) + s2.scale(t)
+    pub fn lerp(self, s2: Self, t: f64) -> Self {
+        self.scale(1. - t) + s2.scale(t)
     }
 
-    pub fn clamp(self, low: T, high: T) -> Self {
-        let mut data: [T; NUM_SPECTRUM_SAMPLES] = unsafe { MaybeUninit::uninit().assume_init() };
-        for (result, &d) in data.iter_mut().zip(&self.data) {
-            *result = clamp(d, low, high);
+    pub fn clamp(self, low: f64, high: f64) -> Self {
+        RGBColor {
+            r: clamp(self.r, low, high),
+            g: clamp(self.g, low, high),
+            b: clamp(self.b, low, high),
         }
-        Spectrum { data }
+    }
+
+    // Generates CIE 1931 XYZ color space result: 
+    pub fn to_xyz(self) -> XYZColor {
+        XYZColor {
+            x: 0.412453 * self.r + 0.357580 * self.g + 0.180423 * self.b,
+            y: 0.212671 * self.r + 0.715160 * self.g + 0.072169 * self.b,
+            z: 0.019334 * self.r + 0.119193 * self.g + 0.950227 * self.b,
+        }
+    }
+
+    // Only generates the Y value (as this is often used):
+    pub fn to_y(self) -> f64 {
+        0.212671 * self.r + 0.715160 * self.g + 0.072169 * self.b
+    }
+
+    pub fn from_xyz(xyz: XYZColor) -> Self {
+        RGBColor {
+            r: 3.240479 * xyz.x - 1.537150 * xyz.y - 0.498535 * xyz.z,
+            g: -0.969256 * xyz.x + 1.875991 * xyz.y + 0.041556 * xyz.z,
+            b: 0.055648 * xyz.x - 0.204043 * xyz.y + 1.057311 * xyz.z,
+        }
     }
 }
 
-impl<T: Float> Add for Spectrum<T> {
+impl Add for RGBColor {
     type Output = Self;
 
     fn add(self, rhs: Self) -> Self {
-        let mut data: [T; NUM_SPECTRUM_SAMPLES] = unsafe { MaybeUninit::uninit().assume_init() };
-        for ((result, &lhs), &rhs) in data.iter_mut().zip(&self.data).zip(&rhs.data) {
-            *result = lhs + rhs;
+        RGBColor {
+            r: self.r + rhs.r,
+            g: self.g + rhs.g,
+            b: self.b + rhs.b,
         }
-        Spectrum { data }
     }
 }
 
-impl<T: Float> Sub for Spectrum<T> {
+impl Sub for RGBColor {
     type Output = Self;
 
     fn sub(self, rhs: Self) -> Self {
-        let mut data: [T; NUM_SPECTRUM_SAMPLES] = unsafe { MaybeUninit::uninit().assume_init() };
-        for ((result, &lhs), &rhs) in data.iter_mut().zip(&self.data).zip(&rhs.data) {
-            *result = lhs - rhs;
+        RGBColor {
+            r: self.r - rhs.r,
+            g: self.g - rhs.g,
+            b: self.b - rhs.b,
         }
-        Spectrum { data }
     }
 }
 
-impl<T: Float> Index<usize> for Spectrum<T> {
-    type Output = T;
+impl Index<usize> for RGBColor {
+    type Output = f64;
 
-    fn index(&self, i: usize) -> &T {
-        &self.data[i]
+    fn index(&self, i: usize) -> &f64 {
+        match i {
+            0 => &self.r,
+            1 => &self.g,
+            2 => &self.b,
+            _ => panic!("Index out of range for Vec"),
+        }
     }
 }

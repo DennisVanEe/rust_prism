@@ -75,9 +75,16 @@ impl<T: PartialOrd + Copy> Vec2<T> {
 }
 
 // This is for operations that require a float (like a length function):
-impl<T: Float + Copy> Vec2<T> {
+impl<T: Float> Vec2<T> {
     pub fn length(self) -> T {
         self.length2().sqrt()
+    }
+
+    pub fn exp(self) -> Self {
+        Vec2 {
+            x: self.x.exp(),
+            y: self.y.exp(),
+        }
     }
 
     pub fn normalize(self) -> Self {

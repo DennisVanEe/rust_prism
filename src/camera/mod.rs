@@ -1,3 +1,5 @@
+pub mod perspective;
+
 use crate::math::ray::{Ray, RayDiff};
 use crate::math::vector::Vec2;
 
@@ -18,6 +20,7 @@ pub trait Camera {
             _ => return None,
         };
 
+        // Generates a CameraSample that is shifted in the x direction:
         let xshift_sample = CameraSample {
             p_film: Vec2 {
                 x: sample.p_film.x + 1.,
@@ -31,6 +34,7 @@ pub trait Camera {
             _ => return None,
         };
 
+        // Generates a CameraSample that is shifted in the y direction:
         let yshift_sample = CameraSample {
             p_film: Vec2 {
                 x: sample.p_film.x,
