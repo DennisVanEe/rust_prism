@@ -73,7 +73,7 @@ pub struct GaussianFilter {
 
 impl GaussianFilter {
     pub fn new(radius: Vec2<f64>, alpha: f64) -> Self {
-        GaussianFilter { 
+        GaussianFilter {
             radius,
             exp: (radius * radius).scale(-alpha).exp(),
             alpha,

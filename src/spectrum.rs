@@ -5,7 +5,7 @@ use num_traits::{clamp, Float};
 use std::mem::MaybeUninit;
 use std::ops::{Add, Index, Sub};
 
-// The CIE XYZ color space: 
+// The CIE XYZ color space:
 #[derive(Clone, Copy)]
 pub struct XYZColor {
     pub x: f64,
@@ -69,7 +69,7 @@ impl RGBColor {
         }
     }
 
-    // Generates CIE 1931 XYZ color space result: 
+    // Generates CIE 1931 XYZ color space result:
     pub fn to_xyz(self) -> XYZColor {
         XYZColor {
             x: 0.412453 * self.r + 0.357580 * self.g + 0.180423 * self.b,

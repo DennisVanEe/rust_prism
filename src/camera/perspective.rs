@@ -6,5 +6,4 @@ pub struct PerspectiveCamera<T: Transform> {
     raster_to_camera: StaticTransform,
     screen_to_raster: StaticTransform,
     raster_to_screen: StaticTransform,
-    
 }
