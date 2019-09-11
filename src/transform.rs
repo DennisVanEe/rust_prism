@@ -65,6 +65,44 @@ impl StaticTransform {
         StaticTransform { mat, inv }
     }
 
+    // Note that fov is in degrees
+    pub fn new_perspective(fov: f64, near: f64, far: f64) -> Self {
+        let perspective = Mat4::new([
+            Vec4 {
+                x: 1.,
+                y: 0.,
+                z: 0.,
+                w: 0.,
+            },
+            Vec4 {
+                x: 0.,
+                y: 1.,
+                z: 0.,
+                w: 0.,
+            },
+            Vec4 {
+                x: 0.,
+                y: 0.,
+                z: far / (far - near),
+                w: -far * near / (far - near),
+            },
+            Vec4 {
+                x: 0.,
+                y: 0.,
+                z: 1.,
+                w: 0.,
+            },
+        ]);
+        // Calculate the FOV information:
+        let inv_tan_angle = 1. / (fov.to_radians() / 2.).tan();
+        // Calculate the scale used:
+        Self::new_scale(Vec3 {
+            x: inv_tan_angle,
+            y: inv_tan_angle,
+            z: 1.,
+        }) * Self::new(perspective).unwrap()
+    }
+
     // Returns the normal matrix:
     pub fn get_mat(self) -> Mat4<f64> {
         self.mat
@@ -81,6 +119,13 @@ impl StaticTransform {
         let homog_p = Vec4::from_vec3(p, 1.);
         let homog_r = self.mat.mul_vec(homog_p);
         Vec3::from_vec4(homog_r)
+    }
+
+    // This version implements the projective division:
+    pub fn proj_point(self, p: Vec3<f64>) -> Vec3<f64> {
+        let homog_p = Vec4::from_vec3(p, 1.);
+        let homog_r = self.mat.mul_vec(homog_p);
+        Vec3::from_vec4(homog_r).scale(1. / homog_r.w)
     }
 
     pub fn normal(&self, n: Vec3<f64>) -> Vec3<f64> {

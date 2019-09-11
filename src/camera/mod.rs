@@ -7,18 +7,15 @@ use crate::math::vector::Vec2;
 pub struct CameraSample {
     p_film: Vec2<f64>, // Where on the film this sample is present
     p_lens: Vec2<f64>, // Where on the lens this sample is present
-    time: f64,         // The time when this sample is to be taken
+    time: f64,
 }
 
 pub trait Camera {
-    fn generate_ray(&self, sample: CameraSample) -> Option<(Ray<f64>, f64)>;
+    fn generate_ray(&self, sample: CameraSample) -> Ray<f64>;
 
     // If the weight is zero, then no ray is generated in this case:
-    fn generate_raydiff(&self, sample: CameraSample) -> Option<(Ray<f64>, RayDiff<f64>, f64)> {
-        let (ray, weight) = match self.generate_ray(sample) {
-            Some(r) => r,
-            _ => return None,
-        };
+    fn generate_raydiff(&self, sample: CameraSample) -> (Ray<f64>, RayDiff<f64>) {
+        let ray = self.generate_ray(sample);
 
         // Generates a CameraSample that is shifted in the x direction:
         let xshift_sample = CameraSample {
@@ -29,10 +26,7 @@ pub trait Camera {
             p_lens: sample.p_lens,
             time: sample.time,
         };
-        let (rx, _) = match self.generate_ray(xshift_sample) {
-            Some(r) => r,
-            _ => return None,
-        };
+        let rx = self.generate_ray(xshift_sample);
 
         // Generates a CameraSample that is shifted in the y direction:
         let yshift_sample = CameraSample {
@@ -43,11 +37,8 @@ pub trait Camera {
             p_lens: sample.p_lens,
             time: sample.time,
         };
-        let (ry, _) = match self.generate_ray(yshift_sample) {
-            Some(r) => r,
-            _ => return None,
-        };
+        let ry = self.generate_ray(yshift_sample);
 
-        Some((ray, RayDiff { rx, ry }, weight))
+        (ray, RayDiff { rx, ry })
     }
 }

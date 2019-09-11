@@ -1,4 +1,5 @@
-// This file holds a bunch of filters that can be sampled and whatnot:
+// This file stores all of the different filters that PRISM
+// supports.
 
 use crate::math::vector::Vec2;
 
@@ -6,8 +7,6 @@ pub trait Filter {
     fn eval(&self, p: Vec2<f64>) -> f64;
     fn get_radius(&self) -> Vec2<f64>;
 }
-
-// Some filters that PRISM supports:
 
 //
 // Box Filter

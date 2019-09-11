@@ -1,6 +1,5 @@
 use crate::math::vector::{Vec3, Vec4};
-
-use num_traits::Float;
+use crate::math::numbers::Float;
 
 use std::ops::{Add, Index, Mul, Neg, Sub};
 

@@ -5,3 +5,5 @@ pub mod random;
 pub mod ray;
 pub mod util;
 pub mod vector;
+pub mod numbers;
+pub mod sampling;

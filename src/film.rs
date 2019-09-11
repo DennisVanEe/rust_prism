@@ -1,14 +1,18 @@
 use crate::filter::Filter;
 use crate::math::vector::Vec2;
+use crate::pixel_buffer::{Pixel, PixelBuffer, PixelTile, TILE_DIM};
 use crate::spectrum::XYZColor;
+
+use simple_error::{bail, SimpleResult};
 
 // The pixel filter uses the technique described here:
 // "Filter Importance Sampling" - Manfred Ernst, Marc Stamminger, Gunther Greiner
+// This isn't exposed to the user, as the user just passes a filter.
 
 const FILTER_TABLE_WIDTH: usize = 64;
 
 #[derive(Clone, Copy)]
-pub struct PixelFilter {
+struct PixelFilter {
     // A CDF Py(x) that allows us to sample the x value:
     cdf_x: [f64; FILTER_TABLE_WIDTH],
     // A CDF P(v|u) that allows us to sample the y value:
@@ -98,9 +102,9 @@ impl PixelFilter {
         // First, we sample the x-value:
         let x = self.cdf_x.iter().position(|&cdf| cdf > r1).unwrap();
         // Using this x-value, we can now find the y-value:
-        let y = self.cdf_y[x].iter().position(|&cdf| { cdf >= r2 }).unwrap();
+        let y = self.cdf_y[x].iter().position(|&cdf| cdf >= r2).unwrap();
 
-        // Convert these into points on the film plane:
+        // Convert these indices to x and y coordinates:
         let x = x as f64;
         let y = y as f64;
         Vec2 {
@@ -110,11 +114,69 @@ impl PixelFilter {
     }
 }
 
-struct Pixel {
-    value: XYZColor, // the
-    count: u64,
+// Because we are using the technique above, each pixel will have a weight
+// of just one. Also, each thread works exclusively on a single pixel, so
+// we don't have to worry about locking it or anything:
+
+#[derive(Clone, Copy)]
+struct FilmPixel {
+    pub value: XYZColor,
+    pub count: u64,
 }
 
-pub struct Film<F: Filter> {
-    filter: F,
+impl Pixel for FilmPixel {
+    fn zero() -> Self {
+        FilmPixel {
+            value: XYZColor::zero(),
+            count: 0,
+        }
+    }
+
+    fn update(&mut self, p: &Self) {
+        self.value = self.value + p.value;
+        self.count = self.count + p.count;
+    }
+
+    fn set_zero(&mut self) {
+        self.value = XYZColor::zero();
+        self.count = 0;
+    }
+}
+
+pub struct Film {
+    pixel_buffer: PixelBuffer<FilmPixel>,
+    pixel_filter: PixelFilter,
+}
+
+impl Film {
+    // This performs the check to make sure that the resolution
+    // provided is a multiple of the TILE_DIM. I could remove this
+    // constraint, but that would make the code a little bit more
+    // complex, and I don't feel like doing that:
+    pub fn new<T: Filter>(filter: &T, pixel_res: Vec2<usize>) -> SimpleResult<Self> {
+        // First we check if the resolution is a multiple of
+        // the TILE_DIM:
+        if pixel_res.x % TILE_DIM != 0 || pixel_res.y % TILE_DIM != 0 {
+            bail!(
+                "The provided Film resolution must be a multiple of: {}",
+                TILE_DIM
+            );
+        }
+        let tile_res = Vec2 {
+            x: pixel_res.x / TILE_DIM,
+            y: pixel_res.y / TILE_DIM,
+        };
+        Ok(Film {
+            pixel_buffer: PixelBuffer::new(tile_res),
+            pixel_filter: PixelFilter::new(filter),
+        })
+    }
+
+    pub fn get_pixel_res(&self) -> Vec2<usize> {
+        self.pixel_buffer.get_pixel_res()
+    }
+
+    pub fn get_tile_res(&self) -> Vec2<usize> {
+        self.pixel_buffer.get_tile_res()
+    }
 }

@@ -2,16 +2,39 @@
 // Needs to be signed to support negation.
 // Float is used to handle sqrt case and whatnot that may arise.
 use crate::math::util::{max, min};
+use crate::math::numbers::Float;
 
-use num_traits::{Float, Signed, Zero};
+use num_traits::{Signed, Zero, One};
 
-use std::cmp::PartialOrd;
+use std::cmp::{PartialEq, PartialOrd};
 use std::ops::{Add, Div, Index, IndexMut, Mul, Neg, Sub};
 
 #[derive(Copy, Clone, Debug)]
 pub struct Vec2<T: Copy> {
     pub x: T,
     pub y: T,
+}
+
+impl<T: Copy> Vec2<T> {
+    pub fn from_vec3(v: Vec3<T>) -> Self {
+        Vec2 {
+            x: v.x,
+            y: v.y,
+        }
+    }
+
+    pub fn from_vec4(v: Vec4<T>) -> Self {
+        Vec2 {
+            x: v.x,
+            y: v.y,
+        }
+    }
+}
+
+impl<T: PartialEq + Copy> PartialEq for Vec2<T> {
+    fn eq(&self, rhs: &Self) -> bool {
+        self.x == rhs.x && self.y == rhs.y
+    }
 }
 
 impl<T: Signed + Copy> Vec2<T> {
@@ -28,6 +51,15 @@ impl<T: Zero + Copy> Vec2<T> {
         Vec2 {
             x: T::zero(),
             y: T::zero(),
+        }
+    }
+}
+
+impl<T: One + Copy> Vec2<T> {
+    pub fn one() -> Self {
+        Vec2 {
+            x: T::one(),
+            y: T::one(),
         }
     }
 }
@@ -175,6 +207,14 @@ impl<T: Copy> Vec3<T> {
         }
     }
 
+    pub fn from_vec2(v: Vec2<T>, z: T) -> Self {
+        Vec3 {
+            x: v.x,
+            y: v.y,
+            z,
+        }
+    }
+
     pub fn permute(self, perm: Vec3Perm) -> Self {
         match perm {
             Vec3Perm::XYZ => Vec3 {
@@ -208,6 +248,12 @@ impl<T: Copy> Vec3<T> {
                 z: self.x,
             },
         }
+    }
+}
+
+impl<T: PartialEq + Copy> PartialEq for Vec3<T> {
+    fn eq(&self, rhs: &Self) -> bool {
+        self.x == rhs.x && self.y == rhs.y && self.z == rhs.z
     }
 }
 
@@ -445,6 +491,12 @@ impl<T: Copy> Vec4<T> {
             z: v.z,
             w,
         }
+    }
+}
+
+impl<T: PartialEq + Copy> PartialEq for Vec4<T> {
+    fn eq(&self, rhs: &Self) -> bool {
+        self.x == rhs.x && self.y == rhs.y && self.z == rhs.z && self.w == rhs.w
     }
 }
 

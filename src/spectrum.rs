@@ -13,6 +13,53 @@ pub struct XYZColor {
     pub z: f64,
 }
 
+impl XYZColor {
+    pub fn zero() -> Self {
+        XYZColor {
+            x: 0.,
+            y: 0.,
+            z: 0.,
+        }
+    }
+}
+
+impl Add for XYZColor {
+    type Output = Self;
+
+    fn add(self, rhs: Self) -> Self {
+        XYZColor {
+            x: self.x + rhs.x,
+            y: self.y + rhs.y,
+            z: self.z + rhs.z,
+        }
+    }
+}
+
+impl Sub for XYZColor {
+    type Output = Self;
+
+    fn sub(self, rhs: Self) -> Self {
+        XYZColor {
+            x: self.x - rhs.x,
+            y: self.y - rhs.y,
+            z: self.z - rhs.z,
+        }
+    }
+}
+
+impl Index<usize> for XYZColor {
+    type Output = f64;
+
+    fn index(&self, i: usize) -> &f64 {
+        match i {
+            0 => &self.x,
+            1 => &self.y,
+            2 => &self.z,
+            _ => panic!("Index out of range for Vec"),
+        }
+    }
+}
+
 #[derive(Clone, Copy)]
 pub struct RGBColor {
     pub r: f64,

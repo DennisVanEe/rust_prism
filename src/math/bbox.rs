@@ -1,8 +1,9 @@
 use crate::math::ray::Ray;
 use crate::math::util::gamma_f64;
 use crate::math::vector::{Vec2, Vec3};
+use crate::math::numbers::Float;
 
-use num_traits::{Bounded, Float};
+use num_traits::Bounded;
 
 use std::cmp::PartialOrd;
 use std::mem::swap;
@@ -123,7 +124,7 @@ impl<T: PartialOrd + Bounded + Copy> BBox3<T> {
     }
 }
 
-impl<T: Float + PartialOrd + Bounded + Copy> BBox3<T> {
+impl<T: Float + Bounded> BBox3<T> {
     // Continious position of a point relative to the corners of the BBox.
     // That is, if pnt is at pmin is (0,0,0), and if pnt is at pmax is (1,1,1)
     pub fn offset(self, pnt: Vec3<T>) -> Vec3<T> {
@@ -149,7 +150,7 @@ impl<T: Float + PartialOrd + Bounded + Copy> BBox3<T> {
 
     pub fn surface_area(self) -> T {
         let d = self.diagonal();
-        T::from(2).unwrap() * (d.x * d.y + d.x * d.y + d.y * d.z)
+        T::two() * (d.x * d.y + d.x * d.y + d.y * d.z)
     }
 }
 

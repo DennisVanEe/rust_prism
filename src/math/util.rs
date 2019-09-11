@@ -1,6 +1,5 @@
 use crate::math::vector::Vec3;
-
-use num_traits::Float;
+use crate::math::numbers::Float;
 
 use std::cmp::PartialOrd;
 use std::f64;
@@ -89,3 +88,6 @@ pub fn quadratic<T: Float>(a: T, b: T, c: T) -> Option<(T, T)> {
 
     Some((t0.min(t1), t0.max(t1)))
 }
+
+// Constants:
+

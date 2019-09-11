@@ -1,7 +1,8 @@
 use crate::math::matrix::Mat4;
 use crate::math::vector::{Vec3, Vec4};
+use crate::math::numbers::Float;
 
-use num_traits::{clamp, Float};
+use num_traits::clamp;
 
 use std::mem::MaybeUninit;
 use std::ops::{Add, Mul, Neg, Sub};
