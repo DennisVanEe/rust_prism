@@ -1,6 +1,6 @@
 use crate::math::matrix::Mat4;
-use crate::math::vector::{Vec3, Vec4};
 use crate::math::numbers::Float;
+use crate::math::vector::{Vec3, Vec4};
 
 use num_traits::clamp;
 

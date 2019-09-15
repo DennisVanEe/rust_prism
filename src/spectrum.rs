@@ -1,9 +1,11 @@
 // Represents color in the renderer:
 
-use num_traits::{clamp, Float};
+use crate::math::numbers::Float;
+
+use num_traits::clamp;
 
 use std::mem::MaybeUninit;
-use std::ops::{Add, Index, Sub};
+use std::ops::{Add, Div, Index, Mul, Sub};
 
 // The CIE XYZ color space:
 #[derive(Clone, Copy)]
@@ -61,19 +63,48 @@ impl Index<usize> for XYZColor {
 }
 
 #[derive(Clone, Copy)]
-pub struct RGBColor {
+pub struct RGBSpectrum {
     pub r: f64,
     pub g: f64,
     pub b: f64,
 }
 
-impl RGBColor {
+impl RGBSpectrum {
+    pub fn from_xyz(xyz: XYZColor) -> Self {
+        RGBSpectrum {
+            r: 3.240479 * xyz.x - 1.537150 * xyz.y - 0.498535 * xyz.z,
+            g: -0.969256 * xyz.x + 1.875991 * xyz.y + 0.041556 * xyz.z,
+            b: 0.055648 * xyz.x - 0.204043 * xyz.y + 1.057311 * xyz.z,
+        }
+    }
+
+    // Just a fancy way of returning 0 for everything:
+    pub fn black() -> Self {
+        RGBSpectrum {
+            r: 0.,
+            g: 0.,
+            b: 0.,
+        }
+    }
+
+    pub fn from_scalar(s: f64) -> Self {
+        RGBSpectrum { r: s, g: s, b: s }
+    }
+
+    pub fn scale(self, s: f64) -> Self {
+        RGBSpectrum {
+            r: self.r * s,
+            g: self.g * s,
+            b: self.b * s,
+        }
+    }
+
     pub fn is_black(self) -> bool {
         self.r == 0. && self.g == 0. && self.b == 0.
     }
 
     pub fn sqrt(self) -> Self {
-        RGBColor {
+        RGBSpectrum {
             r: self.r.sqrt(),
             g: self.g.sqrt(),
             b: self.b.sqrt(),
@@ -81,7 +112,7 @@ impl RGBColor {
     }
 
     pub fn pow(self, p: f64) -> Self {
-        RGBColor {
+        RGBSpectrum {
             r: self.r.powf(p),
             g: self.g.powf(p),
             b: self.b.powf(p),
@@ -89,18 +120,10 @@ impl RGBColor {
     }
 
     pub fn exp(self) -> Self {
-        RGBColor {
+        RGBSpectrum {
             r: self.r.exp(),
             g: self.g.exp(),
             b: self.b.exp(),
-        }
-    }
-
-    pub fn scale(self, s: f64) -> Self {
-        RGBColor {
-            r: self.r * s,
-            g: self.g * s,
-            b: self.b * s,
         }
     }
 
@@ -109,7 +132,7 @@ impl RGBColor {
     }
 
     pub fn clamp(self, low: f64, high: f64) -> Self {
-        RGBColor {
+        RGBSpectrum {
             r: clamp(self.r, low, high),
             g: clamp(self.g, low, high),
             b: clamp(self.b, low, high),
@@ -129,21 +152,13 @@ impl RGBColor {
     pub fn to_y(self) -> f64 {
         0.212671 * self.r + 0.715160 * self.g + 0.072169 * self.b
     }
-
-    pub fn from_xyz(xyz: XYZColor) -> Self {
-        RGBColor {
-            r: 3.240479 * xyz.x - 1.537150 * xyz.y - 0.498535 * xyz.z,
-            g: -0.969256 * xyz.x + 1.875991 * xyz.y + 0.041556 * xyz.z,
-            b: 0.055648 * xyz.x - 0.204043 * xyz.y + 1.057311 * xyz.z,
-        }
-    }
 }
 
-impl Add for RGBColor {
+impl Add for RGBSpectrum {
     type Output = Self;
 
     fn add(self, rhs: Self) -> Self {
-        RGBColor {
+        RGBSpectrum {
             r: self.r + rhs.r,
             g: self.g + rhs.g,
             b: self.b + rhs.b,
@@ -151,11 +166,11 @@ impl Add for RGBColor {
     }
 }
 
-impl Sub for RGBColor {
+impl Sub for RGBSpectrum {
     type Output = Self;
 
     fn sub(self, rhs: Self) -> Self {
-        RGBColor {
+        RGBSpectrum {
             r: self.r - rhs.r,
             g: self.g - rhs.g,
             b: self.b - rhs.b,
@@ -163,7 +178,31 @@ impl Sub for RGBColor {
     }
 }
 
-impl Index<usize> for RGBColor {
+impl Div for RGBSpectrum {
+    type Output = Self;
+
+    fn div(self, rhs: Self) -> Self {
+        RGBSpectrum {
+            r: self.r / rhs.r,
+            g: self.g / rhs.g,
+            b: self.b / rhs.b,
+        }
+    }
+}
+
+impl Mul for RGBSpectrum {
+    type Output = Self;
+
+    fn mul(self, rhs: Self) -> Self {
+        RGBSpectrum {
+            r: self.r * rhs.r,
+            g: self.g * rhs.g,
+            b: self.b * rhs.b,
+        }
+    }
+}
+
+impl Index<usize> for RGBSpectrum {
     type Output = f64;
 
     fn index(&self, i: usize) -> &f64 {

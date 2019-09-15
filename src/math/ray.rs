@@ -1,5 +1,5 @@
-use crate::math::vector::Vec3;
 use crate::math::numbers::Float;
+use crate::math::vector::Vec3;
 
 /// The core ray structure:
 #[derive(Clone, Copy, Debug)]

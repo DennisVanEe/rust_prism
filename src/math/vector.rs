@@ -1,10 +1,10 @@
+use crate::math::numbers::Float;
 /// Defines a bunch of vector types and whatnot:
 // Needs to be signed to support negation.
 // Float is used to handle sqrt case and whatnot that may arise.
 use crate::math::util::{max, min};
-use crate::math::numbers::Float;
 
-use num_traits::{Signed, Zero, One};
+use num_traits::{One, Signed, Zero};
 
 use std::cmp::{PartialEq, PartialOrd};
 use std::ops::{Add, Div, Index, IndexMut, Mul, Neg, Sub};
@@ -17,17 +17,11 @@ pub struct Vec2<T: Copy> {
 
 impl<T: Copy> Vec2<T> {
     pub fn from_vec3(v: Vec3<T>) -> Self {
-        Vec2 {
-            x: v.x,
-            y: v.y,
-        }
+        Vec2 { x: v.x, y: v.y }
     }
 
     pub fn from_vec4(v: Vec4<T>) -> Self {
-        Vec2 {
-            x: v.x,
-            y: v.y,
-        }
+        Vec2 { x: v.x, y: v.y }
     }
 }
 
@@ -208,11 +202,7 @@ impl<T: Copy> Vec3<T> {
     }
 
     pub fn from_vec2(v: Vec2<T>, z: T) -> Self {
-        Vec3 {
-            x: v.x,
-            y: v.y,
-            z,
-        }
+        Vec3 { x: v.x, y: v.y, z }
     }
 
     pub fn permute(self, perm: Vec3Perm) -> Self {

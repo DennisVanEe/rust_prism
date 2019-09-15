@@ -1,7 +1,7 @@
+use crate::math::numbers::Float;
 use crate::math::ray::Ray;
 use crate::math::util::gamma_f64;
 use crate::math::vector::{Vec2, Vec3};
-use crate::math::numbers::Float;
 
 use num_traits::Bounded;
 

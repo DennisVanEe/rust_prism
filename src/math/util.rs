@@ -1,5 +1,5 @@
-use crate::math::vector::Vec3;
 use crate::math::numbers::Float;
+use crate::math::vector::Vec3;
 
 use std::cmp::PartialOrd;
 use std::f64;
@@ -89,5 +89,17 @@ pub fn quadratic<T: Float>(a: T, b: T, c: T) -> Option<(T, T)> {
     Some((t0.min(t1), t0.max(t1)))
 }
 
-// Constants:
+pub fn reflect<T: Float>(wo: Vec3<T>, n: Vec3<T>) -> Vec3<T> {
+    -wo + n.scale(T::two() * wo.dot(n))
+}
 
+pub fn refract<T: Float>(wi: Vec3<T>, n: Vec3<T>, eta: T) -> Option<Vec3<T>> {
+    let cos_theta_i = n.dot(wi);
+    let sin2_theta_i = T::zero().max(T::one() - cos_theta_i * cos_theta_i);
+    let sin2_theta_t = eta * eta * sin2_theta_i;
+    if sin2_theta_t >= T::one() {
+        return None;
+    }
+    let cos_theta_t = (T::one() - sin2_theta_t).sqrt();
+    Some((-wi).scale(eta) + n.scale(cos_theta_i * eta - cos_theta_t))
+}

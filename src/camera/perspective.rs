@@ -1,10 +1,10 @@
-use crate::camera::{CameraSample, Camera};
+use crate::camera::{Camera, CameraSample};
 use crate::film::Film;
 use crate::math::bbox::BBox2;
-use crate::math::vector::{Vec2, Vec3};
 use crate::math::ray::{Ray, RayDiff};
-use crate::transform::{StaticTransform, Transform};
 use crate::math::sampling::concentric_sample_disk;
+use crate::math::vector::{Vec2, Vec3};
+use crate::transform::{StaticTransform, Transform};
 
 pub struct PerspectiveCamera<T: Transform> {
     // Defines the position of the camera in the world
@@ -83,8 +83,13 @@ impl<T: Transform> PerspectiveCamera<T> {
 
 impl<T: Transform> Camera for PerspectiveCamera<T> {
     fn generate_ray(&self, sample: CameraSample) -> Ray<f64> {
-        let p_camera = self.raster_to_camera.proj_point(Vec3::from_vec2(sample.p_film, 0.));
-        let ray = Ray { org: Vec3::zero(), dir: p_camera.normalize(), };
+        let p_camera = self
+            .raster_to_camera
+            .proj_point(Vec3::from_vec2(sample.p_film, 0.));
+        let ray = Ray {
+            org: Vec3::zero(),
+            dir: p_camera.normalize(),
+        };
 
         // Check if there is a lens and, so, update the ray if that is the case:
         let ray = if self.lens_radius > 0. {
@@ -105,14 +110,19 @@ impl<T: Transform> Camera for PerspectiveCamera<T> {
     }
 
     fn generate_raydiff(&self, sample: CameraSample) -> (Ray<f64>, RayDiff<f64>) {
-        let p_camera = self.raster_to_camera.proj_point(Vec3::from_vec2(sample.p_film, 0.));
-        let ray = Ray { org: Vec3::zero(), dir: p_camera.normalize(), };
+        let p_camera = self
+            .raster_to_camera
+            .proj_point(Vec3::from_vec2(sample.p_film, 0.));
+        let ray = Ray {
+            org: Vec3::zero(),
+            dir: p_camera.normalize(),
+        };
 
         // Check whether or not there is a lens
         if self.lens_radius > 0. {
             // Calculate the focus information as normal:
             let p_lens = concentric_sample_disk(sample.p_lens).scale(self.lens_radius);
-            
+
             let ft = self.focal_dist / ray.dir.z;
             let p_focus = ray.point_at(ft);
             let ray = Ray {
@@ -124,21 +134,20 @@ impl<T: Transform> Camera for PerspectiveCamera<T> {
             let dir_x = (p_camera + self.dx_camera).normalize();
             let ft = self.focal_dist / dir_x.z;
             let p_focus = dir_x.scale(ft); // + (0,0,0) as it stems from the origin
-            let rx = Ray { 
-                org: Vec3::from_vec2(p_lens, 0.), 
+            let rx = Ray {
+                org: Vec3::from_vec2(p_lens, 0.),
                 dir: (p_focus - Vec3::from_vec2(p_lens, 0.)).normalize(),
             };
             // Calculate the focus information in the dy direction:
             let dir_y = (p_camera + self.dy_camera).normalize();
             let ft = self.focal_dist / dir_y.z;
             let p_focus = dir_y.scale(ft); // + (0,0,0) as it stems from the origin
-            let ry = Ray { 
-                org: Vec3::from_vec2(p_lens, 0.), 
+            let ry = Ray {
+                org: Vec3::from_vec2(p_lens, 0.),
                 dir: (p_focus - Vec3::from_vec2(p_lens, 0.)).normalize(),
             };
 
-            (ray, RayDiff { rx, ry, })
-
+            (ray, RayDiff { rx, ry })
         } else {
             // No lens to deal with, so this shouldn't be too hard to create
             // the extra rx and ry values:
@@ -151,7 +160,7 @@ impl<T: Transform> Camera for PerspectiveCamera<T> {
                 dir: (p_camera + self.dy_camera).normalize(),
             };
 
-            (ray, RayDiff { rx, ry, })
+            (ray, RayDiff { rx, ry })
         }
     }
 }

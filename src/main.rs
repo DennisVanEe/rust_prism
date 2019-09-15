@@ -6,6 +6,7 @@ mod math;
 mod memory;
 mod pixel_buffer;
 mod scene_loading;
+mod shading;
 mod spectrum;
 mod transform;
 

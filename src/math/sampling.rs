@@ -1,8 +1,8 @@
 // This file contains a bunch of functions useful for sampling
 // different shapes:
 
-use crate::math::vector::{Vec2, Vec3};
 use crate::math::numbers::Float;
+use crate::math::vector::{Vec2, Vec3};
 
 pub fn uniform_sample_hemisphere<T: Float>(u: Vec2<T>) -> Vec3<T> {
     let z = u.x;
@@ -23,7 +23,7 @@ pub fn uniform_sample_sphere<T: Float>(u: Vec2<T>) -> Vec3<T> {
     let z = T::one() - T::two() * u.x;
     let r = T::zero().max(T::one() - z * z).sqrt();
     let phi = T::two() * T::PI * u.y;
-      Vec3 {
+    Vec3 {
         x: r * phi.cos(),
         y: r * phi.sin(),
         z,
@@ -44,7 +44,10 @@ pub fn concentric_sample_disk<T: Float>(u: Vec2<T>) -> Vec2<T> {
     let (r, theta) = if u_offset.x.abs() > u_offset.y.abs() {
         (u_offset.x, T::PI_OVER_4 * (u_offset.y / u_offset.x))
     } else {
-        (u_offset.y, T::PI_OVER_2 - T::PI_OVER_4 * (u_offset.x / u_offset.y))
+        (
+            u_offset.y,
+            T::PI_OVER_2 - T::PI_OVER_4 * (u_offset.x / u_offset.y),
+        )
     };
 
     Vec2 {
