@@ -91,11 +91,21 @@ impl RGBSpectrum {
         RGBSpectrum { r: s, g: s, b: s }
     }
 
+    // Multiplies all of the components by the scale value:
     pub fn scale(self, s: f64) -> Self {
         RGBSpectrum {
             r: self.r * s,
             g: self.g * s,
             b: self.b * s,
+        }
+    }
+
+    // Divides all of the components by the scale value:
+    pub fn div_scale(self, s: f64) -> Self {
+        RGBSpectrum {
+            r: self.r / s,
+            g: self.g / s,
+            b: self.b / s,
         }
     }
 

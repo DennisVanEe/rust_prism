@@ -1,11 +1,9 @@
-// This is for the Oren-Nayar reflection model.
-// This is a microfacet model.
-
-use crate::shading::bxdf::{BxDFType, BxDF, sin_theta, sin_phi, cos_phi, abs_cos_theta};
-use crate::spectrum::RGBSpectrum;
 use crate::math::numbers::Float;
+use crate::math::vector::Vec3;
+use crate::shading::lobe::{abs_cos_theta, cos_phi, sin_phi, sin_theta, Lobe, LobeType};
+use crate::spectrum::RGBSpectrum;
 
-struct OrenNayar {
+pub struct OrenNayar {
     r_scale: RGBSpectrum,
     // Used by the OrenNayar formula:
     a: f64,
@@ -13,7 +11,7 @@ struct OrenNayar {
 }
 
 impl OrenNayar {
-    const BXDF_TYPE: BxDFType = BSDF_REFLECTION | BSDF_DIFFUSE;
+    const LOBE_TYPE: LobeType = LobeType::REFLECTION | LobeType::DIFFUSE;
 
     // r_scale: how much we scale the result by (abledo)
     // sigma: the standard deviation of the distribution of roughness.
@@ -22,22 +20,22 @@ impl OrenNayar {
         let sigma = sigma.to_radians();
         let sigma2 = sigma * sigma;
         OrenNayar {
-            r_scale: RGBSpectrum,
+            r_scale,
             a: 1. - sigma2 / (2. * (sigma2 + 0.33)),
             b: 0.45 * sigma2 / (sigma2 + 0.09),
         }
     }
 }
 
-impl BxDF for OrenNayar {
-    fn has_flags(&self, fl: BxDFType) -> bool {
-        Self::BXDF_TYPE.contains(fl)
+impl Lobe for OrenNayar {
+    fn has_type(&self, fl: LobeType) -> bool {
+        Self::LOBE_TYPE.contains(fl)
     }
 
     fn f(&self, wo: Vec3<f64>, wi: Vec3<f64>) -> RGBSpectrum {
         let sin_theta_o = sin_theta(wo);
         let sin_theta_i = sin_theta(wi);
-        
+
         // Calculate this value using a trigonometric identity:
         let max_cos = if sin_theta_i > 1e-4 && sin_theta_o > 1e-4 {
             let d_cos = cos_phi(wi) * cos_phi(wo) + sin_phi(wi) * sin_phi(wo);
@@ -52,7 +50,7 @@ impl BxDF for OrenNayar {
             (sin_theta_i, sin_theta_o / abs_cos_theta(wo))
         };
 
-        let scaling_factor = f64::INV_PI * (self.A + self.B * max_cos * sin_alpha * tan_beta);
+        let scaling_factor = f64::INV_PI * (self.a + self.b * max_cos * sin_alpha * tan_beta);
         self.r_scale.scale(scaling_factor)
     }
 }

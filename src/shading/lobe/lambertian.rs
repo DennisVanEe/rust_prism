@@ -1,6 +1,6 @@
 use crate::math::numbers::Float;
 use crate::math::vector::{Vec2, Vec3};
-use crate::shading::bxdf::{BxDF, BxDFType};
+use crate::shading::lobe::{Lobe, LobeType};
 use crate::spectrum::RGBSpectrum;
 
 //
@@ -13,16 +13,16 @@ pub struct LambertianReflection {
 }
 
 impl LambertianReflection {
-    const BXDF_TYPE: BxDFType = BxDFType::REFLECTION | BxDFType::DIFFUSE;
+    const LOBE_TYPE: LobeType = LobeType::REFLECTION | LobeType::DIFFUSE;
 
     pub fn new(r_scale: RGBSpectrum) -> Self {
         LambertianReflection { r_scale }
     }
 }
 
-impl BxDF for LambertianReflection {
-    fn has_flags(&self, fl: BxDFType) -> bool {
-        Self::BXDF_TYPE.contains(fl)
+impl Lobe for LambertianReflection {
+    fn has_type(&self, fl: LobeType) -> bool {
+        Self::LOBE_TYPE.contains(fl)
     }
 
     fn f(&self, wo: Vec3<f64>, wi: Vec3<f64>) -> RGBSpectrum {
@@ -47,16 +47,16 @@ pub struct LambertianTransmission {
 }
 
 impl LambertianTransmission {
-    const BXDF_TYPE: BxDFType = BxDFType::TRANSMISSION | BxDFType::DIFFUSE;
+    const LOBE_TYPE: LobeType = LobeType::REFLECTION | LobeType::DIFFUSE;
 
     pub fn new(t_scale: RGBSpectrum) -> Self {
         LambertianTransmission { t_scale }
     }
 }
 
-impl BxDF for LambertianTransmission {
-    fn has_flags(&self, fl: BxDFType) -> bool {
-        Self::BXDF_TYPE.contains(fl)
+impl Lobe for LambertianTransmission {
+    fn has_type(&self, fl: LobeType) -> bool {
+        Self::LOBE_TYPE.contains(fl)
     }
 
     fn f(&self, wo: Vec3<f64>, wi: Vec3<f64>) -> RGBSpectrum {

@@ -4,6 +4,23 @@ This document is needed to specify the scene file format used by PRISM.
 
 Scene file formats are written in JSON file formats and follow a strict set of rules:
 
+## Scene Model ##
+
+A Scene Model is a lightweight object that actually resides in the scene. It simply stores a pointer to both the geometry and the material that make it up. This way, you can reuse materials and geometries throughout the scene. A model also takes a transformation type. This is a geometry space to world space transformation (so where in the scene one is placing the model).
+
+Geometries and materials have a unique name that you can use to identify which geometry and material belong to this model. An example is shown below:
+
+```json
+"scene_model": {
+    "geometry": "sphere_mesh", // name of geometry created before
+    "material": "blue_matte",  // name of material created before
+    "transform": {             // see transform section for more details
+        "type": "translate",
+        "trans": [34.3, 89.1, 90.8],
+    }
+}
+```
+
 ## Transformations ##
 
 Transformations are an important part of any scene. They describe how objects are positioned in the world and how they move (if at all).

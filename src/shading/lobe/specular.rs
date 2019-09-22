@@ -1,6 +1,6 @@
 use crate::math::util::{align, refract};
 use crate::math::vector::{Vec2, Vec3};
-use crate::shading::bxdf::{abs_cos_theta, cos_theta, BxDF, BxDFType};
+use crate::shading::lobe::{abs_cos_theta, cos_theta, Lobe, LobeType};
 use crate::spectrum::RGBSpectrum;
 
 use num_traits::clamp;
@@ -173,16 +173,16 @@ struct SpecularReflection<F: Fresnel> {
 }
 
 impl<F: Fresnel> SpecularReflection<F> {
-    const BXDF_TYPE: BxDFType = BxDFType::REFLECTION | BxDFType::SPECULAR;
+    const LOBE_TYPE: LobeType = LobeType::REFLECTION | LobeType::SPECULAR;
 
     pub fn new(r_scale: RGBSpectrum, fresnel: F) -> Self {
         SpecularReflection { fresnel, r_scale }
     }
 }
 
-impl<F: Fresnel> BxDF for SpecularReflection<F> {
-    fn has_flags(&self, fl: BxDFType) -> bool {
-        Self::BXDF_TYPE.contains(fl)
+impl<F: Fresnel> Lobe for SpecularReflection<F> {
+    fn has_type(&self, fl: LobeType) -> bool {
+        Self::LOBE_TYPE.contains(fl)
     }
 
     fn f(&self, wo: Vec3<f64>, wi: Vec3<f64>) -> RGBSpectrum {
@@ -218,7 +218,7 @@ impl<F: Fresnel> BxDF for SpecularReflection<F> {
 //
 // Defines how light transmits through the object.
 #[derive(Clone, Copy)]
-struct SpecularTransmission {
+pub struct SpecularTransmission {
     // Conductors don't transmit light, so we need a dielectric:
     fresnel: Dielectric,
     // Scales the reflected color:
@@ -228,7 +228,7 @@ struct SpecularTransmission {
 }
 
 impl SpecularTransmission {
-    const BXDF_TYPE: BxDFType = BxDFType::TRANSMISSION | BxDFType::SPECULAR;
+    const LOBE_TYPE: LobeType = LobeType::TRANSMISSION | LobeType::SPECULAR;
 
     // In pbrt we define a transport mode, but we aren't using bidirectional techniques this case,
     // so we can ignore that.
@@ -244,9 +244,9 @@ impl SpecularTransmission {
     }
 }
 
-impl BxDF for SpecularTransmission {
-    fn has_flags(&self, fl: BxDFType) -> bool {
-        Self::BXDF_TYPE.contains(fl)
+impl Lobe for SpecularTransmission {
+    fn has_type(&self, fl: LobeType) -> bool {
+        Self::LOBE_TYPE.contains(fl)
     }
 
     fn f(&self, wo: Vec3<f64>, wi: Vec3<f64>) -> RGBSpectrum {
@@ -299,7 +299,7 @@ impl BxDF for SpecularTransmission {
 // Combines both Specular Reflection Specular Transmission as opposed to
 // just one of them like the previous ones.
 #[derive(Clone, Copy)]
-struct SpecularFresnal {
+pub struct SpecularFresnal {
     // Again, we only focus on the dielectric case (conductors have no transmission):
     fresnel: Dielectric,
     // Scales for transmission:
@@ -311,7 +311,7 @@ struct SpecularFresnal {
 }
 
 impl SpecularFresnal {
-    const BXDF_TYPE: BxDFType = BxDFType::REFLECTION | BxDFType::TRANSMISSION | BxDFType::SPECULAR;
+    const LOBE_TYPE: LobeType = LobeType::REFLECTION | LobeType::TRANSMISSION | LobeType::SPECULAR;
 
     // In pbrt we define a transport mode, but we aren't using bidirectional techniques this case,
     // so we can ignore that.
@@ -330,9 +330,9 @@ impl SpecularFresnal {
     }
 }
 
-impl BxDF for SpecularFresnal {
-    fn has_flags(&self, fl: BxDFType) -> bool {
-        Self::BXDF_TYPE.contains(fl)
+impl Lobe for SpecularFresnal {
+    fn has_type(&self, fl: LobeType) -> bool {
+        Self::LOBE_TYPE.contains(fl)
     }
 
     fn f(&self, wo: Vec3<f64>, wi: Vec3<f64>) -> RGBSpectrum {

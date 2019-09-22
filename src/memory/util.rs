@@ -25,7 +25,7 @@ pub unsafe fn transmute_vec<U, T>(mut src: Vec<U>) -> Vec<T> {
 // Allocates an array of UNINITIALIZED data. Not the most efficient
 // thing in the world (probably). I'll have to look into it.
 pub unsafe fn alloc_array<T: Sized>(len: usize) -> Box<[T]> {
-    // Allocate the space using vector (I know I know...)
+    // Allocate the space using vector:
     let mut array = Vec::with_capacity(len);
     array.set_len(len);
     array.into_boxed_slice()

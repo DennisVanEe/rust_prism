@@ -9,6 +9,7 @@ mod scene_loading;
 mod shading;
 mod spectrum;
 mod transform;
+mod scene;
 
 use math::random::RNG;
 use math::vector::Vec2;

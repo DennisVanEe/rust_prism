@@ -1,1 +1,2 @@
-pub mod bxdf;
+pub mod lobe;
+pub mod material;
