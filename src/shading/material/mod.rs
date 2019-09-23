@@ -3,11 +3,11 @@ pub mod plastic;
 
 use crate::geometry::Interaction;
 use crate::math::vector::{Vec2, Vec3};
-use crate::memory::allocators::DynStackAlloc;
 use crate::shading::lobe::{Lobe, LobeType};
 use crate::spectrum::RGBSpectrum;
 
 use arrayvec::ArrayVec;
+use bumpalo::Bump;
 
 // Public so that anyone making materials has this information.
 // This can be pretty important:
@@ -153,7 +153,7 @@ pub trait Material {
     fn compute_bsdf<'a>(
         &self,
         interaction: Interaction,
-        memory: &'a DynStackAlloc,
+        memory: &'a mut Bump,
         use_multiple_lobes: bool,
     ) -> Bsdf<'a>;
 }

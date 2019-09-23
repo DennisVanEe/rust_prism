@@ -9,7 +9,6 @@ use simple_error::{bail, try_with, SimpleResult};
 
 use crate::geometry::mesh::{Mesh, Triangle};
 use crate::math::vector::{Vec2, Vec3};
-use crate::memory::util::transmute_vec;
 
 use std::fs::File;
 use std::io::BufReader;
@@ -519,4 +518,26 @@ pub fn load_path(path: &str) -> SimpleResult<Mesh> {
 
     // Great! Now we can go ahead and construct our damn mesh:
     Ok(Mesh::new(triangles, vertices, has_nrm, has_tan, has_uv))
+}
+
+// Reinterprets the memory of a vector to that of another:
+unsafe fn transmute_vec<U, T>(mut src: Vec<U>) -> Vec<T> {
+    // First we extract everything we want:
+    let src_ptr = src.as_mut_ptr();
+    let src_len = src.len();
+    let src_cap = src.capacity();
+
+    // Get the size of the information:
+    let size_u = std::mem::size_of::<U>();
+    let size_t = std::mem::size_of::<T>();
+
+    // Get new length required here:
+    let src_len = (src_len * size_u) / size_t;
+
+    // "Forget" src so that we don't call the destructor on src (which would delete our memory)
+    std::mem::forget(src);
+    let src_ptr = std::mem::transmute::<*mut U, *mut T>(src_ptr);
+
+    // Construct the new vector:
+    Vec::from_raw_parts(src_ptr, src_len, src_cap)
 }

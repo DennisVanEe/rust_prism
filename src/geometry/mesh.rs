@@ -7,7 +7,6 @@ use crate::math::bbox::BBox3;
 use crate::math::ray::Ray;
 use crate::math::util::{align, coord_system};
 use crate::math::vector::{Vec2, Vec3, Vec3Perm};
-use crate::memory::allocators::StackAlloc;
 use crate::transform::Transform;
 
 use order_stat::kth_by;

@@ -1,9 +1,9 @@
-use crate::shading::material::{Bsdf, Material};
 use crate::geometry::Interaction;
 use crate::memory::allocators::DynStackAlloc;
-use crate::shading::lobe::Lobe;
-use crate::shading::lobe::oren_nayar::OrenNayar;
 use crate::shading::lobe::lambertian::LambertianReflection;
+use crate::shading::lobe::oren_nayar::OrenNayar;
+use crate::shading::lobe::Lobe;
+use crate::shading::material::{Bsdf, Material};
 use crate::spectrum::RGBSpectrum;
 
 // This uses a the same value for these properties across the entire
@@ -16,10 +16,7 @@ pub struct Matte {
 
 impl Matte {
     pub fn new(color: RGBSpectrum, sigma: f64) -> Self {
-        Matte {
-            color,
-            sigma,
-        }
+        Matte { color, sigma }
     }
 }
 
