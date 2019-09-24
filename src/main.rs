@@ -9,6 +9,6 @@ mod scene_loading;
 mod shading;
 mod spectrum;
 mod transform;
-mod aggregate;
+mod bvh;
 
 fn main() {}
