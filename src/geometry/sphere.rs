@@ -21,13 +21,7 @@ pub struct Sphere {
 }
 
 impl Sphere {
-    pub fn new(
-        rev_orientation: bool,
-        radius: f64,
-        z_min: f64,
-        z_max: f64,
-        phi_max: f64,
-    ) -> Self {
+    pub fn new(rev_orientation: bool, radius: f64, z_min: f64, z_max: f64, phi_max: f64) -> Self {
         let z_min = clamp(z_min, -radius, radius);
         let z_max = clamp(z_max, -radius, radius);
 

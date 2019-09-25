@@ -1,10 +1,10 @@
+use crate::bvh::{BVHObject, BVH};
 use crate::geometry::{Geometry, Interaction};
 use crate::math::bbox::BBox3;
-use crate::math::vector::Vec3;
 use crate::math::ray::Ray;
+use crate::math::vector::Vec3;
 use crate::shading::material::{Bsdf, Material};
 use crate::transform::Transform;
-use crate::bvh::{BVH, BVHObject};
 
 use bumpalo::Bump;
 use simple_error::{bail, SimpleResult};
@@ -97,51 +97,21 @@ struct Model<'a> {
     pub geom_to_world: &'a dyn Transform,
 }
 
-impl<'a> Model<'a> {
-    // The intersection needs to take into account motion:
-    pub fn intersect(&self, ray: Ray<f64>, max_time: f64, curr_time: f64) -> Option<Interaction> {
-        let int_geom_to_world = self.geom_to_world.interpolate(curr_time);
-        let ray = int_geom_to_world.inverse().ray(ray);
-        match self.geometry.intersect(ray, max_time) {
-            // Don't forget to transform it back to the original space we care about:
-            Some(i) => Some(int_geom_to_world.interaction(i)),
-            _ => None,
-        }
-    }
-
-    // The intersection needs to take into account motion:
-    pub fn intersect_test(&self, ray: Ray<f64>, max_time: f64, curr_time: f64) -> bool {
-        let int_geom_to_world = self.geom_to_world.interpolate(curr_time);
-        // Then we transform the ray itself and calculate the acceleration values:
-        let ray = int_geom_to_world.inverse().ray(ray);
-        self.geometry.intersect_test(ray, max_time)
-    }
-
-    pub fn get_geom_bound(&self) -> BBox3<f64> {
-        self.geometry.get_bound()
-    }
-
-    pub fn get_geom_centroid(&self) -> Vec3<f64> {
-        self.geometry.get_centroid()
-    }
-
-    // TODO: figure out how to handle the centroid for potentially
-    // moving objects.
-    pub fn get_world_centroid(&self) -> Vec3<f64> {
-        self.get_geom_centroid()
-    }
-
-    pub fn get_world_bound(&self) -> BBox3<f64> {
-        self.geom_to_world.bound_motion(self.geometry.get_bound())
-    }
-}
-
 impl<'a> BVHObject for Model<'a> {
     type IntParam = ();
     type DataParam = ();
 
-    fn intersect_test(&self, ray: Ray<f64>, max_time: f64, curr_time: f64, _: &Self::IntParam) -> bool {
-        Model::intersect_test(self, ray, max_time, curr_time)
+    fn intersect_test(
+        &self,
+        ray: Ray<f64>,
+        max_time: f64,
+        curr_time: f64,
+        _: &Self::IntParam,
+    ) -> bool {
+        let int_geom_to_world = self.geom_to_world.interpolate(curr_time);
+        // Then we transform the ray itself and calculate the acceleration values:
+        let ray = int_geom_to_world.inverse().ray(ray);
+        self.geometry.intersect_test(ray, max_time)
     }
 
     fn intersect(
@@ -151,15 +121,21 @@ impl<'a> BVHObject for Model<'a> {
         curr_time: f64,
         _: &Self::IntParam,
     ) -> Option<Interaction> {
-        Model::intersect(self, ray, max_time, curr_time)
+        let int_geom_to_world = self.geom_to_world.interpolate(curr_time);
+        let ray = int_geom_to_world.inverse().ray(ray);
+        match self.geometry.intersect(ray, max_time) {
+            // Don't forget to transform it back to the original space we care about:
+            Some(i) => Some(int_geom_to_world.interaction(i)),
+            _ => None,
+        }
     }
 
     fn get_centroid(&self, _: &Self::DataParam) -> Vec3<f64> {
-        self.get_world_centroid()
+        self.geometry.get_centroid()
     }
 
     fn get_bound(&self, _: &Self::DataParam) -> BBox3<f64> {
-        self.get_world_bound()
+        self.geom_to_world.bound_motion(self.geometry.get_bound())
     }
 }
 
@@ -169,7 +145,6 @@ pub struct Scene<'a> {
 }
 
 impl<'a> Scene<'a> {
-    // TODO: make this a user param (or not):
     const MAX_MODEL_PER_NODE: usize = 16;
 
     pub fn new(scene_builder: SceneBuilder<'a>) -> Self {
@@ -177,5 +152,27 @@ impl<'a> Scene<'a> {
             allocator: scene_builder.allocator,
             bvh: BVH::new(scene_builder.models, Self::MAX_MODEL_PER_NODE, &()),
         }
+    }
+
+    // These intersection tests are in world space:
+
+    // The intersect function also returns a reference to the material that belongs
+    // to the object that was intersected. This way, the integrator can decide whether
+    // or not to construct a Bsdf object.
+    pub fn intersect(
+        &self,
+        ray: Ray<f64>,
+        max_time: f64,
+        curr_time: f64,
+    ) -> Option<(Interaction, &dyn Material)> {
+        // First we traverse the BVH and get what we want:
+        match self.bvh.intersect(ray, max_time, curr_time, &()) {
+            Some((i, o)) => Some((i, o.material)),
+            _ => None,
+        }
+    }
+
+    pub fn intersect_test(&self, ray: Ray<f64>, max_time: f64, curr_time: f64) -> bool {
+        self.bvh.intersect_test(ray, max_time, curr_time, &())
     }
 }

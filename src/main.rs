@@ -10,5 +10,6 @@ mod scene_loading;
 mod shading;
 mod spectrum;
 mod transform;
+mod sampler;
 
 fn main() {}

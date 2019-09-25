@@ -15,7 +15,13 @@ pub trait BVHObject {
     type DataParam;
 
     // The intersection algorithms need to support potentially moving objects:
-    fn intersect_test(&self, ray: Ray<f64>, max_time: f64, curr_time: f64, int_info: &Self::IntParam) -> bool;
+    fn intersect_test(
+        &self,
+        ray: Ray<f64>,
+        max_time: f64,
+        curr_time: f64,
+        int_info: &Self::IntParam,
+    ) -> bool;
     fn intersect(
         &self,
         ray: Ray<f64>,
@@ -70,10 +76,9 @@ impl<O: BVHObject> BVH<O> {
         mut max_time: f64,
         curr_time: f64,
         int_info: &O::IntParam,
-    ) -> Option<Interaction> {
+    ) -> Option<(Interaction, &O)> {
         // This function has to be very efficient, so I'll be using a lot of unsafe code
         // here (but everything I'm doing should still be defined behavior).
-
         let inv_dir = ray.dir.inv_scale(1.);
         let is_dir_neg = ray.dir.comp_wise_is_neg();
 
@@ -98,11 +103,13 @@ impl<O: BVHObject> BVH<O> {
                         let obj_end = obj_end_index as usize;
                         unsafe {
                             for obj in self.objects.get_unchecked(obj_start..obj_end).iter() {
-                                if let Some(intersection) = obj.intersect(ray, max_time, curr_time, int_info) {
+                                if let Some(intersection) =
+                                    obj.intersect(ray, max_time, curr_time, int_info)
+                                {
                                     // Update the max time for more efficient culling:
                                     max_time = intersection.time;
                                     // Can't return immediately, have to make sure this is the closest intersection
-                                    result = Some(intersection);
+                                    result = Some((intersection, obj));
                                 }
                             }
                         }
@@ -145,7 +152,13 @@ impl<O: BVHObject> BVH<O> {
         result
     }
 
-    pub fn intersect_test(&self, ray: Ray<f64>, max_time: f64, curr_time: f64, int_info: &O::IntParam) -> bool {
+    pub fn intersect_test(
+        &self,
+        ray: Ray<f64>,
+        max_time: f64,
+        curr_time: f64,
+        int_info: &O::IntParam,
+    ) -> bool {
         // This function has to be very efficient, so I'll be using a lot of unsafe code
         // here (but everything I'm doing should still be defined behavior).
 

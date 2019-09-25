@@ -1,9 +1,9 @@
+use crate::bvh::{BVHObject, BVH};
 use crate::geometry::{Geometry, Interaction};
 use crate::math::bbox::BBox3;
 use crate::math::ray::Ray;
 use crate::math::util::{align, coord_system};
 use crate::math::vector::{Vec2, Vec3, Vec3Perm};
-use crate::bvh::{BVH, BVHObject};
 
 use std::cell::Cell;
 
@@ -31,12 +31,7 @@ pub struct MeshData {
 impl MeshData {
     // Important thing to note, if has_tan = true, then has_nrm must be true as well. If this is not
     // the case, bad things will happen....
-    pub fn new(
-        data: Vec<f32>,
-        has_nrm: bool,
-        has_tan: bool,
-        has_uvs: bool,
-    ) -> Self {
+    pub fn new(data: Vec<f32>, has_nrm: bool, has_tan: bool, has_uvs: bool) -> Self {
         // Make sure that, if has_tan is true, has_nrm is also true:
         debug_assert!(has_nrm || (!has_nrm && !has_tan));
 
@@ -81,7 +76,9 @@ impl MeshData {
     }
 
     pub fn get_surface_area(&self, triangles: &Vec<Triangle>) -> f64 {
-        triangles.iter().fold(0., |area, tri| area + tri.get_area(self))
+        triangles
+            .iter()
+            .fold(0., |area, tri| area + tri.get_area(self))
     }
 
     pub unsafe fn get_pos(&self, index: u32) -> Vec3<f64> {
@@ -581,7 +578,13 @@ impl BVHObject for Triangle {
     type DataParam = MeshData;
 
     // curr_time is not needed as BVHObject will work in geometry space only:
-    fn intersect_test(&self, ray: Ray<f64>, max_time: f64, _: f64, &(ray_int_info, mesh_data): &Self::IntParam) -> bool {
+    fn intersect_test(
+        &self,
+        ray: Ray<f64>,
+        max_time: f64,
+        _: f64,
+        &(ray_int_info, mesh_data): &Self::IntParam,
+    ) -> bool {
         unsafe {
             // Dirty, I know:
             Triangle::intersect_test(self, ray, max_time, ray_int_info, &*mesh_data)
@@ -659,12 +662,27 @@ impl Geometry for Mesh {
     fn intersect_test(&self, ray: Ray<f64>, max_time: f64) -> bool {
         let ray_int_info = calc_rayintinfo(ray);
         // Because in geometry space we aren't moving, curr_time is not needed and we always set it to 0:
-        self.bvh.intersect_test(ray, max_time, 0., &(ray_int_info, &self.mesh_data as *const MeshData))
+        self.bvh.intersect_test(
+            ray,
+            max_time,
+            0.,
+            &(ray_int_info, &self.mesh_data as *const MeshData),
+        )
     }
 
     fn intersect(&self, ray: Ray<f64>, max_time: f64) -> Option<Interaction> {
         let ray_int_info = calc_rayintinfo(ray);
-        // Because in geometry space we aren't moving, curr_time is not needed and we always set it to 0:
-        self.bvh.intersect(ray, max_time, 0., &(ray_int_info, &self.mesh_data as *const MeshData))
+        // Because in geometry space we aren't moving, curr_time is not needed and we always set it to 0.
+        // Also, we don't care which triangle we specifically intersected, so we ignore the reference to
+        // it when we return the result:
+        match self.bvh.intersect(
+            ray,
+            max_time,
+            0.,
+            &(ray_int_info, &self.mesh_data as *const MeshData),
+        ) {
+            Some((i, _)) => Some(i),
+            _ => None,
+        }
     }
 }
