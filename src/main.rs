@@ -1,3 +1,4 @@
+mod bvh;
 mod camera;
 mod film;
 mod filter;
@@ -9,6 +10,5 @@ mod scene_loading;
 mod shading;
 mod spectrum;
 mod transform;
-mod bvh;
 
 fn main() {}

@@ -3,17 +3,12 @@ use crate::math::bbox::BBox3;
 use crate::math::ray::Ray;
 use crate::math::util::quadratic;
 use crate::math::vector::{Vec2, Vec3};
-use crate::transform::Transform;
 
 use num_traits::clamp;
 
 use std::f64;
 
-pub struct Sphere<T: Transform> {
-    // These are pretty easy to invert, so we don't
-    // have to bother storing both bits of information in this case:
-    geom_to_world: T,
-
+pub struct Sphere {
     radius: f64,
     z_min: f64,
     z_max: f64,
@@ -25,9 +20,8 @@ pub struct Sphere<T: Transform> {
     rev_orientation: bool,
 }
 
-impl<T: Transform> Sphere<T> {
+impl Sphere {
     pub fn new(
-        geom_to_world: T,
         rev_orientation: bool,
         radius: f64,
         z_min: f64,
@@ -43,7 +37,6 @@ impl<T: Transform> Sphere<T> {
         let phi_max = clamp(phi_max, 0., 360.).to_radians();
 
         Sphere {
-            geom_to_world,
             radius,
             z_min,
             z_max,
@@ -55,8 +48,8 @@ impl<T: Transform> Sphere<T> {
     }
 }
 
-impl<T: Transform> Geometry for Sphere<T> {
-    fn geom_bound(&self) -> BBox3<f64> {
+impl Geometry for Sphere {
+    fn get_bound(&self) -> BBox3<f64> {
         BBox3::from_pnts(
             Vec3 {
                 x: -self.radius,
@@ -71,21 +64,16 @@ impl<T: Transform> Geometry for Sphere<T> {
         )
     }
 
-    fn world_bound(&self, t: f64) -> BBox3<f64> {
-        self.geom_to_world.bound_motion(self.geom_bound(), t)
+    // TODO: figure out centroid stuff:
+    fn get_centroid(&self) -> Vec3<f64> {
+        Vec3::zero()
     }
 
-    fn surface_area(&self) -> f64 {
+    fn get_surface_area(&self) -> f64 {
         self.phi_max * self.radius * (self.z_max - self.z_min)
     }
 
-    fn intersect(&self, ray: Ray<f64>, max_time: f64, curr_time: f64) -> Option<Interaction> {
-        // Because of the way this works, we perform this operation first:
-        let int_geom_to_world = self.geom_to_world.interpolate(curr_time);
-
-        // Transform the ray to the appropriate space:
-        let ray = int_geom_to_world.inverse().ray(ray);
-
+    fn intersect(&self, ray: Ray<f64>, max_time: f64) -> Option<Interaction> {
         // Now we need to solve the following quadratic equation:
         let a = ray.dir.dot(ray.dir);
         let b = 2. * ray.dir.dot(ray.org);
@@ -230,7 +218,7 @@ impl<T: Transform> Geometry for Sphere<T> {
             + dpdv.scale(inv_begf2 * (f * bf - g * be)))
         .normalize();
 
-        let geom_interaction = Interaction {
+        Some(Interaction {
             p,
             n,
             wo: -ray.dir,
@@ -245,19 +233,10 @@ impl<T: Transform> Geometry for Sphere<T> {
             shading_dpdv: dpdv,
             shading_dndu: dndu,
             shading_dndv: dndv,
-        };
-
-        // Don't forget to transform it back to world space:
-        Some(int_geom_to_world.interaction(geom_interaction))
+        })
     }
 
-    fn intersect_test(&self, ray: Ray<f64>, max_time: f64, curr_time: f64) -> bool {
-        // Because of the way this works, we perform this operation first:
-        let int_geom_to_world = self.geom_to_world.interpolate(curr_time);
-
-        // Transform the ray to the appropriate space:
-        let ray = int_geom_to_world.inverse().ray(ray);
-
+    fn intersect_test(&self, ray: Ray<f64>, max_time: f64) -> bool {
         // Now we need to solve the following quadratic equation:
         let a = ray.dir.dot(ray.dir);
         let b = 2. * ray.dir.dot(ray.org);

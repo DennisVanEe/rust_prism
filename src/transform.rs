@@ -15,7 +15,7 @@ pub trait Transform {
     // We need to be able to interpolate it:
     fn interpolate(&self, t: f64) -> StaticTransform;
     // And we need to be able to bound it's motion:
-    fn bound_motion(&self, b: BBox3<f64>, t: f64) -> BBox3<f64>;
+    fn bound_motion(&self, b: BBox3<f64>) -> BBox3<f64>;
 }
 
 #[derive(Clone, Copy)]
@@ -203,7 +203,7 @@ impl Transform for StaticTransform {
         *self
     }
 
-    fn bound_motion(&self, b: BBox3<f64>, _: f64) -> BBox3<f64> {
+    fn bound_motion(&self, b: BBox3<f64>) -> BBox3<f64> {
         self.bbox(b)
     }
 }
@@ -370,7 +370,7 @@ impl Transform for AnimatedTransform {
 
     // This function is time costly, but should only really be called during the
     // preprocess step anyways:
-    fn bound_motion(&self, b: BBox3<f64>, _: f64) -> BBox3<f64> {
+    fn bound_motion(&self, b: BBox3<f64>) -> BBox3<f64> {
         // If there is no rotation, we can just combine the transformations
         // of the two bounding boxes:
         if !self.has_rot {

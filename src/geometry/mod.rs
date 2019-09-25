@@ -29,17 +29,16 @@ pub struct Interaction {
 
 pub trait Geometry {
     // The bounds in geometry space:
-    fn geom_bound(&self) -> BBox3<f64>;
-    // The bouds in world space (this will be the bound of the motion
-    // if it is animated):
-    fn world_bound(&self, t: f64) -> BBox3<f64>;
+    fn get_bound(&self) -> BBox3<f64>;
+    // The cetroid in geometry space:
+    fn get_centroid(&self) -> Vec3<f64>;
     // This just calculates the surface area of whatever geometry we care about:
-    fn surface_area(&self) -> f64;
+    fn get_surface_area(&self) -> f64;
 
     // Need to specify max_time so we can potentially return early if
     // the intersection is beyond. Curr_time is also needed if the
     // object moves.
 
-    fn intersect_test(&self, ray: Ray<f64>, max_time: f64, curr_time: f64) -> bool;
-    fn intersect(&self, ray: Ray<f64>, max_time: f64, curr_time: f64) -> Option<Interaction>;
+    fn intersect_test(&self, ray: Ray<f64>, max_time: f64) -> bool;
+    fn intersect(&self, ray: Ray<f64>, max_time: f64) -> Option<Interaction>;
 }
