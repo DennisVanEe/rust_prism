@@ -1,9 +1,12 @@
+pub mod stratified;
+
 use crate::math::vector::Vec2;
 use crate::camera::CameraSample;
 
 const ONE_MINUS_EPS: f64 = 0.99999999999999989;
 
-// Each thread, when working on a tile, gets access to a single Sampler.
+// Each thread, when working on a tile, gets access to their own
+// sampler when rendering.
 
 pub trait Sampler {
     fn start_pixel(&mut self, pixel: Vec2<usize>);
