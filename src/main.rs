@@ -5,11 +5,11 @@ mod filter;
 mod geometry;
 mod math;
 mod pixel_buffer;
+mod sampler;
 mod scene;
 mod scene_loading;
 mod shading;
 mod spectrum;
 mod transform;
-mod sampler;
 
 fn main() {}
