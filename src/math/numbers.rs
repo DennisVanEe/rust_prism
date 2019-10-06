@@ -3,7 +3,7 @@
 
 use num_traits;
 
-// This is my own float trait versus the num_traits one:
+// This is my own float trait versus the num_traits' one:
 
 pub trait Float: num_traits::Float + num_traits::Bounded {
     const PI: Self;
@@ -17,6 +17,8 @@ pub trait Float: num_traits::Float + num_traits::Bounded {
 
     // Some important functions that are lacking from the previous one:
 
+    // These could be constants, but to mimick the design of num_traits' float
+    // we'll make them functions:
     fn two() -> Self;
     fn half() -> Self;
 }

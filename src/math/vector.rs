@@ -1,7 +1,4 @@
 use crate::math::numbers::Float;
-/// Defines a bunch of vector types and whatnot:
-// Needs to be signed to support negation.
-// Float is used to handle sqrt case and whatnot that may arise.
 use crate::math::util::{max, min};
 
 use num_traits::{One, Signed, Zero};

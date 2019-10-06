@@ -11,5 +11,6 @@ mod scene_loading;
 mod shading;
 mod spectrum;
 mod transform;
+mod memory;
 
 fn main() {}

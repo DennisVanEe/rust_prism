@@ -21,3 +21,10 @@ pub unsafe fn transmute_vec<U, T>(mut src: Vec<U>) -> Vec<T> {
     // Construct the new vector:
     Vec::from_raw_parts(src_ptr, src_len, src_cap)
 }
+
+// Allocates a vector of uninitialized data:
+pub unsafe fn uninit_vec<T>(size: usize) -> Vec<T> {
+    let vec = Vec::with_capacity(size);
+    vec.set_len(size);
+    vec
+}
