@@ -71,18 +71,14 @@ impl Stratified {
         // Allocate buffers for the "regular" samples_1d and samples_2d values:
         let (samples_1d, samples_2d) = {
             let num_samples = num_pixel_samples * num_dimensions;
-            unsafe {
-                (uninit_vec(num_samples), uninit_vec(num_samples))
-            }
+            unsafe { (uninit_vec(num_samples), uninit_vec(num_samples)) }
         };
 
         let (samples_1d_arrays, samples_2d_arrays) = {
             // So, for EACH individual pixel sample, we have these sizes:
             let num_samples_1d = array_1d_lens.iter().sum() * num_pixel_samples;
             let num_samples_2d = array_2d_lens.iter().sum() * num_pixel_samples;
-            unsafe {
-                (uninit_vec(num_samples_1d), uninit_vec(num_samples_2d))
-            }
+            unsafe { (uninit_vec(num_samples_1d), uninit_vec(num_samples_2d)) }
         };
 
         Stratified {
@@ -168,22 +164,22 @@ impl Stratified {
     }
 
     // Generates latin hypercube samples for 2 dimensions:
-    fn gen_lhs_2d(
-        &mut self,
-        samples_data: &mut [Vec2<f64>],
-    ) {
+    fn gen_lhs_2d(&mut self, samples_data: &mut [Vec2<f64>]) {
         // Generate a random value in each dimension
         let inv_num_samples = 1. / (samples_data.len() as f64);
         for (i, sample) in &mut samples_data.iter().enumerate() {
-            sample.x = f64::ONE_MINUS_EPS.min((i as f64 + self.rng.uniform_f64()) * inv_num_samples);
-            sample.y = f64::ONE_MINUS_EPS.min((i as f64 + self.rng.uniform_f64()) * inv_num_samples);
+            sample.x =
+                f64::ONE_MINUS_EPS.min((i as f64 + self.rng.uniform_f64()) * inv_num_samples);
+            sample.y =
+                f64::ONE_MINUS_EPS.min((i as f64 + self.rng.uniform_f64()) * inv_num_samples);
         }
 
         // Now we shuffle them in place of dimesnion (so shuffle the x's in the dimension of x and the y's in the dimension of y):
         for (i, sample) in &mut samples_data.iter().enumerate() {
             // Pick a value to swap with:
             {
-                let other_index = i + self.rng.uniform_u32_limit((samples_data.len() - i) as u32) as usize;
+                let other_index =
+                    i + self.rng.uniform_u32_limit((samples_data.len() - i) as u32) as usize;
                 let other_sample = &mut samples_data[other_index].x;
                 let temp = sample.x;
                 sample.x = *other_sample;
@@ -191,7 +187,8 @@ impl Stratified {
             }
 
             {
-                let other_index = i + self.rng.uniform_u32_limit((samples_data.len() - i) as u32) as usize;
+                let other_index =
+                    i + self.rng.uniform_u32_limit((samples_data.len() - i) as u32) as usize;
                 let other_sample = &mut samples_data[other_index].y;
                 let temp = sample.y;
                 sample.y = *other_sample;
@@ -264,7 +261,7 @@ impl Sampler for Stratified {
         self.curr_pixel_sample += 1;
 
         // Zero information regarding our current position in the sampler:
-        
+
         self.curr_1d_dim = 0;
         self.curr_2d_dim = 0;
         self.curr_1d_array = 0;
@@ -293,11 +290,11 @@ impl Sampler for Stratified {
         // Update the values as appropriate:
         self.curr_1d_array += 1;
         self.curr_1d_array_index += array_len * self.num_pixel_samples;
-        
+
         &self.samples_1d_arrays[array_start..array_end]
     }
 
-     fn get_2d_array(&mut self) -> &[Vec2<f64>] {
+    fn get_2d_array(&mut self) -> &[Vec2<f64>] {
         // Check if we have more slices to deal with:
         if self.curr_2d_array == self.samples_2d_arrays.len() {
             return <&[Vec2<f64>]>::default();
@@ -311,7 +308,7 @@ impl Sampler for Stratified {
         // Update the values as appropriate:
         self.curr_2d_array += 1;
         self.curr_2d_array_index += array_len * self.num_pixel_samples;
-        
+
         &self.samples_2d_arrays[array_start..array_end]
     }
 
