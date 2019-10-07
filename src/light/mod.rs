@@ -1,3 +1,28 @@
+pub mod point;
+
+use crate::geometry::Interaction;
+use crate::spectrum::RGBSpectrum;
+
+use bitflags::bitflags;
+
+bitflags! {
+    pub struct LightType : u32 {
+        // Whether or not the light is a delta position light (that is, it's position 
+        // is a delta function):
+        const DELTA_POSITION = 1 << 0;
+        // Whether the direction is a delta direction 
+        const DELTA_DIRECTION = 1 << 1;
+        const AREA = 1 << 2;
+        const INFINITE = 1 << 3;
+    }
+}
+
+// The light interface:
+pub trait Light {
+    //fn sample_li(&self, Interaction: interaction, )
+    fn power(&self) -> RGBSpectrum;
+}
+
 // This essentially calculates Planck's law for a range of wavelengths.
 // NOTE: the wavelengths must be in terms of nm.
 pub fn blackbody(wavelengths: &[f64], temp: f64, spd: &mut [f64]) {

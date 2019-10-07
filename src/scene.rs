@@ -4,6 +4,7 @@ use crate::math::bbox::BBox3;
 use crate::math::ray::Ray;
 use crate::math::vector::Vec3;
 use crate::shading::material::{Bsdf, Material};
+use crate::light::Light;
 use crate::transform::Transform;
 
 use bumpalo::Bump;
@@ -14,12 +15,12 @@ use std::mem::{transmute, ManuallyDrop};
 
 // This is used to setup all of the scene information:
 pub struct SceneBuilder<'a> {
-    pub(super) allocator: Bump,
+    allocator: Bump,
     // Both of these are manually dropped to safe on memory as they won't
     // be needed when we are actually rendering:
-    pub(super) geometry_ids: ManuallyDrop<HashMap<String, &'a dyn Geometry>>,
-    pub(super) material_ids: ManuallyDrop<HashMap<String, &'a dyn Material>>,
-    pub(super) models: Vec<Model<'a>>,
+    geometry_ids: ManuallyDrop<HashMap<String, &'a dyn Geometry>>,
+    material_ids: ManuallyDrop<HashMap<String, &'a dyn Material>>,
+    models: Vec<SceneGeometry<'a>>,
 }
 
 impl<'a> SceneBuilder<'a> {
@@ -80,7 +81,7 @@ impl<'a> SceneBuilder<'a> {
         // determine what to do:
         let geom_to_world =
             unsafe { transmute::<&mut T, &'a dyn Transform>(self.allocator.alloc(transform)) };
-        self.models.push(Model {
+        self.models.push(SceneGeometry {
             geometry,
             material,
             geom_to_world,
@@ -91,13 +92,13 @@ impl<'a> SceneBuilder<'a> {
 
 // A model has information regarding the transformation of geometry in the world.
 // This is to allow for basic instancing.
-struct Model<'a> {
-    pub geometry: &'a dyn Geometry,
-    pub material: &'a dyn Material,
-    pub geom_to_world: &'a dyn Transform,
+struct SceneGeometry<'a> {
+    geometry: &'a dyn Geometry,
+    material: &'a dyn Material,
+    geom_to_world: &'a dyn Transform,
 }
 
-impl<'a> BVHObject for Model<'a> {
+impl<'a> BVHObject for SceneGeometry<'a> {
     type IntParam = ();
     type DataParam = ();
 
@@ -139,9 +140,17 @@ impl<'a> BVHObject for Model<'a> {
     }
 }
 
+// A SceneLight is a light with information regarding the transformation of the light in the
+// world. This is to allow for basic instancing of lights:
+struct SceneLight<'a> {
+    light: &'a dyn Light,
+    geom_to_world: &'a dyn Transform,
+}
+
 pub struct Scene<'a> {
     allocator: Bump,
-    bvh: BVH<Model<'a>>,
+    //lights: Vec<SceneLight<'a>>,
+    bvh: BVH<SceneGeometry<'a>>,
 }
 
 impl<'a> Scene<'a> {
