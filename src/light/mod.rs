@@ -1,6 +1,6 @@
 pub mod point;
 
-use crate::geometry::Interaction;
+use crate::math::vector::{Vec2, Vec3};
 use crate::spectrum::RGBSpectrum;
 
 use bitflags::bitflags;
@@ -19,7 +19,18 @@ bitflags! {
 
 // The light interface:
 pub trait Light {
-    //fn sample_li(&self, Interaction: interaction, )
+
+    // Samples the light at a given interaction point (in scene space):
+    // u is a random uniform point (useful for things like area lights).
+    // The time value is not for handling moving lights (that's already handled elsewhere).
+    // No, it's for lights that have some special time-dependent effect.
+    //
+    // Returns values in this order:
+    // pdf: the probability density for the light sample
+    // RGBSpectrum: potential (if no occlusion occurs) energy the light contributes
+    // Vec3<f64>: scene space location of where the light will get hit
+    fn sample(&self, surface_point: Vec3<f64>, time: f64, u: Vec2<f64>) -> (f64, RGBSpectrum, Vec3<f64>);
+
     fn power(&self) -> RGBSpectrum;
 }
 

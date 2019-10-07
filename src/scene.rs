@@ -2,7 +2,8 @@ use crate::bvh::{BVHObject, BVH};
 use crate::geometry::{Geometry, Interaction};
 use crate::math::bbox::BBox3;
 use crate::math::ray::Ray;
-use crate::math::vector::Vec3;
+use crate::math::vector::{Vec2, Vec3};
+use crate::spectrum::RGBSpectrum;
 use crate::shading::material::{Bsdf, Material};
 use crate::light::Light;
 use crate::transform::Transform;
@@ -144,7 +145,20 @@ impl<'a> BVHObject for SceneGeometry<'a> {
 // world. This is to allow for basic instancing of lights:
 struct SceneLight<'a> {
     light: &'a dyn Light,
-    geom_to_world: &'a dyn Transform,
+    light_to_scene: &'a dyn Transform,
+}
+
+impl<'a> SceneLight<'a> {
+    // Transforms everything to the light's space:
+    fn sample(&self, surface_point: Vec3<f64>, time: f64, u: Vec2<f64>) -> (f64, RGBSpectrum, Vec3<f64>) {
+        let int_light_to_scene = self.light_to_scene.interpolate(time);
+        let surface_point = int_light_to_scene.inverse().point(surface_point);
+
+        let (pdf, radiance, light_point) = self.light.sample(surface_point, time, u);
+
+        // Make sure to transform the light point to scene space:
+        (pdf, radiance, int_light_to_scene.point(light_point))
+    }
 }
 
 pub struct Scene<'a> {
