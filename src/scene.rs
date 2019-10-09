@@ -1,11 +1,11 @@
 use crate::bvh::{BVHObject, BVH};
 use crate::geometry::{Geometry, Interaction};
+use crate::light::Light;
 use crate::math::bbox::BBox3;
 use crate::math::ray::Ray;
 use crate::math::vector::{Vec2, Vec3};
-use crate::spectrum::RGBSpectrum;
 use crate::shading::material::{Bsdf, Material};
-use crate::light::Light;
+use crate::spectrum::RGBSpectrum;
 use crate::transform::Transform;
 
 use bumpalo::Bump;
@@ -150,7 +150,12 @@ struct SceneLight<'a> {
 
 impl<'a> SceneLight<'a> {
     // Transforms everything to the light's space:
-    fn sample(&self, surface_point: Vec3<f64>, time: f64, u: Vec2<f64>) -> (f64, RGBSpectrum, Vec3<f64>) {
+    fn sample(
+        &self,
+        surface_point: Vec3<f64>,
+        time: f64,
+        u: Vec2<f64>,
+    ) -> (f64, RGBSpectrum, Vec3<f64>) {
         let int_light_to_scene = self.light_to_scene.interpolate(time);
         let surface_point = int_light_to_scene.inverse().point(surface_point);
 

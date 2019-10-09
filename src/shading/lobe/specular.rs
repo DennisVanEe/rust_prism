@@ -185,7 +185,7 @@ impl<F: Fresnel> Lobe for SpecularReflection<F> {
         Self::LOBE_TYPE.contains(fl)
     }
 
-    fn f(&self, wo: Vec3<f64>, wi: Vec3<f64>) -> RGBSpectrum {
+    fn eval(&self, wo: Vec3<f64>, wi: Vec3<f64>) -> RGBSpectrum {
         // This always returns black (even, if by some miracle, we hit the right direction
         // straight on)
         RGBSpectrum::black()
@@ -196,7 +196,7 @@ impl<F: Fresnel> Lobe for SpecularReflection<F> {
         0.
     }
 
-    fn sample_f(&self, wo: Vec3<f64>, sample: Vec2<f64>) -> (RGBSpectrum, Vec3<f64>, f64) {
+    fn sample(&self, wo: Vec3<f64>, sample: Vec2<f64>) -> (RGBSpectrum, Vec3<f64>, f64) {
         // This is basically calling reflect(wo, n) with n = (0, 0, 1)
         let wi = Vec3 {
             x: -wo.x,
@@ -249,7 +249,7 @@ impl Lobe for SpecularTransmission {
         Self::LOBE_TYPE.contains(fl)
     }
 
-    fn f(&self, wo: Vec3<f64>, wi: Vec3<f64>) -> RGBSpectrum {
+    fn eval(&self, wo: Vec3<f64>, wi: Vec3<f64>) -> RGBSpectrum {
         // See SpecularReflection:
         RGBSpectrum::black()
     }
@@ -259,7 +259,7 @@ impl Lobe for SpecularTransmission {
         0.
     }
 
-    fn sample_f(&self, wo: Vec3<f64>, sample: Vec2<f64>) -> (RGBSpectrum, Vec3<f64>, f64) {
+    fn sample(&self, wo: Vec3<f64>, sample: Vec2<f64>) -> (RGBSpectrum, Vec3<f64>, f64) {
         // Pick the correct eta_i and eta_t depending on the directin of w_o compared to the
         // normal:
         let (eta_i, eta_t) = if cos_theta(wo) > 0. {
@@ -335,7 +335,7 @@ impl Lobe for SpecularFresnal {
         Self::LOBE_TYPE.contains(fl)
     }
 
-    fn f(&self, wo: Vec3<f64>, wi: Vec3<f64>) -> RGBSpectrum {
+    fn eval(&self, wo: Vec3<f64>, wi: Vec3<f64>) -> RGBSpectrum {
         // See SpecularReflection:
         RGBSpectrum::black()
     }

@@ -7,10 +7,10 @@ use bitflags::bitflags;
 
 bitflags! {
     pub struct LightType : u32 {
-        // Whether or not the light is a delta position light (that is, it's position 
+        // Whether or not the light is a delta position light (that is, it's position
         // is a delta function):
         const DELTA_POSITION = 1 << 0;
-        // Whether the direction is a delta direction 
+        // Whether the direction is a delta direction
         const DELTA_DIRECTION = 1 << 1;
         const AREA = 1 << 2;
         const INFINITE = 1 << 3;
@@ -19,7 +19,6 @@ bitflags! {
 
 // The light interface:
 pub trait Light {
-
     // Samples the light at a given interaction point (in scene space):
     // u is a random uniform point (useful for things like area lights).
     // The time value is not for handling moving lights (that's already handled elsewhere).
@@ -29,7 +28,12 @@ pub trait Light {
     // pdf: the probability density for the light sample
     // RGBSpectrum: potential (if no occlusion occurs) energy the light contributes
     // Vec3<f64>: scene space location of where the light will get hit
-    fn sample(&self, surface_point: Vec3<f64>, time: f64, u: Vec2<f64>) -> (f64, RGBSpectrum, Vec3<f64>);
+    fn sample(
+        &self,
+        surface_point: Vec3<f64>,
+        time: f64,
+        u: Vec2<f64>,
+    ) -> (f64, RGBSpectrum, Vec3<f64>);
 
     fn power(&self) -> RGBSpectrum;
 }

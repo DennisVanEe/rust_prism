@@ -4,6 +4,34 @@ This document is needed to specify the scene file format used by PRISM.
 
 Scene file formats are written in JSON file formats and follow a strict set of rules:
 
+## Geometry ##
+
+Geometry refers to the mathematical description of a 3D object (like a collection of vertices representing a mesh or a point and radius representing a sphere).
+
+### Basic Shapes ###
+
+- **Sphere**: This represents a simple sphere.
+
+```json
+"sphere_geometry": {
+    "id": "sphere_a",          // id of geometry used by scene model
+    "rev_orientation": true,   // if true, normals point inward
+    "radius": 1.0,             // radius of the sphere
+}
+```
+
+### Mesh ###
+
+This represents a geometric mesh. Right now, PRISM only supports .ply files, so if you set the file type to anything else it won't process it.
+
+```json
+"mesh_geometry": {
+    "id": "sphere_a",             // id of geometry used by scene model
+    "file_type": "ply",           // the file type
+    "dir": "/models/sphere.ply",  // the location of the file representing it
+}
+```
+
 ## Scene Model ##
 
 A Scene Model is a lightweight object that actually resides in the scene. It simply stores a pointer to both the geometry and the material that make it up. This way, you can reuse materials and geometries throughout the scene. A model also takes a transformation type. This is a geometry space to world space transformation (so where in the scene one is placing the model).
