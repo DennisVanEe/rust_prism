@@ -2,7 +2,7 @@
 
 This document is needed to specify the scene file format used by PRISM.
 
-Scene file formats are written in JSON file formats and follow a strict set of rules:
+Scene file formats are written in the JSON file format:
 
 ## Geometry ##
 
@@ -12,7 +12,7 @@ Geometry refers to the mathematical description of a 3D object (like a collectio
 
 - **Sphere**: This represents a simple sphere.
 
-```json
+```json5
 "sphere_geometry": {
     "id": "sphere_a",          // id of geometry used by scene model
     "rev_orientation": true,   // if true, normals point inward
@@ -24,7 +24,7 @@ Geometry refers to the mathematical description of a 3D object (like a collectio
 
 This represents a geometric mesh. Right now, PRISM only supports .ply files, so if you set the file type to anything else it won't process it.
 
-```json
+```json5
 "mesh_geometry": {
     "id": "sphere_a",             // id of geometry used by scene model
     "file_type": "ply",           // the file type
@@ -38,7 +38,7 @@ A Scene Model is a lightweight object that actually resides in the scene. It sim
 
 Geometries and materials have a unique name that you can use to identify which geometry and material belong to this model. An example is shown below:
 
-```json
+```json5
 "scene_model": {
     "geometry": "sphere_mesh", // name of geometry created before
     "material": "blue_matte",  // name of material created before
@@ -56,14 +56,14 @@ Transformations are an important part of any scene. They describe how objects ar
 Every transform has a type specified with it. Let's go over the different types that are currently available:
 
 - **Translation**: Just a translation by a specified vector:
-    ```json
+    ```json5
     "transform": {
         "type": "translate",
         "trans": [34.3, 89.1, 90.8],
     }
     ```
 - **Rotation**: Rotates by degrees (in degrees, obviously) around the specified axis:
-    ```json
+    ```json5
     "transform": {
         "type": "rotate",
         "degrees": 275.0,
@@ -78,7 +78,7 @@ Every transform has a type specified with it. Let's go over the different types 
     }
     ```
 - **Matrix**: If you want to specify the matrix itself, you can do so. Be mindful that if it isn't affine and invertible, you might get problems. PRISM performs a check to make sure that this is the case and tells you if it's a problem. Matrices are represented in row-major order (an array of arrays, each of which is a row):
-    ```json
+    ```json5
     "transform": {
         "type": "matrix",
         "mat": [1.0, 0.0, 0.0, 34.0,
@@ -88,7 +88,7 @@ Every transform has a type specified with it. Let's go over the different types 
     }
     ```
 - **Composite**: A single transformation defined as a number of transformations. This is essentially represented as an array of transformations. The order of the transformations defines the order in which they are applied (not necessarily the order in which the transformation's matrix representation is multiplied). So, the bottom example would first scale the object, then translate it:
-    ```json
+    ```json5
     "transform": {
         "type": "composite",
         "transf": [
@@ -104,7 +104,7 @@ Every transform has a type specified with it. Let's go over the different types 
     }
     ```
 - **Animated**: These are special transformations. We interpolate between the start and end transformation, with the given start and end times. Animated transforms are more restrictive. For one, you can only specify a "top level" transform as animated. So, you can't have a composition of animated transforms, even if the top level transform is animated.
-    ```json
+    ```json5
     "transform": {
         "type": "animated",
         "start_transf": {
