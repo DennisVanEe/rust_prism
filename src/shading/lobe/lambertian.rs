@@ -21,11 +21,15 @@ impl LambertianReflection {
 }
 
 impl Lobe for LambertianReflection {
-    fn has_type(&self, fl: LobeType) -> bool {
-        Self::LOBE_TYPE.contains(fl)
+    fn matches_type(&self, lobe_type: LobeType) -> bool {
+        Self::LOBE_TYPE.contains(lobe_type)
     }
 
-    fn f(&self, wo: Vec3<f64>, wi: Vec3<f64>) -> RGBSpectrum {
+    fn get_type(&self) -> LobeType {
+        Self::LOBE_TYPE
+    }
+
+    fn eval(&self, wo: Vec3<f64>, wi: Vec3<f64>) -> RGBSpectrum {
         self.r_scale.scale(f64::INV_PI)
     }
 
@@ -55,11 +59,15 @@ impl LambertianTransmission {
 }
 
 impl Lobe for LambertianTransmission {
-    fn has_type(&self, fl: LobeType) -> bool {
-        Self::LOBE_TYPE.contains(fl)
+    fn matches_type(&self, lobe_type: LobeType) -> bool {
+        Self::LOBE_TYPE.contains(lobe_type)
     }
 
-    fn f(&self, wo: Vec3<f64>, wi: Vec3<f64>) -> RGBSpectrum {
+    fn get_type(&self) -> LobeType {
+        Self::LOBE_TYPE
+    }
+
+    fn eval(&self, wo: Vec3<f64>, wi: Vec3<f64>) -> RGBSpectrum {
         self.t_scale.scale(f64::INV_PI)
     }
 

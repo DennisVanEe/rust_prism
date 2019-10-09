@@ -32,7 +32,9 @@ pub trait Lobe {
     // Returns whether or not the lobe has these types present.
     // This will be redundant as hell, but rust does not support fields
     // in traits.
-    fn has_type(&self, fl: LobeType) -> bool;
+    fn matches_type(&self, lobe_type: LobeType) -> bool;
+    // Returns the lobe type:
+    fn get_type(&self) -> LobeType;
     // Evaluates the lobe:
     fn eval(&self, wo: Vec3<f64>, wi: Vec3<f64>) -> RGBSpectrum;
     // sample_f is for sampling the f value and also works when we have a delta function

@@ -181,8 +181,12 @@ impl<F: Fresnel> SpecularReflection<F> {
 }
 
 impl<F: Fresnel> Lobe for SpecularReflection<F> {
-    fn has_type(&self, fl: LobeType) -> bool {
-        Self::LOBE_TYPE.contains(fl)
+    fn matches_type(&self, lobe_type: LobeType) -> bool {
+        Self::LOBE_TYPE.contains(lobe_type)
+    }
+
+    fn get_type(&self) -> LobeType {
+        Self::LOBE_TYPE
     }
 
     fn eval(&self, wo: Vec3<f64>, wi: Vec3<f64>) -> RGBSpectrum {
@@ -245,8 +249,12 @@ impl SpecularTransmission {
 }
 
 impl Lobe for SpecularTransmission {
-    fn has_type(&self, fl: LobeType) -> bool {
-        Self::LOBE_TYPE.contains(fl)
+    fn matches_type(&self, lobe_type: LobeType) -> bool {
+        Self::LOBE_TYPE.contains(lobe_type)
+    }
+
+    fn get_type(&self) -> LobeType {
+        Self::LOBE_TYPE
     }
 
     fn eval(&self, wo: Vec3<f64>, wi: Vec3<f64>) -> RGBSpectrum {
@@ -331,8 +339,12 @@ impl SpecularFresnal {
 }
 
 impl Lobe for SpecularFresnal {
-    fn has_type(&self, fl: LobeType) -> bool {
+    fn matches_type(&self, fl: LobeType) -> bool {
         Self::LOBE_TYPE.contains(fl)
+    }
+
+    fn get_type(&self) -> LobeType {
+        Self::LOBE_TYPE
     }
 
     fn eval(&self, wo: Vec3<f64>, wi: Vec3<f64>) -> RGBSpectrum {

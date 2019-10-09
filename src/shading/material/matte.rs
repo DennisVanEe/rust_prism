@@ -1,5 +1,4 @@
 use crate::geometry::Interaction;
-use crate::memory::allocators::DynStackAlloc;
 use crate::shading::lobe::lambertian::LambertianReflection;
 use crate::shading::lobe::oren_nayar::OrenNayar;
 use crate::shading::lobe::Lobe;

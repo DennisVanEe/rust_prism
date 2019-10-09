@@ -28,11 +28,15 @@ impl OrenNayar {
 }
 
 impl Lobe for OrenNayar {
-    fn has_type(&self, fl: LobeType) -> bool {
+    fn matches_type(&self, fl: LobeType) -> bool {
         Self::LOBE_TYPE.contains(fl)
     }
 
-    fn f(&self, wo: Vec3<f64>, wi: Vec3<f64>) -> RGBSpectrum {
+    fn get_type(&self) -> LobeType {
+        Self::LOBE_TYPE
+    }
+
+    fn eval(&self, wo: Vec3<f64>, wi: Vec3<f64>) -> RGBSpectrum {
         let sin_theta_o = sin_theta(wo);
         let sin_theta_i = sin_theta(wi);
 
