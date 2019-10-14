@@ -27,13 +27,15 @@ pub trait Light {
     // Returns values in this order:
     // pdf: the probability density for the light sample
     // RGBSpectrum: potential (if no occlusion occurs) energy the light contributes
-    // Vec3<f64>: scene space location of where the light will get hit
+    // Vec3<f64>: scene space location of where the light will get hit (so one can calculate the wi value themselves)
     fn sample(
         &self,
         surface_point: Vec3<f64>,
         time: f64,
         u: Vec2<f64>,
-    ) -> (f64, RGBSpectrum, Vec3<f64>);
+    ) -> (RGBSpectrum, Vec3<f64>, f64);
+
+    fn pdf(&self, surface_point: Vec3<f64>, wi: Vec3<f64>) -> f64;
 
     fn power(&self) -> RGBSpectrum;
 }

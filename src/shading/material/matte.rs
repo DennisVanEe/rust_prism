@@ -5,6 +5,8 @@ use crate::shading::lobe::Lobe;
 use crate::shading::material::{Bsdf, Material};
 use crate::spectrum::RGBSpectrum;
 
+use bumpalo::Bump;
+
 // This uses a the same value for these properties across the entire
 // surface of the model. If you want this to be parametarized, see
 // MatteTexture.
@@ -23,7 +25,7 @@ impl Material for Matte {
     fn compute_bsdf<'a>(
         &self,
         interaction: Interaction,
-        memory: &'a DynStackAlloc,
+        memory: &'a mut Bump,
         use_multiple_lobes: bool,
     ) -> Bsdf<'a> {
         // Check if the color is black or not. If it is black,
@@ -32,12 +34,12 @@ impl Material for Matte {
             Bsdf::new_empty(interaction, 1.)
         } else {
             // If sigma is 0, then we can use the cheaper lambertian material:
-            let lobes = if self.sigma == 0. {
+            let lobes: [&'a dyn Lobe; 1] = if self.sigma == 0. {
                 // Allocate a lambertian lobe:
-                [memory.push(LambertianReflection::new(self.color)) as &'a dyn Lobe]
+                [memory.alloc(LambertianReflection::new(self.color))]
             } else {
                 // Allocate a fancy OrenNayar lobe:
-                [memory.push(OrenNayar::new(self.color, self.sigma)) as &'a dyn Lobe]
+                [memory.alloc(OrenNayar::new(self.color, self.sigma))]
             };
             Bsdf::new(interaction, 1., &lobes)
         }

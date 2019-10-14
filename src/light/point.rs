@@ -21,9 +21,14 @@ impl Light for Point {
         surface_point: Vec3<f64>,
         _: f64,
         u: Vec2<f64>,
-    ) -> (f64, RGBSpectrum, Vec3<f64>) {
+    ) -> (RGBSpectrum, Vec3<f64>, f64) {
         let distSqrt = (-surface_point).length2();
-        (1., self.intensity.div_scale(distSqrt), Vec3::zero())
+        (self.intensity.div_scale(distSqrt), Vec3::zero(), 1.)
+    }
+
+    fn pdf(&self, _: Vec3<f64>, _: Vec3<f64>) -> f64 {
+        // It is practically impossible to get pick the correct direction in this case:
+        0.
     }
 
     fn power(&self) -> RGBSpectrum {
