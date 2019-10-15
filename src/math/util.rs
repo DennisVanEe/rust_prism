@@ -1,8 +1,88 @@
 use crate::math::numbers::Float;
-use crate::math::vector::Vec3;
+use crate::math::vector::{Vec2, Vec3};
 
 use std::cmp::PartialOrd;
 use std::f64;
+
+// Morton Encoding for 2D values:
+pub fn morton_from_2d(xy: Vec2<u32>) -> u64 {
+    // Only compile if we have support for bmi2:
+    #[cfg(all(
+        any(target_arch = "x86", target_arch = "x86_64"),
+        target_feature = "bmi2"
+    ))]
+    {
+        // Only perform this faster approach if we can:
+        use core::arch::x86_64::_pdep_u64;
+        unsafe {
+            // What PDEP (parallel bits deposit) does here (with these masks) is space the bits so that there is a
+            // 0 bit between each of the bits. We use different masks to pick different starting points. Once that
+            // is done, we then combine them with a bitwise or:
+            return _pdep_u64(xy.x as u64, 0x5555555555555555)
+                | _pdep_u64(xy.y as u64, 0xAAAAAAAAAAAAAAAA);
+        }
+    }
+
+    // The fall back technique (TODO: get something specifc for NEON and ARM based systems as well):
+
+    // See: https://www.forceflow.be/2013/10/07/morton-encodingdecoding-through-bit-interleaving-implementations/
+    // for details:
+    let x = xy.x as u64;
+    let y = xy.y as u64;
+
+    let x = (x | (x << 16)) & 0x0000FFFF0000FFFF;
+    let x = (x | (x << 8)) & 0x00FF00FF00FF00FF;
+    let x = (x | (x << 4)) & 0x0F0F0F0F0F0F0F0F;
+    let x = (x | (x << 2)) & 0x3333333333333333;
+    let x = (x | (x << 1)) & 0x5555555555555555;
+
+    let y = (y | (y << 16)) & 0x0000FFFF0000FFFF;
+    let y = (y | (y << 8)) & 0x00FF00FF00FF00FF;
+    let y = (y | (y << 4)) & 0x0F0F0F0F0F0F0F0F;
+    let y = (y | (y << 2)) & 0x3333333333333333;
+    let y = (y | (y << 1)) & 0x5555555555555555;
+
+    x | (y << 1)
+}
+
+pub fn morton_to_2d(m: u64) -> Vec2<u32> {
+    // Only compile if we have support for bmi2:
+    #[cfg(all(
+        any(target_arch = "x86", target_arch = "x86_64"),
+        target_feature = "bmi2"
+    ))]
+    {
+        // Only perform this faster approach if we can:
+        use core::arch::x86_64::_pext_u64;
+
+        unsafe {
+            // Here, PEXT basically does the opposite of what we saw above and extracts the bits:
+            return Vec2 {
+                x: _pext_u64(m, 0x5555555555555555) as u32,
+                y: _pext_u64(m, 0xaaaaaaaaaaaaaaaa) as u32,
+            };
+        }
+    }
+
+    // The fall back technique (TODO: get something specifc for NEON and ARM based systems as well):
+
+    // See: https://www.forceflow.be/2013/10/07/morton-encodingdecoding-through-bit-interleaving-implementations/
+    // for details:
+    fn morton_1(x: u64) -> u32 {
+        let x = x & 0x5555555555555555;
+        let x = (x | (x >> 1)) & 0x3333333333333333;
+        let x = (x | (x >> 2)) & 0x0F0F0F0F0F0F0F0F;
+        let x = (x | (x >> 4)) & 0x00FF00FF00FF00FF;
+        let x = (x | (x >> 8)) & 0x0000FFFF0000FFFF;
+        let x = (x | (x >> 16)) & 0x00000000FFFFFFFF;
+        x as u32
+    }
+
+    Vec2 {
+        x: morton_1(m),
+        y: morton_1(m >> 1),
+    }
+}
 
 // This creates a coordinate system given only a single vector.
 pub fn coord_system<T: Float>(v1: Vec3<T>) -> (Vec3<T>, Vec3<T>) {

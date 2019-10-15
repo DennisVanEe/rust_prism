@@ -1,6 +1,7 @@
 // Can be used throughout to store information in a "PixelBuffer"
 // like manner.
 
+use crate::math::util::morton_from_2d;
 use crate::math::vector::Vec2;
 
 // This trait is needed so we know how to update a pixel
@@ -24,13 +25,36 @@ pub const TILE_DIM: usize = 8;
 // will actually be working on:
 pub struct PixelTile<T: Pixel> {
     pub data: [T; TILE_DIM * TILE_DIM], // The actual data that we care about
-    pub tile_pos: Vec2<usize>,          // The position in terms of pixels of this tile
+    tile_pos: Vec2<u32>,                // The position in terms of pixels of this tile
+}
+
+impl<T: Pixel> PixelTile<T> {
+    pub fn get_tile_pos(&self) -> Vec2<u32> {
+        self.tile_pos
+    }
+
+    pub fn set_zero(&mut self) {
+        for p in self.data.iter_mut() {
+            p.set_zero();
+        }
+    }
+
+    fn update(&mut self, tile: &PixelTile<T>) {
+        // Hopefully this unrolls this properly as data is a statically sized array:
+        self.data
+            .iter_mut()
+            .zip(tile.data.iter())
+            .for_each(|(curr_p, update_p)| {
+                curr_p.update(update_p);
+            });
+    }
 }
 
 // Now, for that reason, data is not stored as a normal pixel buffer
 // would be (it's not just a 2D array in a 1D array form):
 pub struct PixelBuffer<T: Pixel> {
-    data: Vec<T>,
+    // The data is stored in order of morton curves:
+    data: Vec<PixelTile<T>>,
     tile_res: Vec2<usize>,
     pixel_res: Vec2<usize>,
 }
@@ -58,7 +82,9 @@ impl<T: Pixel> PixelBuffer<T> {
 
     // Given a tile, updates the values in that location:
     pub fn update_tile(&mut self, tile: &PixelTile<T>) {
-        let data_tile_index = tile.tile_pos.x + self.tile_res.y * tile.tile_pos.y;
+        // The specific tile we are interested:
+        let data_tile_index = morton_from_2d(tile.tile_pos) as usize;
+
         let pixel_tile_index = data_tile_index * (TILE_DIM * TILE_DIM);
         let data = &mut self.data[pixel_tile_index..(pixel_tile_index + TILE_DIM * TILE_DIM)];
         data.iter_mut()
