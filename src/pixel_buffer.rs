@@ -3,6 +3,10 @@
 
 use crate::math::vector::Vec2;
 
+//
+// Pixel
+//
+
 // This trait is needed so we know how to update a pixel
 // when a PixelBuffer is given a tile that we recently finished
 // work on:
@@ -15,6 +19,10 @@ pub trait Pixel: Copy {
     fn update(&mut self, p: &Self);
 }
 
+//
+// PixelTile
+//
+
 // Now, a single thread renderes a collection of pixels (not just one).
 // It renders in tiles which are of a certain size as defined here:
 // TILE_DIM means a tile is TILE_DIM X TILE_DIM:
@@ -24,9 +32,31 @@ pub const TILE_DIM: usize = 8;
 // information.
 pub struct PixelTile<T: Pixel> {
     pub data: [T; TILE_DIM * TILE_DIM], // The actual data that we care about
-    pub tile_pos: Vec2<usize>,          // The (x, y) position of the tile itself
-    pub pixel_pos: Vec2<usize>,         // The positin of the top left pixel
+    // A lot of this information is redundant (can all be computed if given 
+    // the original pixel buffer). But if a thread doesn't want to deal with 
+    // checking the PixelBuffer, all of the info is here:
+    tile_index: usize,                  // The index of the tile in question 
+    tile_vec: Vec2<usize>,              // The (x, y) position of the tile itself
+    pixel_vec: Vec2<usize>,             // The positin of the top left pixel
 }
+
+impl<T: Pixel> PixelTile<T> {
+    pub fn get_tile_index(&self) -> usize {
+        self.tile_index
+    }
+
+    pub fn get_tile_vec(&self) -> Vec2<usize> {
+        self.tile_vec
+    }
+
+    pub fn get_pixel_vec(&self) -> Vec2<usize> {
+        self.pixel_vec
+    }
+}
+
+//
+// PixelBuffer
+//
 
 // Now, for that reason, data is not stored as a normal pixel buffer
 // would be (it's not just a 2D array in a 1D array form):
@@ -70,18 +100,51 @@ impl<T: Pixel> PixelBuffer<T> {
         });
     }
 
-    // Given a tile, updates the values in that location:
-    pub fn update(&mut self, tile: &PixelTile<T>) {
-        // The specific tile we are interested:
-        let tile_index = tile.tile_pos.x + tile.tile_pos.y * self.tile_res.x;
-        // Measrable performance improvement:
-        let buffer_tile = unsafe { self.data.get_unchecked_mut(tile_index) };
+    pub fn tile_index_to_vec(&self, tile_index: usize) -> Vec2<usize> {
+        Vec2 {
+            x: tile_index % self.tile_res.x,
+            y: tile_index / self.tile_res.x, 
+        }
+    }
 
+    pub fn tile_vec_to_index(&self, tile_vec: Vec2<usize>) -> usize {
+        self.tile_res.x * tile_vec.y + tile_vec.x
+    }
+
+    // Returns a zeroed tile for the given tile_index:
+    pub fn get_zero_tile(&self, tile_index: usize) -> PixelTile<T> {
+        let tile_vec = self.tile_index_to_vec(tile_index);
+        PixelTile {
+            data: [T::zero(); TILE_DIM * TILE_DIM],
+            tile_index,
+            tile_vec,
+            pixel_vec: tile_vec.scale(TILE_DIM),
+        }
+    }
+
+    // Returns the tile data present at the given tile_index:
+    pub fn get_tile(&self, tile_index: usize) -> PixelTile<T> {
+        let tile_vec = self.tile_index_to_vec(tile_index);
+        PixelTile {
+            data: self.data[tile_index],
+            tile_index,
+            tile_vec,
+            pixel_vec: tile_vec.scale(TILE_DIM),
+        }
+    }
+
+    // Given a tile, updates the values in that location:
+    pub fn update_tile(&mut self, tile: &PixelTile<T>) {
+        let buffer_tile = &mut self.data[tile.tile_index];
         buffer_tile.iter_mut()
             .zip(tile.data.iter())
             .for_each(|(curr_p, p)| {
                 curr_p.update(p);
             });
+    }
+
+    pub fn get_num_tiles(&self) -> usize {
+        self.data.len()
     }
 
     pub fn get_pixel_res(&self) -> Vec2<usize> {

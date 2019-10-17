@@ -1,10 +1,7 @@
 // Represents color in the renderer:
 
-use crate::math::numbers::Float;
-
 use num_traits::clamp;
 
-use std::mem::MaybeUninit;
 use std::ops::{Add, Div, Index, Mul, Sub};
 
 // The CIE XYZ color space:

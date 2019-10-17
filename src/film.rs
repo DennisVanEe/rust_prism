@@ -5,6 +5,9 @@ use crate::spectrum::XYZColor;
 
 use simple_error::{bail, SimpleResult};
 
+use std::sync::atomic::{Ordering, AtomicUsize};
+use std::mem::transmute;
+
 // The pixel filter uses the technique described here:
 // "Filter Importance Sampling" - Manfred Ernst, Marc Stamminger, Gunther Greiner
 // This isn't exposed to the user, as the user just passes a filter.
@@ -143,9 +146,13 @@ impl Pixel for FilmPixel {
     }
 }
 
+// The film class is in charge of managing all information about the film we may want.
 pub struct Film {
     pixel_buffer: PixelBuffer<FilmPixel>,
     pixel_filter: PixelFilter,
+
+    // Specifies which task is next for a thread to work on:
+    next_tile: AtomicUsize,
 }
 
 impl Film {
@@ -167,9 +174,43 @@ impl Film {
             y: pixel_res.y / TILE_DIM,
         };
         Ok(Film {
-            pixel_buffer: PixelBuffer::new(tile_res),
+            pixel_buffer: PixelBuffer::new_zero(tile_res),
             pixel_filter: PixelFilter::new(filter),
+            next_tile: AtomicUsize::new(0),
         })
+    }
+
+    // Because this is potentially called by multiple threads, we make it an immutable borrow:
+    pub fn next_tile(&self) -> Option<PixelTile<FilmPixel>> {
+        // We are doing a simple scan-line approach here, so we just increment the counter. We
+        // are also currently using simple uniform sampling (no adaptive sampling). With adaptive
+        // sampling this could potentially be a lot more difficult. Future me will worry about that.
+        //
+        // Now, because of wrapping behaviour, if this gets called MANY times after we are done,
+        // it could potentially wrap around and falsly return true.
+        let tile_index = self.next_tile.fetch_add(1, Ordering::Relaxed);
+        // Check if this is a valid tile or not:
+        if tile_index >= self.pixel_buffer.get_num_tiles() {
+            return None;
+        }
+
+        // Otherwise we can just create the tile:
+        Some(self.pixel_buffer.get_zero_tile(tile_index))
+    }
+
+    // Updates the film buffer at the specified location with the given tiles:
+    pub fn update_tile(&self, tile: &PixelTile<FilmPixel>) {
+        // We are going to do something rather "tricky" here.
+        // Because we know that every tile that is sent here is updating a unique
+        // part of the image, we don't have to lock this function. For this reason we can do the 
+        // dangerous thing we are about to do.
+        //
+        // TODO: figure out a cleaner way of doing this:
+        let mut_self = unsafe {
+            transmute::<&Self, &mut Self>(self)
+        };
+        // Now we can just go ahead and update the tile:
+        mut_self.pixel_buffer.update_tile(tile);
     }
 
     pub fn get_pixel_res(&self) -> Vec2<usize> {

@@ -1,3 +1,6 @@
+// Clean this stuff up in the future...
+// This is here just for now.
+
 mod bvh;
 mod camera;
 mod film;

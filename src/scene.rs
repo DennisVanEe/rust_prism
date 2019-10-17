@@ -155,14 +155,14 @@ impl<'a> SceneLight<'a> {
         surface_point: Vec3<f64>,
         time: f64,
         u: Vec2<f64>,
-    ) -> (f64, RGBSpectrum, Vec3<f64>) {
+    ) -> (RGBSpectrum, Vec3<f64>, f64) {
         let int_light_to_scene = self.light_to_scene.interpolate(time);
         let surface_point = int_light_to_scene.inverse().point(surface_point);
 
-        let (pdf, radiance, light_point) = self.light.sample(surface_point, time, u);
+        let (radiance, light_point, pdf) = self.light.sample(surface_point, time, u);
 
         // Make sure to transform the light point to scene space:
-        (pdf, radiance, int_light_to_scene.point(light_point))
+        (radiance, int_light_to_scene.point(light_point), pdf)
     }
 }
 
