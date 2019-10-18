@@ -1,130 +1,21 @@
-use crate::filter::Filter;
+use crate::filter::{Filter, PixelFilter};
 use crate::math::vector::Vec2;
 use crate::pixel_buffer::{Pixel, PixelBuffer, PixelTile, TILE_DIM};
 use crate::spectrum::XYZColor;
 
 use simple_error::{bail, SimpleResult};
 
-use std::sync::atomic::{Ordering, AtomicUsize};
 use std::mem::transmute;
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
-// The pixel filter uses the technique described here:
-// "Filter Importance Sampling" - Manfred Ernst, Marc Stamminger, Gunther Greiner
-// This isn't exposed to the user, as the user just passes a filter.
-
-const FILTER_TABLE_WIDTH: usize = 64;
-
-#[derive(Clone, Copy)]
-struct PixelFilter {
-    // A CDF Py(x) that allows us to sample the x value:
-    cdf_x: [f64; FILTER_TABLE_WIDTH],
-    // A CDF P(v|u) that allows us to sample the y value:
-    cdf_y: [[f64; FILTER_TABLE_WIDTH]; FILTER_TABLE_WIDTH],
-    // Radius of the filter:
-    radius: Vec2<f64>,
-}
-
-impl PixelFilter {
-    pub fn new<T: Filter>(filter: &T) -> Self {
-        // Filed in as follows:
-        // x0: [y0, y1, y2, y3],
-        // x1: [y0, y1, y2, y3],
-        // x2: [y0, y1, y2, y3],
-        // x3: [y0, y1, y2, y3],
-        // So, to index into pdf_xy, use [x][y] where y selects the row and x the entry in the row
-
-        let radius = filter.get_radius();
-
-        let pdf_xy = {
-            // First we should go through and discretize the filter:
-            let mut filter_entries = [[0.; FILTER_TABLE_WIDTH]; FILTER_TABLE_WIDTH];
-            for (x, row) in filter_entries.iter_mut().enumerate() {
-                for (y, entry) in row.iter_mut().enumerate() {
-                    let x = x as f64;
-                    let y = y as f64;
-                    let p = Vec2 {
-                        x: (x + 0.5) / (FILTER_TABLE_WIDTH as f64) * (2. * radius.x) - radius.x,
-                        y: (y + 0.5) / (FILTER_TABLE_WIDTH as f64) * (2. * radius.y) - radius.y,
-                    };
-                    *entry = filter.eval(p).abs();
-                }
-            }
-
-            // Now we want to normalize the entires by summing all of the table entries up and dividing each
-            // entry by this sum. So, that we have a pdf for a specific x, y value:
-            let filter_sum = filter_entries
-                .iter()
-                .fold(0., |total, row| total + row.iter().sum::<f64>());
-            filter_entries.iter_mut().for_each(|row| {
-                row.iter_mut().for_each(|entry| {
-                    *entry /= filter_sum;
-                });
-            });
-            filter_entries
-        };
-
-        // Now we want to calculate a marginal pdf for GETTING the x values (it's p_y(x))
-        let mut pdf_x = [0.; FILTER_TABLE_WIDTH];
-        for (x, x_row) in pdf_xy.iter().enumerate() {
-            pdf_x[x] = x_row.iter().sum();
-        }
-        // To sample the pdf_x distribution, we need to form a cdf (it's P_y(x)):
-        let mut cdf_x = [0.; FILTER_TABLE_WIDTH];
-        for (x, &pdf) in pdf_x.iter().enumerate() {
-            cdf_x[x..].iter_mut().for_each(|t| {
-                *t += pdf;
-            });
-        }
-        // To sample the pdf_y value, we need to generate a table that, if given an x
-        // value from pdf_x, we get a y value from pdf_y (so we index into the table
-        // with the x value):
-        let mut pdf_y = [[0.; FILTER_TABLE_WIDTH]; FILTER_TABLE_WIDTH];
-        for (x, x_row) in pdf_y.iter_mut().enumerate() {
-            for (y, val) in x_row.iter_mut().enumerate() {
-                *val = pdf_xy[x][y] / pdf_x[x];
-            }
-        }
-        // Now we want to turn this pdf into a cdf so we can sample it:
-        let mut cdf_y = [[0.; FILTER_TABLE_WIDTH]; FILTER_TABLE_WIDTH];
-        for (cdf_y_row, pdf_y_row) in cdf_y.iter_mut().zip(pdf_y.iter()) {
-            for (y, &prob) in pdf_y_row.iter().enumerate() {
-                cdf_y_row[y..].iter_mut().for_each(|t| {
-                    *t += prob;
-                });
-            }
-        }
-
-        PixelFilter {
-            cdf_x,
-            cdf_y,
-            radius,
-        }
-    }
-
-    pub fn sample_pos(self, r1: f64, r2: f64) -> Vec2<f64> {
-        // First, we sample the x-value:
-        let x = self.cdf_x.iter().position(|&cdf| cdf > r1).unwrap();
-        // Using this x-value, we can now find the y-value:
-        let y = self.cdf_y[x].iter().position(|&cdf| cdf >= r2).unwrap();
-
-        // Convert these indices to x and y coordinates:
-        let x = x as f64;
-        let y = y as f64;
-        Vec2 {
-            x: (x + 0.5) / (FILTER_TABLE_WIDTH as f64) * (2. * self.radius.x) - self.radius.x,
-            y: (y + 0.5) / (FILTER_TABLE_WIDTH as f64) * (2. * self.radius.y) - self.radius.y,
-        }
-    }
-}
-
-// Because we are using the technique above, each pixel will have a weight
-// of just one. Also, each thread works exclusively on a single pixel, so
-// we don't have to worry about locking it or anything:
+// Because we are using importance sampling, the weights of each sample
+// is 1. So we can just keep a count of the number of samples we have for that
+// pixel. It's 32 bits (4294967296 samples is a lot of samples per pixel...)
 
 #[derive(Clone, Copy)]
 struct FilmPixel {
     pub value: XYZColor,
-    pub count: u64,
+    pub count: u32,
 }
 
 impl Pixel for FilmPixel {
@@ -146,13 +37,36 @@ impl Pixel for FilmPixel {
     }
 }
 
+// A special type that can only be created by a Film object.
+// This way, if the Film object works, we can gaurantee that
+// no two threads will ever have a tile to the same location
+// at the same time.
+//
+// A FilmTile is not copyable (even though it could be) and not
+// clonable to prevent a thread from keeping a copy of the Film
+// tile and submitting it later (which could cause problems). Why
+// someone would write code like that does that is beyond me, though.
+pub struct FilmTile {
+    pub tile: PixelTile<FilmPixel>,
+}
+
+impl FilmTile {
+    fn new(tile: PixelTile<FilmPixel>) -> Self {
+        Self { tile }
+    }
+}
+
 // The film class is in charge of managing all information about the film we may want.
 pub struct Film {
     pixel_buffer: PixelBuffer<FilmPixel>,
     pixel_filter: PixelFilter,
 
-    // Specifies which task is next for a thread to work on:
+    // Used for basic unfirom scanline sampling. Fancier, adaptive
+    // sampling techniques will be explored in the future (TODO for good
+    // measure!)
     next_tile: AtomicUsize,
+    // In case we have multiple passes:
+    is_done: AtomicBool,
 }
 
 impl Film {
@@ -177,11 +91,22 @@ impl Film {
             pixel_buffer: PixelBuffer::new_zero(tile_res),
             pixel_filter: PixelFilter::new(filter),
             next_tile: AtomicUsize::new(0),
+            is_done: AtomicBool::new(false),
         })
     }
 
-    // Because this is potentially called by multiple threads, we make it an immutable borrow:
-    pub fn next_tile(&self) -> Option<PixelTile<FilmPixel>> {
+    pub fn is_done(&self) -> bool {
+        self.is_done.load(Ordering::Relaxed)
+    }
+
+    // Returns the next tile for a thread to work on. If no tiles are left to be worked on.
+    pub fn next_tile(&self) -> Option<FilmTile> {
+        // Check if we are done. I am aware that this state could change from here to the next instruction.
+        // If that does happen, however, the code should still work.
+        if self.is_done() {
+            return None;
+        }
+
         // We are doing a simple scan-line approach here, so we just increment the counter. We
         // are also currently using simple uniform sampling (no adaptive sampling). With adaptive
         // sampling this could potentially be a lot more difficult. Future me will worry about that.
@@ -191,26 +116,24 @@ impl Film {
         let tile_index = self.next_tile.fetch_add(1, Ordering::Relaxed);
         // Check if this is a valid tile or not:
         if tile_index >= self.pixel_buffer.get_num_tiles() {
+            // This may be called multiple times, but because they will all set it to true,
+            // it shouldn't be a problem.
+            self.is_done.store(true, Ordering::Relaxed);
             return None;
         }
 
         // Otherwise we can just create the tile:
-        Some(self.pixel_buffer.get_zero_tile(tile_index))
+        Some(FilmTile::new(self.pixel_buffer.get_zero_tile(tile_index)))
     }
 
-    // Updates the film buffer at the specified location with the given tiles:
-    pub fn update_tile(&self, tile: &PixelTile<FilmPixel>) {
-        // We are going to do something rather "tricky" here.
-        // Because we know that every tile that is sent here is updating a unique
-        // part of the image, we don't have to lock this function. For this reason we can do the 
-        // dangerous thing we are about to do.
-        //
-        // TODO: figure out a cleaner way of doing this:
-        let mut_self = unsafe {
-            transmute::<&Self, &mut Self>(self)
-        };
+    // Updates the film buffer at the specified location with the given tile. Technically
+    // this is a mutable operation, but because of the use of FilmTiles, we can gaurantee
+    // that everyone accessing it will access a disjoint portion of it:
+    pub fn update_tile(&self, film_tile: FilmTile) {
+        // We can do this for the reason described above:
+        let mut_self = unsafe { transmute::<&Self, &mut Self>(self) };
         // Now we can just go ahead and update the tile:
-        mut_self.pixel_buffer.update_tile(tile);
+        mut_self.pixel_buffer.update_tile(&film_tile.tile);
     }
 
     pub fn get_pixel_res(&self) -> Vec2<usize> {

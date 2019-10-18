@@ -32,12 +32,12 @@ pub const TILE_DIM: usize = 8;
 // information.
 pub struct PixelTile<T: Pixel> {
     pub data: [T; TILE_DIM * TILE_DIM], // The actual data that we care about
-    // A lot of this information is redundant (can all be computed if given 
-    // the original pixel buffer). But if a thread doesn't want to deal with 
+    // A lot of this information is redundant (can all be computed if given
+    // the original pixel buffer). But if a thread doesn't want to deal with
     // checking the PixelBuffer, all of the info is here:
-    tile_index: usize,                  // The index of the tile in question 
-    tile_vec: Vec2<usize>,              // The (x, y) position of the tile itself
-    pixel_vec: Vec2<usize>,             // The positin of the top left pixel
+    tile_index: usize,      // The index of the tile in question
+    tile_vec: Vec2<usize>,  // The (x, y) position of the tile itself
+    pixel_vec: Vec2<usize>, // The positin of the top left pixel
 }
 
 impl<T: Pixel> PixelTile<T> {
@@ -103,7 +103,7 @@ impl<T: Pixel> PixelBuffer<T> {
     pub fn tile_index_to_vec(&self, tile_index: usize) -> Vec2<usize> {
         Vec2 {
             x: tile_index % self.tile_res.x,
-            y: tile_index / self.tile_res.x, 
+            y: tile_index / self.tile_res.x,
         }
     }
 
@@ -136,7 +136,8 @@ impl<T: Pixel> PixelBuffer<T> {
     // Given a tile, updates the values in that location:
     pub fn update_tile(&mut self, tile: &PixelTile<T>) {
         let buffer_tile = &mut self.data[tile.tile_index];
-        buffer_tile.iter_mut()
+        buffer_tile
+            .iter_mut()
             .zip(tile.data.iter())
             .for_each(|(curr_p, p)| {
                 curr_p.update(p);
