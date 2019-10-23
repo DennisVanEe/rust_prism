@@ -5,7 +5,7 @@ use crate::math::bbox::BBox3;
 use crate::math::ray::Ray;
 use crate::math::vector::{Vec2, Vec3};
 use crate::shading::material::{Bsdf, Material};
-use crate::spectrum::RGBSpectrum;
+use crate::spectrum::RGBColor;
 use crate::transform::Transform;
 
 use bumpalo::Bump;

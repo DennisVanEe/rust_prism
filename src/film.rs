@@ -1,12 +1,11 @@
 use crate::filter::{Filter, PixelFilter};
 use crate::math::vector::Vec2;
-use crate::pixel_buffer::{Pixel, PixelBuffer, PixelTile, TILE_DIM};
-use crate::spectrum::XYZColor;
+use crate::pixel_buffer::{Pixel, PixelBuffer, PixelTile, TileOrdering, TILE_DIM};
+use crate::spectrum::{RGBColor, XYZColor};
 
 use simple_error::{bail, SimpleResult};
 
 use std::mem::transmute;
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
 // Because we are using importance sampling, the weights of each sample
 // is 1. So we can just keep a count of the number of samples we have for that
@@ -19,6 +18,8 @@ struct FilmPixel {
 }
 
 impl Pixel for FilmPixel {
+    type FinalOutput = RGBColor;
+
     fn zero() -> Self {
         FilmPixel {
             value: XYZColor::zero(),
@@ -27,6 +28,7 @@ impl Pixel for FilmPixel {
     }
 
     fn update(&mut self, p: &Self) {
+        // Relatively simple update function:
         self.value = self.value + p.value;
         self.count = self.count + p.count;
     }
@@ -34,6 +36,14 @@ impl Pixel for FilmPixel {
     fn set_zero(&mut self) {
         self.value = XYZColor::zero();
         self.count = 0;
+    }
+
+    fn finalize(&self) -> Self::FinalOutput {
+        // First we normalize the XYZColor value:
+        let weight = 1. / (self.count as f64);
+        let final_xyz = self.value.scale(weight);
+        // Convert it to RGBColor space:
+        RGBColor::from_xyz(final_xyz)
     }
 }
 
@@ -57,19 +67,12 @@ impl FilmTile {
 }
 
 // The film class is in charge of managing all information about the film we may want.
-pub struct Film {
-    pixel_buffer: PixelBuffer<FilmPixel>,
+pub struct Film<O: TileOrdering> {
+    pixel_buffer: PixelBuffer<FilmPixel, O>,
     pixel_filter: PixelFilter,
-
-    // Used for basic unfirom scanline sampling. Fancier, adaptive
-    // sampling techniques will be explored in the future (TODO for good
-    // measure!)
-    next_tile: AtomicUsize,
-    // In case we have multiple passes:
-    is_done: AtomicBool,
 }
 
-impl Film {
+impl<O: TileOrdering> Film<O> {
     // This performs the check to make sure that the resolution
     // provided is a multiple of the TILE_DIM. I could remove this
     // constraint, but that would make the code a little bit more
@@ -90,40 +93,7 @@ impl Film {
         Ok(Film {
             pixel_buffer: PixelBuffer::new_zero(tile_res),
             pixel_filter: PixelFilter::new(filter),
-            next_tile: AtomicUsize::new(0),
-            is_done: AtomicBool::new(false),
         })
-    }
-
-    pub fn is_done(&self) -> bool {
-        self.is_done.load(Ordering::Relaxed)
-    }
-
-    // Returns the next tile for a thread to work on. If no tiles are left to be worked on.
-    pub fn next_tile(&self) -> Option<FilmTile> {
-        // Check if we are done. I am aware that this state could change from here to the next instruction.
-        // If that does happen, however, the code should still work.
-        if self.is_done() {
-            return None;
-        }
-
-        // We are doing a simple scan-line approach here, so we just increment the counter. We
-        // are also currently using simple uniform sampling (no adaptive sampling). With adaptive
-        // sampling this could potentially be a lot more difficult. Future me will worry about that.
-        //
-        // Now, because of wrapping behaviour, if this gets called MANY times after we are done,
-        // it could potentially wrap around and falsly return true.
-        let tile_index = self.next_tile.fetch_add(1, Ordering::Relaxed);
-        // Check if this is a valid tile or not:
-        if tile_index >= self.pixel_buffer.get_num_tiles() {
-            // This may be called multiple times, but because they will all set it to true,
-            // it shouldn't be a problem.
-            self.is_done.store(true, Ordering::Relaxed);
-            return None;
-        }
-
-        // Otherwise we can just create the tile:
-        Some(FilmTile::new(self.pixel_buffer.get_zero_tile(tile_index)))
     }
 
     // Updates the film buffer at the specified location with the given tile. Technically

@@ -20,6 +20,14 @@ impl XYZColor {
             z: 0.,
         }
     }
+
+    pub fn scale(self, s: f64) -> XYZColor {
+        XYZColor {
+            x: self.x * s,
+            y: self.y * s,
+            z: self.z * s,
+        }
+    }
 }
 
 impl Add for XYZColor {
@@ -60,15 +68,15 @@ impl Index<usize> for XYZColor {
 }
 
 #[derive(Clone, Copy)]
-pub struct RGBSpectrum {
+pub struct RGBColor {
     pub r: f64,
     pub g: f64,
     pub b: f64,
 }
 
-impl RGBSpectrum {
+impl RGBColor {
     pub fn from_xyz(xyz: XYZColor) -> Self {
-        RGBSpectrum {
+        RGBColor {
             r: 3.240479 * xyz.x - 1.537150 * xyz.y - 0.498535 * xyz.z,
             g: -0.969256 * xyz.x + 1.875991 * xyz.y + 0.041556 * xyz.z,
             b: 0.055648 * xyz.x - 0.204043 * xyz.y + 1.057311 * xyz.z,
@@ -77,7 +85,7 @@ impl RGBSpectrum {
 
     // Just a fancy way of returning 0 for everything:
     pub fn black() -> Self {
-        RGBSpectrum {
+        RGBColor {
             r: 0.,
             g: 0.,
             b: 0.,
@@ -85,12 +93,12 @@ impl RGBSpectrum {
     }
 
     pub fn from_scalar(s: f64) -> Self {
-        RGBSpectrum { r: s, g: s, b: s }
+        RGBColor { r: s, g: s, b: s }
     }
 
     // Multiplies all of the components by the scale value:
     pub fn scale(self, s: f64) -> Self {
-        RGBSpectrum {
+        RGBColor {
             r: self.r * s,
             g: self.g * s,
             b: self.b * s,
@@ -99,7 +107,7 @@ impl RGBSpectrum {
 
     // Divides all of the components by the scale value:
     pub fn div_scale(self, s: f64) -> Self {
-        RGBSpectrum {
+        RGBColor {
             r: self.r / s,
             g: self.g / s,
             b: self.b / s,
@@ -111,7 +119,7 @@ impl RGBSpectrum {
     }
 
     pub fn sqrt(self) -> Self {
-        RGBSpectrum {
+        RGBColor {
             r: self.r.sqrt(),
             g: self.g.sqrt(),
             b: self.b.sqrt(),
@@ -119,7 +127,7 @@ impl RGBSpectrum {
     }
 
     pub fn pow(self, p: f64) -> Self {
-        RGBSpectrum {
+        RGBColor {
             r: self.r.powf(p),
             g: self.g.powf(p),
             b: self.b.powf(p),
@@ -127,7 +135,7 @@ impl RGBSpectrum {
     }
 
     pub fn exp(self) -> Self {
-        RGBSpectrum {
+        RGBColor {
             r: self.r.exp(),
             g: self.g.exp(),
             b: self.b.exp(),
@@ -139,7 +147,7 @@ impl RGBSpectrum {
     }
 
     pub fn clamp(self, low: f64, high: f64) -> Self {
-        RGBSpectrum {
+        RGBColor {
             r: clamp(self.r, low, high),
             g: clamp(self.g, low, high),
             b: clamp(self.b, low, high),
@@ -161,11 +169,11 @@ impl RGBSpectrum {
     }
 }
 
-impl Add for RGBSpectrum {
+impl Add for RGBColor {
     type Output = Self;
 
     fn add(self, rhs: Self) -> Self {
-        RGBSpectrum {
+        RGBColor {
             r: self.r + rhs.r,
             g: self.g + rhs.g,
             b: self.b + rhs.b,
@@ -173,11 +181,11 @@ impl Add for RGBSpectrum {
     }
 }
 
-impl Sub for RGBSpectrum {
+impl Sub for RGBColor {
     type Output = Self;
 
     fn sub(self, rhs: Self) -> Self {
-        RGBSpectrum {
+        RGBColor {
             r: self.r - rhs.r,
             g: self.g - rhs.g,
             b: self.b - rhs.b,
@@ -185,11 +193,11 @@ impl Sub for RGBSpectrum {
     }
 }
 
-impl Div for RGBSpectrum {
+impl Div for RGBColor {
     type Output = Self;
 
     fn div(self, rhs: Self) -> Self {
-        RGBSpectrum {
+        RGBColor {
             r: self.r / rhs.r,
             g: self.g / rhs.g,
             b: self.b / rhs.b,
@@ -197,11 +205,11 @@ impl Div for RGBSpectrum {
     }
 }
 
-impl Mul for RGBSpectrum {
+impl Mul for RGBColor {
     type Output = Self;
 
     fn mul(self, rhs: Self) -> Self {
-        RGBSpectrum {
+        RGBColor {
             r: self.r * rhs.r,
             g: self.g * rhs.g,
             b: self.b * rhs.b,
@@ -209,7 +217,7 @@ impl Mul for RGBSpectrum {
     }
 }
 
-impl Index<usize> for RGBSpectrum {
+impl Index<usize> for RGBColor {
     type Output = f64;
 
     fn index(&self, i: usize) -> &f64 {

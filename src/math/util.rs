@@ -84,6 +84,32 @@ pub fn morton_to_2d(m: u64) -> Vec2<u32> {
     }
 }
 
+// Reverses the bits in a u32 number:
+pub fn reverse_u32(n: u32) -> u32 {
+    let n = (n << 16) | (n >> 16);
+    let n = ((n & 0x00ff00ff) << 8) | ((n & 0xff00ff00) >> 8);
+    let n = ((n & 0x0f0f0f0f) << 4) | ((n & 0xf0f0f0f0) >> 4);
+    let n = ((n & 0x33333333) << 2) | ((n & 0xcccccccc) >> 2);
+    let n = ((n & 0x55555555) << 1) | ((n & 0xaaaaaaaa) >> 1);
+    n
+}
+
+pub fn reverse_u64(n: u64) -> u64 {
+    let n0 = reverse_u32(n as u32) as u64;
+    let n1 = reverse_u32((n >> 32) as u32) as u64;
+    (n0 << 32) | n1
+}
+
+// Computes the grey code value for an unsigned 32 bit value:
+pub fn greycode_u32(n: u32) -> u32 {
+    (n >> 1) ^ n
+}
+
+// Computes the grey code value for an unsigned 64 bit value:
+pub fn greycode_u64(n: u64) -> u64 {
+    (n >> 1) ^ n
+}
+
 // This creates a coordinate system given only a single vector.
 pub fn coord_system<T: Float>(v1: Vec3<T>) -> (Vec3<T>, Vec3<T>) {
     let v2 = if v1.x.abs() > v1.y.abs() {
