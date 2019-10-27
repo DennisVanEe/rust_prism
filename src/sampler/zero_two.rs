@@ -5,8 +5,8 @@ use crate::memory::uninit_vec;
 use crate::sampler::{shuffle, Sampler};
 
 pub struct ZeroTwo {
-    num_pixel_samples: usize,
-    num_dim: usize,
+    n_pxl_sampl: usize,
+    n_dim: usize,
 
     // The samples values are stored contiguously in memory but represents
     // a 2D array of values.
@@ -15,24 +15,46 @@ pub struct ZeroTwo {
     // dim0: pixel_sample0, pixel_sample1, pixel_sample2, ...
     // dim1: pixel_sample0, pixel_sample1, pixel_sample2, ...
     // ...
-    samples_1d: Vec<f32>,
-    samples_2d: Vec<Vec2<f32>>,
+    sampl_1d: Vec<f32>,
+    sampl_2d: Vec<Vec2<f32>>,
+
+    arr_sampl_1d: Vec<Vec<f32>>,
+    arr_sampl_2d: Vec<Vec<Vec2<f32>>>,
 
     rng: RandGen,
 }
 
 impl ZeroTwo {
-    pub fn new(num_pixel_samples: usize, num_dim: usize) -> Self {
-        let num_pixel_samples = roundup_pow2(num_pixel_samples);
+    // n_pxl_sampl: number of pixel samples (samples per pixel)
+    // n_dim: number of dimensions we are planning on sampling:
+    pub fn new(
+        n_pxl_sampl: usize,
+        n_dim: usize,
+        arr_sampl_1d: Vec<Vec<f32>>,
+        arr_sampl_2d: Vec<Vec<Vec2<f32>>>,
+    ) -> Self {
+        // Update the number of pixel samples. We generate better samples
+        // when this number is a power of 2:
+        let n_pxl_sampl = roundup_pow2(n_pxl_sampl);
 
         // Allocate buffers for the "regular" samples_1d and samples_2d values:
-        let (samples_1d, samples_2d) = {
-            let num_samples = num_pixel_samples * num_dim;
-            unsafe { (uninit_vec(num_samples), uninit_vec(num_samples)) }
+        let (sampl_1d, sampl_2d) = {
+            let n_sampl = n_pxl_sampl * n_dim;
+            unsafe { (uninit_vec(n_sampl), uninit_vec(n_sampl)) }
         };
+
+        ZeroTwo {
+            n_pxl_sampl,
+            n_dim,
+            sampl_1d,
+            sampl_2d,
+            arr_sampl_1d,
+            arr_sampl_2d,
+            rng: RandGen::new(),
+        }
     }
 
-    fn sobol_1d_samples(&mut self, num_pixel_sample_samples: usize, samples: &mut [f32]) {
+    fn gen_1d_samples(&mut self, num_pixel_sample_samples: usize, samples: &mut [f32]) {
         // Van Der Corput sequence:
         const VAN_DER_CORPUT: [u32; 32] = [
             0x80000000, 0x40000000, 0x20000000, 0x10000000, 0x8000000, 0x4000000, 0x2000000,
@@ -55,7 +77,7 @@ impl ZeroTwo {
         shuffle(samples, num_pixel_sample_samples, &mut self.rng);
     }
 
-    fn sobol_2d_samples(&mut self, num_pixel_sample_samples: usize, samples: &mut [Vec2<f32>]) {
+    fn gen_2d_samples(&mut self, num_pixel_sample_samples: usize, samples: &mut [Vec2<f32>]) {
         // Van Der Corput sequence:
         const SOBOL: [[u32; 32]; 2] = [
             [
@@ -100,14 +122,14 @@ impl Sampler for ZeroTwo {
             let start_index = dim * self.num_pixel_samples;
             let end_index = start_index + self.num_pixel_samples;
             let pixel_samples = &mut self.samples_1d[start_index..end_index];
-            self.sobol_1d_samples(1, pixel_samples);
+            self.gen_1d_samples(1, pixel_samples);
         }
 
         for dim in 0..self.num_dim {
             let start_index = dim * self.num_pixel_samples;
             let end_index = start_index + self.num_pixel_samples;
             let pixel_samples = &mut self.samples_2d[start_index..end_index];
-            self.sobol_2d_samples(1, pixel_samples);
+            self.gen_2d_samples(1, pixel_samples);
         }
     }
 }
