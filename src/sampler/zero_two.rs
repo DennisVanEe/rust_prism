@@ -5,8 +5,8 @@ use crate::memory::uninit_vec;
 use crate::sampler::{shuffle, Sampler};
 
 pub struct ZeroTwo {
-    n_pxl_sampl: usize,
-    n_dim: usize,
+    num_pixel_samples: usize,
+    num_dim: usize,
 
     // The samples values are stored contiguously in memory but represents
     // a 2D array of values.
@@ -15,46 +15,65 @@ pub struct ZeroTwo {
     // dim0: pixel_sample0, pixel_sample1, pixel_sample2, ...
     // dim1: pixel_sample0, pixel_sample1, pixel_sample2, ...
     // ...
-    sampl_1d: Vec<f32>,
-    sampl_2d: Vec<Vec2<f32>>,
+    samples_1d: Vec<f32>,
+    samples_2d: Vec<Vec2<f32>>,
 
-    arr_sampl_1d: Vec<Vec<f32>>,
-    arr_sampl_2d: Vec<Vec<Vec2<f32>>>,
+    arr_samples_1d: Vec<Vec<f32>>,
+    arr_samples_2d: Vec<Vec<Vec2<f32>>>,
 
     rng: RandGen,
 }
 
 impl ZeroTwo {
-    // n_pxl_sampl: number of pixel samples (samples per pixel)
-    // n_dim: number of dimensions we are planning on sampling:
     pub fn new(
-        n_pxl_sampl: usize,
-        n_dim: usize,
-        arr_sampl_1d: Vec<Vec<f32>>,
-        arr_sampl_2d: Vec<Vec<Vec2<f32>>>,
+        // The number of pixel samples:
+        num_pixel_samples: usize,
+        // The number of dimensions:
+        num_dim: usize,
+        // Not really a seed, but is used to define the random number generator:
+        seed: u64,
+        // If any arrays are to be requested for 1d, request them here:
+        arr_sizes_1d: &[usize],
+        // If any arrays are to be requested for 2d, request them here:
+        arr_sizes_2d: &[usize],
     ) -> Self {
         // Update the number of pixel samples. We generate better samples
         // when this number is a power of 2:
-        let n_pxl_sampl = roundup_pow2(n_pxl_sampl);
+        let num_pixel_samples = roundup_pow2(num_pixel_samples);
 
         // Allocate buffers for the "regular" samples_1d and samples_2d values:
-        let (sampl_1d, sampl_2d) = {
-            let n_sampl = n_pxl_sampl * n_dim;
-            unsafe { (uninit_vec(n_sampl), uninit_vec(n_sampl)) }
+        let (samples_1d, samples_2d) = {
+            let num_samples = num_pixel_samples * num_dim;
+            unsafe { (uninit_vec(num_samples), uninit_vec(num_samples)) }
         };
 
+        let mut arr_samples_1d = Vec::with_capacity(arr_sizes_1d.len());
+        for &size in arr_sizes_1d {
+            unsafe { arr_samples_1d.push(uninit_vec(size)); }
+        }
+
+        let mut arr_samples_2d = Vec::with_capacity(arr_sizes_2d.len());
+        for &size in arr_sizes_2d {
+            unsafe { arr_samples_2d.push(uninit_vec(size)); }
+        }
+
         ZeroTwo {
-            n_pxl_sampl,
-            n_dim,
-            sampl_1d,
-            sampl_2d,
-            arr_sampl_1d,
-            arr_sampl_2d,
-            rng: RandGen::new(),
+            num_pixel_samples,
+            num_dim,
+            samples_1d,
+            samples_2d,
+            arr_samples_1d,
+            arr_samples_2d,
+            rng: RandGen::new(seed),
         }
     }
 
-    fn gen_1d_samples(&mut self, num_pixel_sample_samples: usize, samples: &mut [f32]) {
+    fn gen_1d_samples(&mut self,
+        // The number of samples per pixel sample:
+        num_pixel_sample_samples: usize, 
+        // Where we are storing the resulting samples:
+        samples: &mut [f32]) 
+    {
         // Van Der Corput sequence:
         const VAN_DER_CORPUT: [u32; 32] = [
             0x80000000, 0x40000000, 0x20000000, 0x10000000, 0x8000000, 0x4000000, 0x2000000,
