@@ -2,9 +2,8 @@ pub mod stratified;
 pub mod zero_two;
 
 use crate::camera::CameraSample;
-use crate::math::numbers::Float;
 use crate::math::random::RandGen;
-use crate::math::vector::{Vec2, Vec3};
+use crate::math::vector::Vec2;
 
 // Each thread, when working on a tile, gets access to their own
 // sampler when rendering.
@@ -44,6 +43,7 @@ pub trait Sampler {
 }
 
 // This is used by numerous samplers, so we have it defined here:
+
 fn shuffle<T>(samples: &mut [T], block_size: usize, rng: &mut RandGen) {
     let num_blocks = samples.len() / block_size;
     for curr_block_index in 0..num_blocks {

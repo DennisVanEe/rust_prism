@@ -104,7 +104,7 @@ pub fn greycode_u64(n: u64) -> u64 {
 
 // Rounds up to the nearest power of 2 for u32 numbers:
 pub fn next_pow2_u32(n: u32) -> u32 {
-    // The idea is to essentially set it so that all bits are set 
+    // The idea is to essentially set it so that all bits are set
     // from least significant bit to most significant bit already set.
     // Then when we add 1 we would "roll over":
 
@@ -120,7 +120,7 @@ pub fn next_pow2_u32(n: u32) -> u32 {
 
 // Rounds up to the nearest power of 2 for u64 numbers:
 pub fn next_pow2_u64(n: u64) -> u64 {
-    // The idea is to essentially set it so that all bits are set 
+    // The idea is to essentially set it so that all bits are set
     // from least significant bit to most significant bit already set.
     // Then when we add 1 we would "roll over":
     let n = n - 1;
