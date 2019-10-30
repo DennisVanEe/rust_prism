@@ -19,30 +19,23 @@ pub fn morton_from_2d(xy: Vec2<u32>) -> u64 {
             // 0 bit between each of the bits. We use different masks to pick different starting points. Once that
             // is done, we then combine them with a bitwise or:
             return _pdep_u64(xy.x as u64, 0x5555555555555555)
-                | _pdep_u64(xy.y as u64, 0xAAAAAAAAAAAAAAAA);
+                | _pdep_u64(xy.y as u64, 0xaaaaaaaaaaaaaaa);
         }
     }
 
-    // The fall back technique (TODO: get something specifc for NEON and ARM based systems as well):
+    // The fall back technique (so, non x86 machines, or no support for bmi2)
+    // Our own little pdep function (that only works for the mask 0x55...):
+    fn pdep(n: u64) -> u64 {
+        let n = (n | (n << 16)) & 0x0000ffff0000ffff;
+        let n = (n | (n << 8)) & 0x00ff00ff00ff00ff;
+        let n = (n | (n << 4)) & 0x0f0f0f0f0f0f0f0f;
+        let n = (n | (n << 2)) & 0x3333333333333333;
+        let n = (n | (n << 1)) & 0x5555555555555555;
+        n
+    }
 
-    // See: https://www.forceflow.be/2013/10/07/morton-encodingdecoding-through-bit-interleaving-implementations/
-    // for details:
-    let x = xy.x as u64;
-    let y = xy.y as u64;
-
-    let x = (x | (x << 16)) & 0x0000FFFF0000FFFF;
-    let x = (x | (x << 8)) & 0x00FF00FF00FF00FF;
-    let x = (x | (x << 4)) & 0x0F0F0F0F0F0F0F0F;
-    let x = (x | (x << 2)) & 0x3333333333333333;
-    let x = (x | (x << 1)) & 0x5555555555555555;
-
-    let y = (y | (y << 16)) & 0x0000FFFF0000FFFF;
-    let y = (y | (y << 8)) & 0x00FF00FF00FF00FF;
-    let y = (y | (y << 4)) & 0x0F0F0F0F0F0F0F0F;
-    let y = (y | (y << 2)) & 0x3333333333333333;
-    let y = (y | (y << 1)) & 0x5555555555555555;
-
-    x | (y << 1)
+    // Then we can finally or the result:
+    pdep(xy.x as u64) | pdep((xy.y as u64) << 1)
 }
 
 pub fn morton_to_2d(m: u64) -> Vec2<u32> {
@@ -64,23 +57,21 @@ pub fn morton_to_2d(m: u64) -> Vec2<u32> {
         }
     }
 
-    // The fall back technique (TODO: get something specifc for NEON and ARM based systems as well):
-
-    // See: https://www.forceflow.be/2013/10/07/morton-encodingdecoding-through-bit-interleaving-implementations/
-    // for details:
-    fn morton_1(x: u64) -> u32 {
-        let x = x & 0x5555555555555555;
-        let x = (x | (x >> 1)) & 0x3333333333333333;
-        let x = (x | (x >> 2)) & 0x0F0F0F0F0F0F0F0F;
-        let x = (x | (x >> 4)) & 0x00FF00FF00FF00FF;
-        let x = (x | (x >> 8)) & 0x0000FFFF0000FFFF;
-        let x = (x | (x >> 16)) & 0x00000000FFFFFFFF;
-        x as u32
+    // The fall back technique (so, non x86 machines, or no support for bmi2)
+    // Our own little pdext function (that only works for the mask 0x55...):
+    fn pext(n: u64) -> u64 {
+        let n = n & 0x5555555555555555;
+        let n = (n | (n >> 1)) & 0x3333333333333333;
+        let n = (n | (n >> 2)) & 0x0f0f0f0f0f0f0f0f;
+        let n = (n | (n >> 4)) & 0x00ff00ff00ff00ff;
+        let n = (n | (n >> 8)) & 0x0000ffff0000ffff;
+        let n = (n | (n >> 16)) & 0x00000000ffffffff;
+        n
     }
 
     Vec2 {
-        x: morton_1(m),
-        y: morton_1(m >> 1),
+        x: pext(m) as u32,
+        y: pext(m >> 1) as u32,
     }
 }
 
@@ -94,6 +85,7 @@ pub fn reverse_u32(n: u32) -> u32 {
     n
 }
 
+// Reverses the bits in a u64 number:
 pub fn reverse_u64(n: u64) -> u64 {
     let n0 = reverse_u32(n as u32) as u64;
     let n1 = reverse_u32((n >> 32) as u32) as u64;
@@ -110,8 +102,40 @@ pub fn greycode_u64(n: u64) -> u64 {
     (n >> 1) ^ n
 }
 
+// Rounds up to the nearest power of 2 for u32 numbers:
+pub fn next_pow2_u32(n: u32) -> u32 {
+    // The idea is to essentially set it so that all bits are set 
+    // from least significant bit to most significant bit already set.
+    // Then when we add 1 we would "roll over":
+
+    // Decrement by 1 so that it maps to itself (doesn't just get the next power of 2):
+    let n = n - 1;
+    let n = n | n >> 1;
+    let n = n | n >> 2;
+    let n = n | n >> 4;
+    let n = n | n >> 8;
+    let n = n | n >> 16;
+    n + 1
+}
+
+// Rounds up to the nearest power of 2 for u64 numbers:
+pub fn next_pow2_u64(n: u64) -> u64 {
+    // The idea is to essentially set it so that all bits are set 
+    // from least significant bit to most significant bit already set.
+    // Then when we add 1 we would "roll over":
+    let n = n - 1;
+    let n = n | n >> 1;
+    let n = n | n >> 2;
+    let n = n | n >> 4;
+    let n = n | n >> 8;
+    let n = n | n >> 16;
+    let n = n | n >> 32;
+    n + 1
+}
+
 // This creates a coordinate system given only a single vector.
 pub fn coord_system<T: Float>(v1: Vec3<T>) -> (Vec3<T>, Vec3<T>) {
+    // v2 can easily be calculated by just negating one of the components:
     let v2 = if v1.x.abs() > v1.y.abs() {
         Vec3 {
             x: -v1.x,
@@ -146,19 +170,19 @@ pub fn align<T: Float>(refv: Vec3<T>, vec: Vec3<T>) -> Vec3<T> {
 
 pub fn gamma_f32(n: i32) -> f32 {
     let n = n as f32;
-    let half_eps = std::f32::EPSILON / 2f32;
-    (n * half_eps) / (1f32 - n * half_eps)
+    const half_eps: f32 = std::f32::EPSILON / 2.;
+    (n * half_eps) / (1. - n * half_eps)
 }
 
 pub fn gamma_f64(n: i64) -> f64 {
     let n = n as f64;
-    let half_eps = std::f64::EPSILON / 2.;
+    const half_eps: f64 = std::f64::EPSILON / 2.;
     (n * half_eps) / (1. - n * half_eps)
 }
 
 // This is used so that we can have efficient comparisons
-// with PartialOrd types:
-
+// with PartialOrd types (like floats). According to the compiler
+// explorer, this converts to the proper minsd/maxsd instruction:
 pub fn min<T: PartialOrd>(v0: T, v1: T) -> T {
     if v0 < v1 {
         v0
@@ -175,7 +199,8 @@ pub fn max<T: PartialOrd>(v0: T, v1: T) -> T {
     }
 }
 
-// Solves the quadratic equation robustly:
+// Solves the quadratic equation robustly.
+// If no solution exists, Option is set:
 pub fn quadratic<T: Float>(a: T, b: T, c: T) -> Option<(T, T)> {
     let disc = b * b - T::from(4).unwrap() * a * c;
     if disc < T::zero() {
@@ -195,10 +220,12 @@ pub fn quadratic<T: Float>(a: T, b: T, c: T) -> Option<(T, T)> {
     Some((t0.min(t1), t0.max(t1)))
 }
 
+// Reflect function:
 pub fn reflect<T: Float>(wo: Vec3<T>, n: Vec3<T>) -> Vec3<T> {
     -wo + n.scale(T::two() * wo.dot(n))
 }
 
+// Refract function:
 pub fn refract<T: Float>(wi: Vec3<T>, n: Vec3<T>, eta: T) -> Option<Vec3<T>> {
     let cos_theta_i = n.dot(wi);
     let sin2_theta_i = T::zero().max(T::one() - cos_theta_i * cos_theta_i);

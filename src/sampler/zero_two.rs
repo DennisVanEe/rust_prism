@@ -1,6 +1,7 @@
 use crate::math::numbers::Float;
 use crate::math::random::RandGen;
 use crate::math::vector::Vec2;
+use crate::math::util::next_pow2_u64;
 use crate::memory::uninit_vec;
 use crate::sampler::{shuffle, Sampler};
 
@@ -18,8 +19,22 @@ pub struct ZeroTwo {
     samples_1d: Vec<f32>,
     samples_2d: Vec<Vec2<f32>>,
 
-    arr_samples_1d: Vec<Vec<f32>>,
-    arr_samples_2d: Vec<Vec<Vec2<f32>>>,
+    // Someone can potentially request arrays of samples. If they do, they will be stored
+    // here. The first entry of the tuple stores the length of the array. This is usefull
+    // information to have.
+    // Each sample gets its own array (so, the length of the vectors is length of array * num_pixel_samples)
+    arr_samples_1d: Vec<(usize, Vec<f32>)>,
+    arr_samples_2d: Vec<(usize, Vec<Vec2<f32>>)>,
+
+    // State information regarding the sampler. As each thread gets its
+    // own sampler, we aren't concerned with race conditions or anything:
+
+    // The current pixel sample we are on:
+    pixel_sample_index: usize,
+    // The next array we will return when requested (for 1D):
+    arr_1d_index: usize,
+    // The next array we will return when requested (for 2D):
+    arr_2d_index: usize,
 
     rng: RandGen,
 }
@@ -39,22 +54,24 @@ impl ZeroTwo {
     ) -> Self {
         // Update the number of pixel samples. We generate better samples
         // when this number is a power of 2:
-        let num_pixel_samples = roundup_pow2(num_pixel_samples);
+        let num_pixel_samples = next_pow2_u64(num_pixel_samples as u64) as usize;
 
-        // Allocate buffers for the "regular" samples_1d and samples_2d values:
+        // Allocates the memory needed for the sampler (uninitialized, they will be
+        // initialized when pixel start is called):
+
         let (samples_1d, samples_2d) = {
             let num_samples = num_pixel_samples * num_dim;
             unsafe { (uninit_vec(num_samples), uninit_vec(num_samples)) }
         };
 
         let mut arr_samples_1d = Vec::with_capacity(arr_sizes_1d.len());
-        for &size in arr_sizes_1d {
-            unsafe { arr_samples_1d.push(uninit_vec(size)); }
+        for &n in arr_sizes_1d {
+            unsafe { arr_samples_1d.push((n, uninit_vec(n * num_pixel_samples))); }
         }
 
         let mut arr_samples_2d = Vec::with_capacity(arr_sizes_2d.len());
-        for &size in arr_sizes_2d {
-            unsafe { arr_samples_2d.push(uninit_vec(size)); }
+        for &n in arr_sizes_2d {
+            unsafe { arr_samples_2d.push((n, uninit_vec(n * num_pixel_samples))); }
         }
 
         ZeroTwo {
@@ -64,6 +81,9 @@ impl ZeroTwo {
             samples_2d,
             arr_samples_1d,
             arr_samples_2d,
+            pixel_sample_index: 0,
+            arr_1d_index: 0,
+            arr_2d_index: 0,
             rng: RandGen::new(seed),
         }
     }
@@ -96,7 +116,12 @@ impl ZeroTwo {
         shuffle(samples, num_pixel_sample_samples, &mut self.rng);
     }
 
-    fn gen_2d_samples(&mut self, num_pixel_sample_samples: usize, samples: &mut [Vec2<f32>]) {
+    fn gen_2d_samples(&mut self, 
+        // The number of samples per pixel sample:
+        num_pixel_sample_samples: usize, 
+        // Where we are storing the resulting samples:
+        samples: &mut [Vec2<f32>]) 
+    {
         // Van Der Corput sequence:
         const SOBOL: [[u32; 32]; 2] = [
             [
@@ -150,6 +175,19 @@ impl Sampler for ZeroTwo {
             let pixel_samples = &mut self.samples_2d[start_index..end_index];
             self.gen_2d_samples(1, pixel_samples);
         }
+
+        for (n, arrays) in self.arr_samples_1d.iter_mut() {
+            self.gen_1d_samples(*n, arrays);
+        }
+
+        for (n, arrays) in self.arr_samples_2d.iter_mut() {
+            self.gen_2d_samples(*n, arrays);
+        }
+
+        // Start at the beginning again:
+        self.pixel_sample_index = 0;
+        self.arr_1d_index = 0;
+        self.arr_2d_index = 0;
     }
 }
 
@@ -179,16 +217,4 @@ fn greycode_sample_2d(gen_mat: &[[u32; 32]; 2], scramble: Vec2<u32>, samples: &m
         v[0] ^= unsafe { *gen_mat[0].get_unchecked(index) };
         v[1] ^= unsafe { *gen_mat[1].get_unchecked(index) };
     }
-}
-
-fn roundup_pow2(n: usize) -> usize {
-    let n = n as u64;
-    let n = n - 1;
-    let n = n | n >> 1;
-    let n = n | n >> 2;
-    let n = n | n >> 4;
-    let n = n | n >> 8;
-    let n = n | n >> 16;
-    let n = n | n >> 32;
-    (n + 1) as usize
 }
