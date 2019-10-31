@@ -38,6 +38,10 @@ pub trait Light {
     fn pdf(&self, surface_point: Vec3<f64>, wi: Vec3<f64>) -> f64;
 
     fn power(&self) -> RGBSpectrum;
+
+    fn num_recommended_samples(&self) -> usize {
+        
+    }
 }
 
 // This essentially calculates Planck's law for a range of wavelengths.
