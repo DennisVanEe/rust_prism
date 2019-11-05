@@ -8,7 +8,27 @@ use crate::math::vector::Vec2;
 // Each thread, when working on a tile, gets access to their own
 // sampler when rendering.
 
+// Also defines any extra parameters a sampler might want:
 pub trait Sampler {
+    // Parameter type, if any. Once default parameter
+    // types aren't an unstable feature it'll be the empty tuple:
+    type ParamType;
+
+    fn new(
+        // If the sampler requires extra parameters, pass them here:
+        param: Self::ParamType,
+        // The number of pixel samples:
+        num_pixel_samples: usize,
+        // The number of dimensions:
+        num_dim: usize,
+        // Not really a seed, but is used to define the random number generator:
+        seed: u64,
+        // If any arrays are to be requested for 1d, request them here:
+        arr_sizes_1d: &[usize],
+        // If any arrays are to be requested for 2d, request them here:
+        arr_sizes_2d: &[usize],
+    ) -> Self;
+
     // Use the sampler to start working on a new pixel:
     fn start_pixel(&mut self, pixel: Vec2<usize>);
 
@@ -39,6 +59,13 @@ pub trait Sampler {
             p_lens,
             time,
         }
+    }
+
+    // Rounds a provided count to an appropriate count for the sampler
+    // to work with (such as a power of 2, given that many samplers
+    // prefer working with such values):
+    fn round_count(&self, cnt: usize) -> usize {
+        cnt
     }
 }
 

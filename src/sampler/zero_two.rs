@@ -44,62 +44,6 @@ pub struct ZeroTwo {
 }
 
 impl ZeroTwo {
-    pub fn new(
-        // The number of pixel samples:
-        num_pixel_samples: usize,
-        // The number of dimensions:
-        num_dim: usize,
-        // Not really a seed, but is used to define the random number generator:
-        seed: u64,
-        // If any arrays are to be requested for 1d, request them here:
-        arr_sizes_1d: &[usize],
-        // If any arrays are to be requested for 2d, request them here:
-        arr_sizes_2d: &[usize],
-    ) -> Self {
-        // Update the number of pixel samples. We generate better samples
-        // when this number is a power of 2:
-        let num_pixel_samples = next_pow2_u64(num_pixel_samples as u64) as usize;
-
-        // Allocates the memory needed for the sampler (uninitialized, they will be
-        // initialized when pixel start is called):
-
-        let (samples_1d, samples_2d) = {
-            let num_samples = num_pixel_samples * num_dim;
-            unsafe { (uninit_vec(num_samples), uninit_vec(num_samples)) }
-        };
-
-        let mut arr_samples_1d = Vec::with_capacity(arr_sizes_1d.len());
-        for &n in arr_sizes_1d {
-            unsafe {
-                arr_samples_1d.push((n, uninit_vec(n * num_pixel_samples)));
-            }
-        }
-
-        let mut arr_samples_2d = Vec::with_capacity(arr_sizes_2d.len());
-        for &n in arr_sizes_2d {
-            unsafe {
-                arr_samples_2d.push((n, uninit_vec(n * num_pixel_samples)));
-            }
-        }
-
-        ZeroTwo {
-            num_pixel_samples,
-            num_dim,
-            samples_1d,
-            samples_2d,
-            arr_samples_1d,
-            arr_samples_2d,
-
-            index_pixel_sample: 0,
-            index_arr_1d: 0,
-            index_arr_2d: 0,
-            index_1d: 0,
-            index_2d: 0,
-
-            rng: RandGen::new(seed),
-        }
-    }
-
     fn gen_1d_samples(
         &mut self,
         // The number of samples per pixel sample:
@@ -172,6 +116,61 @@ impl ZeroTwo {
 }
 
 impl Sampler for ZeroTwo {
+    type ParamType = ();
+
+    fn new(
+        // Not used in our case
+        _: Self::ParamType,
+        num_pixel_samples: usize,
+        num_dim: usize,
+        seed: u64,
+        arr_sizes_1d: &[usize],
+        arr_sizes_2d: &[usize],
+    ) -> Self {
+        // Update the number of pixel samples. We generate better samples
+        // when this number is a power of 2:
+        let num_pixel_samples = next_pow2_u64(num_pixel_samples as u64) as usize;
+
+        // Allocates the memory needed for the sampler (uninitialized, they will be
+        // initialized when pixel start is called):
+
+        let (samples_1d, samples_2d) = {
+            let num_samples = num_pixel_samples * num_dim;
+            unsafe { (uninit_vec(num_samples), uninit_vec(num_samples)) }
+        };
+
+        let mut arr_samples_1d = Vec::with_capacity(arr_sizes_1d.len());
+        for &n in arr_sizes_1d {
+            unsafe {
+                arr_samples_1d.push((n, uninit_vec(n * num_pixel_samples)));
+            }
+        }
+
+        let mut arr_samples_2d = Vec::with_capacity(arr_sizes_2d.len());
+        for &n in arr_sizes_2d {
+            unsafe {
+                arr_samples_2d.push((n, uninit_vec(n * num_pixel_samples)));
+            }
+        }
+
+        ZeroTwo {
+            num_pixel_samples,
+            num_dim,
+            samples_1d,
+            samples_2d,
+            arr_samples_1d,
+            arr_samples_2d,
+
+            index_pixel_sample: 0,
+            index_arr_1d: 0,
+            index_arr_2d: 0,
+            index_1d: 0,
+            index_2d: 0,
+
+            rng: RandGen::new(seed),
+        }
+    }
+
     fn start_pixel(&mut self, _: Vec2<usize>) {
         // Go through and generate the samples for both 1D and 2D values:
 

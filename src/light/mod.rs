@@ -39,8 +39,10 @@ pub trait Light {
 
     fn power(&self) -> RGBSpectrum;
 
-    fn num_recommended_samples(&self) -> usize {
-        
+    // The number of samples for a particular light. This is mainly useful
+    // for area lights. Defaults to 1 (as for point lights):
+    fn num_samples(&self) -> usize {
+        1
     }
 }
 
