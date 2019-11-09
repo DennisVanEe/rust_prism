@@ -67,12 +67,23 @@ impl Index<usize> for XYZColor {
     }
 }
 
-// The Spectrum trait for different types of 
-pub trait Spectrum {
+// The Spectrum trait for different types of spectrum that we will support.
+// The decision of which type of spectrum to support is global to prism.
+pub trait Spectrum: Copy + Add + Sub + Mul + Div + Index<usize> {
     fn from_xyz(xyz: XYZColor) -> Self;
+    fn to_xyz(self) -> XYZColor;
+    fn to_y(self) -> f64;
+
     fn black() -> Self;
     fn from_scalar(s: f64) -> Self;
-    
+    fn scale(self, s: f64) -> Self;
+    fn div_scale(self, s: f64) -> Self;
+    fn is_black(self) -> bool;
+    fn sqrt(self) -> Self;
+    fn pow(self, p: f64) -> Self;
+    fn exp(self) -> Self;
+    fn lerp(self, s2: Self, t: f64) -> Self;
+    fn clamp(self, low: f64, high: f64) -> Self;
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -82,9 +93,9 @@ pub struct RGBSpectrum {
     pub b: f64,
 }
 
-impl RGBColor {
-    pub fn from_xyz(xyz: XYZColor) -> Self {
-        RGBColor {
+impl Spectrum for RGBSpectrum {
+    fn from_xyz(xyz: XYZColor) -> Self {
+        RGBSpectrum {
             r: 3.240479 * xyz.x - 1.537150 * xyz.y - 0.498535 * xyz.z,
             g: -0.969256 * xyz.x + 1.875991 * xyz.y + 0.041556 * xyz.z,
             b: 0.055648 * xyz.x - 0.204043 * xyz.y + 1.057311 * xyz.z,
@@ -92,21 +103,21 @@ impl RGBColor {
     }
 
     // Just a fancy way of returning 0 for everything:
-    pub fn black() -> Self {
-        RGBColor {
+    fn black() -> Self {
+        RGBSpectrum {
             r: 0.,
             g: 0.,
             b: 0.,
         }
     }
 
-    pub fn from_scalar(s: f64) -> Self {
-        RGBColor { r: s, g: s, b: s }
+    fn from_scalar(s: f64) -> Self {
+        RGBSpectrum { r: s, g: s, b: s }
     }
 
     // Multiplies all of the components by the scale value:
-    pub fn scale(self, s: f64) -> Self {
-        RGBColor {
+    fn scale(self, s: f64) -> Self {
+        RGBSpectrum {
             r: self.r * s,
             g: self.g * s,
             b: self.b * s,
@@ -114,48 +125,48 @@ impl RGBColor {
     }
 
     // Divides all of the components by the scale value:
-    pub fn div_scale(self, s: f64) -> Self {
-        RGBColor {
+    fn div_scale(self, s: f64) -> Self {
+        RGBSpectrum {
             r: self.r / s,
             g: self.g / s,
             b: self.b / s,
         }
     }
 
-    pub fn is_black(self) -> bool {
+    fn is_black(self) -> bool {
         self.r == 0. && self.g == 0. && self.b == 0.
     }
 
-    pub fn sqrt(self) -> Self {
-        RGBColor {
+    fn sqrt(self) -> Self {
+        RGBSpectrum {
             r: self.r.sqrt(),
             g: self.g.sqrt(),
             b: self.b.sqrt(),
         }
     }
 
-    pub fn pow(self, p: f64) -> Self {
-        RGBColor {
+    fn pow(self, p: f64) -> Self {
+        RGBSpectrum {
             r: self.r.powf(p),
             g: self.g.powf(p),
             b: self.b.powf(p),
         }
     }
 
-    pub fn exp(self) -> Self {
-        RGBColor {
+    fn exp(self) -> Self {
+        RGBSpectrum {
             r: self.r.exp(),
             g: self.g.exp(),
             b: self.b.exp(),
         }
     }
 
-    pub fn lerp(self, s2: Self, t: f64) -> Self {
+    fn lerp(self, s2: Self, t: f64) -> Self {
         self.scale(1. - t) + s2.scale(t)
     }
 
-    pub fn clamp(self, low: f64, high: f64) -> Self {
-        RGBColor {
+    fn clamp(self, low: f64, high: f64) -> Self {
+        RGBSpectrum {
             r: clamp(self.r, low, high),
             g: clamp(self.g, low, high),
             b: clamp(self.b, low, high),
@@ -163,7 +174,7 @@ impl RGBColor {
     }
 
     // Generates CIE 1931 XYZ color space result:
-    pub fn to_xyz(self) -> XYZColor {
+    fn to_xyz(self) -> XYZColor {
         XYZColor {
             x: 0.412453 * self.r + 0.357580 * self.g + 0.180423 * self.b,
             y: 0.212671 * self.r + 0.715160 * self.g + 0.072169 * self.b,
@@ -172,16 +183,16 @@ impl RGBColor {
     }
 
     // Only generates the Y value (as this is often used):
-    pub fn to_y(self) -> f64 {
+    fn to_y(self) -> f64 {
         0.212671 * self.r + 0.715160 * self.g + 0.072169 * self.b
     }
 }
 
-impl Add for RGBColor {
+impl Add for RGBSpectrum {
     type Output = Self;
 
     fn add(self, rhs: Self) -> Self {
-        RGBColor {
+        RGBSpectrum {
             r: self.r + rhs.r,
             g: self.g + rhs.g,
             b: self.b + rhs.b,
@@ -189,11 +200,11 @@ impl Add for RGBColor {
     }
 }
 
-impl Sub for RGBColor {
+impl Sub for RGBSpectrum {
     type Output = Self;
 
     fn sub(self, rhs: Self) -> Self {
-        RGBColor {
+        RGBSpectrum {
             r: self.r - rhs.r,
             g: self.g - rhs.g,
             b: self.b - rhs.b,
@@ -201,11 +212,11 @@ impl Sub for RGBColor {
     }
 }
 
-impl Div for RGBColor {
+impl Div for RGBSpectrum {
     type Output = Self;
 
     fn div(self, rhs: Self) -> Self {
-        RGBColor {
+        RGBSpectrum {
             r: self.r / rhs.r,
             g: self.g / rhs.g,
             b: self.b / rhs.b,
@@ -213,11 +224,11 @@ impl Div for RGBColor {
     }
 }
 
-impl Mul for RGBColor {
+impl Mul for RGBSpectrum {
     type Output = Self;
 
     fn mul(self, rhs: Self) -> Self {
-        RGBColor {
+        RGBSpectrum {
             r: self.r * rhs.r,
             g: self.g * rhs.g,
             b: self.b * rhs.b,
@@ -225,7 +236,7 @@ impl Mul for RGBColor {
     }
 }
 
-impl Index<usize> for RGBColor {
+impl Index<usize> for RGBSpectrum {
     type Output = f64;
 
     fn index(&self, i: usize) -> &f64 {
