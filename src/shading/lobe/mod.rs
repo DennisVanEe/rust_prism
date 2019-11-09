@@ -1,7 +1,7 @@
 pub mod lambertian;
 pub mod oren_nayar;
 pub mod specular;
-//pub mod microfacet;
+pub mod microfacet;
 
 use crate::math::numbers::Float;
 use crate::math::vector::{Vec2, Vec3};

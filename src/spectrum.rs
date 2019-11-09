@@ -67,8 +67,16 @@ impl Index<usize> for XYZColor {
     }
 }
 
-#[derive(Clone, Copy)]
-pub struct RGBColor {
+// The Spectrum trait for different types of 
+pub trait Spectrum {
+    fn from_xyz(xyz: XYZColor) -> Self;
+    fn black() -> Self;
+    fn from_scalar(s: f64) -> Self;
+    
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct RGBSpectrum {
     pub r: f64,
     pub g: f64,
     pub b: f64,
