@@ -1,7 +1,7 @@
 pub mod point;
 
 use crate::math::vector::{Vec2, Vec3};
-use crate::spectrum::RGBSpectrum;
+use crate::spectrum::Spectrum;
 
 use bitflags::bitflags;
 
@@ -33,11 +33,12 @@ pub trait Light {
         surface_point: Vec3<f64>,
         time: f64,
         u: Vec2<f64>,
-    ) -> (RGBSpectrum, Vec3<f64>, f64);
+    ) -> (Spectrum, Vec3<f64>, f64);
 
     fn pdf(&self, surface_point: Vec3<f64>, wi: Vec3<f64>) -> f64;
-
-    fn power(&self) -> RGBSpectrum;
+    fn power(&self) -> Spectrum;
+    // Whether or not the light is a delta (like a point light):
+    fn is_delta(&self) -> bool;
 
     // The number of samples for a particular light. This is mainly useful
     // for area lights. Defaults to 1 (as for point lights):

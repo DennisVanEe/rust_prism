@@ -12,7 +12,7 @@ pub struct Interaction {
     pub n: Vec3<f64>,  // geometric normal (of triangle)
     pub wo: Vec3<f64>, // direction of intersection leaving the point
 
-    pub time: f64, // time when the intersection occured
+    pub t: f64, // the t value of the intersection of the ray (not time).
 
     pub uv: Vec2<f64>,   // uv coordinate at the intersection
     pub dpdu: Vec3<f64>, // vectors parallel to the triangle

@@ -213,7 +213,7 @@ impl Triangle {
     pub fn intersect_test(
         &self,
         ray: Ray<f64>,
-        max_time: f64,
+        max_t: f64,
         int_info: RayIntInfo,
         mesh_data: &MeshData,
     ) -> bool {
@@ -280,24 +280,24 @@ impl Triangle {
             },
         ];
 
-        let time_scaled = e[0] * pt[0].z + e[1] * pt[1].z + e[2] * pt[2].z;
+        let t_scaled = e[0] * pt[0].z + e[1] * pt[1].z + e[2] * pt[2].z;
 
         // Now check if the sign of sum is different from the sign of tScaled, it it is, then no good:
-        if (sum_e < 0. && (time_scaled >= 0. || time_scaled < max_time * sum_e))
-            || (sum_e > 0. && (time_scaled <= 0. || time_scaled > max_time * sum_e))
+        if (sum_e < 0. && (t_scaled >= 0. || t_scaled < max_t * sum_e))
+            || (sum_e > 0. && (t_scaled <= 0. || t_scaled > max_t * sum_e))
         {
             return false;
         };
 
         let inv_sum_e = 1. / sum_e;
-        // The time of the intersection (make sure it's positive):
-        time_scaled * inv_sum_e > 0.
+        // The t of the intersection (make sure it's positive):
+        t_scaled * inv_sum_e > 0.
     }
 
     pub fn intersect(
         &self,
         ray: Ray<f64>,
-        max_time: f64,
+        max_t: f64,
         int_info: RayIntInfo,
         mesh_data: &MeshData,
     ) -> Option<Interaction> {
@@ -364,20 +364,20 @@ impl Triangle {
             },
         ];
 
-        let time_scaled = e[0] * pt[0].z + e[1] * pt[1].z + e[2] * pt[2].z;
+        let t_scaled = e[0] * pt[0].z + e[1] * pt[1].z + e[2] * pt[2].z;
 
         // Now check if the sign of sum is different from the sign of tScaled, it it is, then no good:
-        if (sum_e < 0. && (time_scaled >= 0. || time_scaled < max_time * sum_e))
-            || (sum_e > 0. && (time_scaled <= 0. || time_scaled > max_time * sum_e))
+        if (sum_e < 0. && (t_scaled >= 0. || t_scaled < max_t * sum_e))
+            || (sum_e > 0. && (t_scaled <= 0. || t_scaled > max_t * sum_e))
         {
             return None;
         };
 
         let inv_sum_e = 1. / sum_e;
         // The time of the intersection:
-        let time = time_scaled * inv_sum_e;
+        let t = t_scaled * inv_sum_e;
 
-        if time <= 0. {
+        if t <= 0. {
             return None;
         }
 
@@ -495,7 +495,7 @@ impl Triangle {
             p,
             n,
             wo,
-            time,
+            t,
             uv,
             dpdu,
             dpdv,
@@ -581,13 +581,13 @@ impl BVHObject for Triangle {
     fn intersect_test(
         &self,
         ray: Ray<f64>,
-        max_time: f64,
+        max_t: f64,
         _: f64,
         &(ray_int_info, mesh_data): &Self::IntParam,
     ) -> bool {
         unsafe {
             // Dirty, I know:
-            Triangle::intersect_test(self, ray, max_time, ray_int_info, &*mesh_data)
+            Triangle::intersect_test(self, ray, max_t, ray_int_info, &*mesh_data)
         }
     }
 
@@ -595,13 +595,13 @@ impl BVHObject for Triangle {
     fn intersect(
         &self,
         ray: Ray<f64>,
-        max_time: f64,
+        max_t: f64,
         _: f64,
         &(ray_int_info, mesh_data): &Self::IntParam,
     ) -> Option<Interaction> {
         unsafe {
             // Dirty, I know:
-            Triangle::intersect(self, ray, max_time, ray_int_info, &*mesh_data)
+            Triangle::intersect(self, ray, max_t, ray_int_info, &*mesh_data)
         }
     }
 
@@ -659,25 +659,25 @@ impl Geometry for Mesh {
         s
     }
 
-    fn intersect_test(&self, ray: Ray<f64>, max_time: f64) -> bool {
+    fn intersect_test(&self, ray: Ray<f64>, max_t: f64) -> bool {
         let ray_int_info = calc_rayintinfo(ray);
         // Because in geometry space we aren't moving, curr_time is not needed and we always set it to 0:
         self.bvh.intersect_test(
             ray,
-            max_time,
+            max_t,
             0.,
             &(ray_int_info, &self.mesh_data as *const MeshData),
         )
     }
 
-    fn intersect(&self, ray: Ray<f64>, max_time: f64) -> Option<Interaction> {
+    fn intersect(&self, ray: Ray<f64>, max_t: f64) -> Option<Interaction> {
         let ray_int_info = calc_rayintinfo(ray);
         // Because in geometry space we aren't moving, curr_time is not needed and we always set it to 0.
         // Also, we don't care which triangle we specifically intersected, so we ignore the reference to
         // it when we return the result:
         match self.bvh.intersect(
             ray,
-            max_time,
+            max_t,
             0.,
             &(ray_int_info, &self.mesh_data as *const MeshData),
         ) {

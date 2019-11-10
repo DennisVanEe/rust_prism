@@ -5,7 +5,7 @@ use crate::math::bbox::BBox3;
 use crate::math::ray::Ray;
 use crate::math::vector::{Vec2, Vec3};
 use crate::shading::material::{Bsdf, Material};
-use crate::spectrum::RGBColor;
+use crate::spectrum::Spectrum;
 use crate::transform::Transform;
 
 use bumpalo::Bump;
@@ -155,7 +155,7 @@ impl<'a> SceneLight<'a> {
         surface_point: Vec3<f64>,
         time: f64,
         u: Vec2<f64>,
-    ) -> (RGBSpectrum, Vec3<f64>, f64) {
+    ) -> (Spectrum, Vec3<f64>, f64) {
         let int_light_to_scene = self.light_to_scene.interpolate(time);
         let surface_point = int_light_to_scene.inverse().point(surface_point);
 
@@ -190,17 +190,17 @@ impl<'a> Scene<'a> {
     pub fn intersect(
         &self,
         ray: Ray<f64>,
-        max_time: f64,
+        max_t: f64,
         curr_time: f64,
     ) -> Option<(Interaction, &dyn Material)> {
         // First we traverse the BVH and get what we want:
-        match self.bvh.intersect(ray, max_time, curr_time, &()) {
+        match self.bvh.intersect(ray, max_t, curr_time, &()) {
             Some((i, o)) => Some((i, o.material)),
             _ => None,
         }
     }
 
-    pub fn intersect_test(&self, ray: Ray<f64>, max_time: f64, curr_time: f64) -> bool {
-        self.bvh.intersect_test(ray, max_time, curr_time, &())
+    pub fn intersect_test(&self, ray: Ray<f64>, max_t: f64, curr_time: f64) -> bool {
+        self.bvh.intersect_test(ray, max_t, curr_time, &())
     }
 }

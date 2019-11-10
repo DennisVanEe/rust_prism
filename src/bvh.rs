@@ -18,14 +18,15 @@ pub trait BVHObject {
     fn intersect_test(
         &self,
         ray: Ray<f64>,
-        max_time: f64,
+        max_t: f64,
         curr_time: f64,
         int_info: &Self::IntParam,
     ) -> bool;
+
     fn intersect(
         &self,
         ray: Ray<f64>,
-        max_time: f64,
+        max_t: f64,
         curr_time: f64,
         int_info: &Self::IntParam,
     ) -> Option<Interaction>;
@@ -73,7 +74,7 @@ impl<O: BVHObject> BVH<O> {
     pub fn intersect(
         &self,
         ray: Ray<f64>,
-        mut max_time: f64,
+        mut max_t: f64,
         curr_time: f64,
         int_info: &O::IntParam,
     ) -> Option<(Interaction, &O)> {
@@ -92,7 +93,7 @@ impl<O: BVHObject> BVH<O> {
             let curr_node = *unsafe { self.linear_nodes.get_unchecked(curr_node_index) };
             if curr_node
                 .bound
-                .intersect_test(ray, max_time, inv_dir, is_dir_neg)
+                .intersect_test(ray, max_t, inv_dir, is_dir_neg)
             {
                 match curr_node.kind {
                     LinearNodeKind::Leaf {
@@ -104,10 +105,10 @@ impl<O: BVHObject> BVH<O> {
                         unsafe {
                             for obj in self.objects.get_unchecked(obj_start..obj_end).iter() {
                                 if let Some(intersection) =
-                                    obj.intersect(ray, max_time, curr_time, int_info)
+                                    obj.intersect(ray, max_t, curr_time, int_info)
                                 {
                                     // Update the max time for more efficient culling:
-                                    max_time = intersection.time;
+                                    max_t = intersection.t;
                                     // Can't return immediately, have to make sure this is the closest intersection
                                     result = Some((intersection, obj));
                                 }
@@ -155,7 +156,7 @@ impl<O: BVHObject> BVH<O> {
     pub fn intersect_test(
         &self,
         ray: Ray<f64>,
-        max_time: f64,
+        max_t: f64,
         curr_time: f64,
         int_info: &O::IntParam,
     ) -> bool {
@@ -172,7 +173,7 @@ impl<O: BVHObject> BVH<O> {
             let curr_node = *unsafe { self.linear_nodes.get_unchecked(curr_node_index) };
             if curr_node
                 .bound
-                .intersect_test(ray, max_time, inv_dir, is_dir_neg)
+                .intersect_test(ray, max_t, inv_dir, is_dir_neg)
             {
                 match curr_node.kind {
                     LinearNodeKind::Leaf {
@@ -183,7 +184,7 @@ impl<O: BVHObject> BVH<O> {
                         let obj_end = obj_end_index as usize;
                         unsafe {
                             for obj in self.objects.get_unchecked(obj_start..obj_end).iter() {
-                                if obj.intersect_test(ray, max_time, curr_time, int_info) {
+                                if obj.intersect_test(ray, max_t, curr_time, int_info) {
                                     return true;
                                 }
                             }

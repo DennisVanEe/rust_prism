@@ -4,7 +4,7 @@ pub mod plastic;
 use crate::geometry::Interaction;
 use crate::math::vector::{Vec2, Vec3};
 use crate::shading::lobe::{Lobe, LobeType};
-use crate::spectrum::RGBSpectrum;
+use crate::spectrum::Spectrum;
 
 use arrayvec::ArrayVec;
 use bumpalo::Bump;
@@ -32,7 +32,7 @@ impl<'a> Bsdf<'a> {
         // ArrayVec has no clone_from_slice function, so we do it this way:
         let mut lobes = ArrayVec::<[_; MAX_NUM_LOBES]>::new();
         for &lobe in in_lobes {
-            unsafe { lobes.push_unchecked(lobe) };
+            lobes.push(lobe);
         }
 
         let s = interaction.dpdu.normalize();
@@ -89,7 +89,8 @@ impl<'a> Bsdf<'a> {
         })
     }
 
-    pub fn eval(&self, wo: Vec3<f64>, wi: Vec3<f64>, fl: LobeType) -> RGBSpectrum {
+    // Both wo and wi here are in world space:
+    pub fn eval(&self, wo: Vec3<f64>, wi: Vec3<f64>, fl: LobeType) -> Spectrum {
         // To prevent light leaking and dark spots, we need to check if wi and wo
         // are on the same side according to the geometric normal:
         let is_reflect = wi.dot(self.geometry_n) * wo.dot(self.geometry_n) > 0.;
@@ -97,7 +98,7 @@ impl<'a> Bsdf<'a> {
         let wo = self.world_to_shading(wo);
         let wi = self.world_to_shading(wi);
 
-        self.lobes.iter().fold(RGBSpectrum::black(), |f, &lobe| {
+        self.lobes.iter().fold(Spectrum::black(), |f, &lobe| {
             // Make sure that, if it is reflected, then the lobe ONLY has reflection,
             // and if it isn't, then the lobe ONLY has transmission:
             if lobe.matches_type(fl)
@@ -111,6 +112,24 @@ impl<'a> Bsdf<'a> {
         })
     }
 
+    // Both wo and wi here are in world space:
+    pub fn pdf(&self, wo: Vec3<f64>, wi: Vec3<f64>, fl: LobeType) -> f64 {
+        // Transform them to shading space first:
+        let wo = self.world_to_shading(wo);
+        let wi = self.world_to_shading(wi);
+
+        // We are essentially averaging the pdfs that match the flags:
+        let (pdf, num_has_type) = self.lobes.iter().fold((0., 0usize), |(pdf_sum, count), &lobe| {
+            // Don't double count the lobe we sampled:
+            if lobe.matches_type(fl) {
+                (pdf_sum + lobe.pdf(wo, wi), count + 1)
+            } else {
+                (pdf_sum, count)
+            }
+        });
+        pdf / (num_has_type as f64)
+    }
+
     // Returns, in the following order:
     // Resulting throughput, wi (world space), pdf, lobe type of lobe samples (as option, in case there is no lobe sampled):
     pub fn sample(
@@ -118,10 +137,10 @@ impl<'a> Bsdf<'a> {
         world_wo: Vec3<f64>,
         u: Vec2<f64>,
         lobe_type: LobeType,
-    ) -> (RGBSpectrum, Vec3<f64>, f64, Option<LobeType>) {
+    ) -> (Spectrum, Vec3<f64>, f64, Option<LobeType>) {
         let num_has_type = self.num_has_type(lobe_type);
         if num_has_type == 0 {
-            return (RGBSpectrum::black(), Vec3::zero(), 0., None);
+            return (Spectrum::black(), Vec3::zero(), 0., None);
         }
         // TODO: pick a wiser selection algorithm for lobes that are much more
         // likely to be called instead of using just a uniform approach:
@@ -203,8 +222,8 @@ impl<'a> Bsdf<'a> {
         (throughput, world_wi, pdf, Some(sampled_lobe_type))
     }
 
-    pub fn rho_hd(&self, wo: Vec3<f64>, samples: &[Vec2<f64>], fl: LobeType) -> RGBSpectrum {
-        self.lobes.iter().fold(RGBSpectrum::black(), |f, &lobe| {
+    pub fn rho_hd(&self, wo: Vec3<f64>, samples: &[Vec2<f64>], fl: LobeType) -> Spectrum {
+        self.lobes.iter().fold(Spectrum::black(), |f, &lobe| {
             // Make sure that, if it is reflected, then the lobe ONLY has reflection,
             // and if it isn't, then the lobe ONLY has transmission:
             if lobe.matches_type(fl) {
@@ -220,8 +239,8 @@ impl<'a> Bsdf<'a> {
         samples0: &[Vec2<f64>],
         samples1: &[Vec2<f64>],
         fl: LobeType,
-    ) -> RGBSpectrum {
-        self.lobes.iter().fold(RGBSpectrum::black(), |f, &lobe| {
+    ) -> Spectrum {
+        self.lobes.iter().fold(Spectrum::black(), |f, &lobe| {
             // Make sure that, if it is reflected, then the lobe ONLY has reflection,
             // and if it isn't, then the lobe ONLY has transmission:
             if lobe.matches_type(fl) {
