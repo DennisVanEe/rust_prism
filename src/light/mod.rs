@@ -1,4 +1,5 @@
 pub mod point;
+pub mod area;
 
 use crate::math::vector::{Vec2, Vec3};
 use crate::spectrum::Spectrum;
@@ -37,6 +38,7 @@ pub trait Light {
 
     fn pdf(&self, surface_point: Vec3<f64>, wi: Vec3<f64>) -> f64;
     fn power(&self) -> Spectrum;
+
     // Whether or not the light is a delta (like a point light):
     fn is_delta(&self) -> bool;
 

@@ -137,10 +137,10 @@ impl<'a> Bsdf<'a> {
         world_wo: Vec3<f64>,
         u: Vec2<f64>,
         lobe_type: LobeType,
-    ) -> (Spectrum, Vec3<f64>, f64, Option<LobeType>) {
+    ) -> (Spectrum, Vec3<f64>, f64, LobeType) {
         let num_has_type = self.num_has_type(lobe_type);
         if num_has_type == 0 {
-            return (Spectrum::black(), Vec3::zero(), 0., None);
+            return (Spectrum::black(), Vec3::zero(), 0., LobeType::NONE);
         }
         // TODO: pick a wiser selection algorithm for lobes that are much more
         // likely to be called instead of using just a uniform approach:
@@ -219,7 +219,7 @@ impl<'a> Bsdf<'a> {
             throughput
         };
 
-        (throughput, world_wi, pdf, Some(sampled_lobe_type))
+        (throughput, world_wi, pdf, sampled_lobe_type)
     }
 
     pub fn rho_hd(&self, wo: Vec3<f64>, samples: &[Vec2<f64>], fl: LobeType) -> Spectrum {

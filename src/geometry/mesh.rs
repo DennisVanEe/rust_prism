@@ -504,6 +504,8 @@ impl Triangle {
             shading_dpdv,
             shading_dndu,
             shading_dndv,
+            // defaults to None
+            light: None,
         })
     }
 

@@ -67,7 +67,7 @@ impl Geometry for Sphere {
         self.phi_max * self.radius * (self.z_max - self.z_min)
     }
 
-    fn intersect(&self, ray: Ray<f64>, max_time: f64) -> Option<Interaction> {
+    fn intersect(&self, ray: Ray<f64>, max_t: f64) -> Option<Interaction> {
         // Now we need to solve the following quadratic equation:
         let a = ray.dir.dot(ray.dir);
         let b = 2. * ray.dir.dot(ray.org);
@@ -78,18 +78,18 @@ impl Geometry for Sphere {
             _ => return None,
         };
 
-        if t0 > max_time || t1 <= 0. {
+        if t0 > max_t || t1 <= 0. {
             return None;
         }
 
-        let time = if t0 <= 0. { t1 } else { t0 };
+        let t = if t0 <= 0. { t1 } else { t0 };
 
-        if time > max_time {
+        if t > max_t {
             return None;
         }
 
         // Get the hit point of the intersection in a robust manner:
-        let p = ray.org + ray.dir.scale(time);
+        let p = ray.org + ray.dir.scale(t);
         let p = p.scale(self.radius / p.length());
         let p = if p.x == 0. && p.y == 0. {
             Vec3 {
@@ -111,20 +111,20 @@ impl Geometry for Sphere {
         // Check against the climping values of the sphere. If this doesn't
         // work, we might have to update the values we just calculated using
         // t1 instead of t0 (if t1 was already being used, we are done):
-        let (time, p, phi) = if (self.z_min > -self.radius && p.z < self.z_min)
+        let (t, p, phi) = if (self.z_min > -self.radius && p.z < self.z_min)
             || (self.z_max < self.radius && p.z > self.z_max)
             || phi > self.phi_max
         {
             // Make sure that t1 is a valid choice:
-            if time == t1 {
+            if t == t1 {
                 return None;
             }
-            if t1 > max_time {
+            if t1 > max_t {
                 return None;
             }
             // Calculate p_hit and phi with the new t values here:
-            let time = t1;
-            let p = ray.org + ray.dir.scale(time);
+            let t = t1;
+            let p = ray.org + ray.dir.scale(t);
             let p = p.scale(self.radius / p.length());
             let p = if p.x == 0. && p.y == 0. {
                 Vec3 {
@@ -150,10 +150,10 @@ impl Geometry for Sphere {
                 return None;
             }
 
-            (time, p, phi)
+            (t, p, phi)
         // We intersected the correct point:
         } else {
-            (time, p, phi)
+            (t, p, phi)
         };
 
         // Calculate the u,v coordinates:
@@ -216,7 +216,7 @@ impl Geometry for Sphere {
             p,
             n,
             wo: -ray.dir,
-            time,
+            t,
             uv: Vec2 { x: u, y: v },
             dpdu,
             dpdv,
@@ -227,6 +227,7 @@ impl Geometry for Sphere {
             shading_dpdv: dpdv,
             shading_dndu: dndu,
             shading_dndv: dndv,
+            light: None,
         })
     }
 
@@ -245,14 +246,14 @@ impl Geometry for Sphere {
             return false;
         }
 
-        let time = if t0 <= 0. { t1 } else { t0 };
+        let t = if t0 <= 0. { t1 } else { t0 };
 
-        if time > max_time {
+        if t > max_time {
             return false;
         }
 
         // Get the hit point of the intersection in a robust manner:
-        let p = ray.org + ray.dir.scale(time);
+        let p = ray.org + ray.dir.scale(t);
         let p = p.scale(self.radius / p.length());
         let p = if p.x == 0. && p.y == 0. {
             Vec3 {
@@ -279,15 +280,15 @@ impl Geometry for Sphere {
             || phi > self.phi_max
         {
             // Make sure that t1 is a valid choice:
-            if time == t1 {
+            if t == t1 {
                 return false;
             }
             if t1 > max_time {
                 return false;
             }
             // Calculate p_hit and phi with the new t values here:
-            let time = t1;
-            let p = ray.org + ray.dir.scale(time);
+            let t = t1;
+            let p = ray.org + ray.dir.scale(t);
             let p = p.scale(self.radius / p.length());
             let p = if p.x == 0. && p.y == 0. {
                 Vec3 {

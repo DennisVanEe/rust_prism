@@ -4,10 +4,12 @@ pub mod sphere;
 use crate::math::bbox::BBox3;
 use crate::math::ray::Ray;
 use crate::math::vector::{Vec2, Vec3};
+use crate::light::area::AreaLight;
+use crate::spectrum::Spectrum;
 
 // Stores the result of an intersection:
-#[derive(Clone, Copy, Debug)]
-pub struct Interaction {
+#[derive(Clone, Copy)]
+pub struct Interaction<'a> {
     pub p: Vec3<f64>,  // intersection point
     pub n: Vec3<f64>,  // geometric normal (of triangle)
     pub wo: Vec3<f64>, // direction of intersection leaving the point
@@ -23,6 +25,19 @@ pub struct Interaction {
     pub shading_dpdv: Vec3<f64>,
     pub shading_dndu: Vec3<f64>, // the shading dndu, dndv at this point
     pub shading_dndv: Vec3<f64>,
+
+    pub light: Option<&'a dyn AreaLight>, // intersection might be a light source if it's an area light
+}
+
+impl<'a> Interaction<'a> {
+    // Calculates the emitted radiance from the surface in the given direction.
+    // If there is no light attached to it, then it returns black
+    pub fn emit_radiance(self, w: Vec3<f64>) -> Spectrum {
+        match self.light {
+            Some(light) => light.eval(self, w),
+            None => Spectrum::black(),
+        }
+    }
 }
 
 // The basic geometry trait defines the geometry that PRISM can intersect.

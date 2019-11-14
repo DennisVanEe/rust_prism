@@ -26,6 +26,23 @@ pub trait Integrator {
     fn render(&mut self, scene: &Scene);
 }
 
+// Calculates the balance heurisitc for the first distribution provided out of the two:
+fn balance_heuristic(num_samples: usize, pdf: f64, num_samples_o: usize, pdf_o: f64) -> f64 {
+    let num_samples = num_samples as f64;
+    let num_samples_o = num_samples_o as f64;
+    (num_samples * pdf) / (num_samples * pdf + num_samples_o + pdf_o)
+}
+
+// Calculates the power heurisitc for the first distribution provided out of the two.
+// Here, the power (beta) is 2:
+fn power2_heuristic(num_samples: usize, pdf: f64, num_samples_o: usize, pdf_o: f64) -> f64 {
+    let num_samples = num_samples as f64;
+    let num_samples_o = num_samples_o as f64;
+    let s = num_samples * pdf;
+    let s_o = num_samples_o * pdf_o;
+    (s * s) / (s * s + s_o * s_o)
+}
+
 // Call this if you only have a single random value to sample:
 fn estimate_direct<S: Sampler>(
     // Geometric information of our current position:
@@ -36,11 +53,12 @@ fn estimate_direct<S: Sampler>(
     curr_time: f64,
     // The current scene that the light belongs to (for shadow ray testing):
     scene: &Scene,
-    // Light sample and light we care about:
+
     light_sample: Vec2<f64>,
+    bsdf_sample: Vec2<f64>,
     light: &dyn Light) -> Spectrum {
 
-    let (li, light_pos, light_pdf) = light.sample(int.p, curr_time, light_sample);
+    let (light_result, light_pos, light_pdf) = light.sample(int.p, curr_time, light_sample);
     // wi points away from the surface and is normalized:
     let wi = (light_pos - int.p).normalize();
     // Now we check whether or not it's occluded:
@@ -48,25 +66,52 @@ fn estimate_direct<S: Sampler>(
         return Spectrum::black();
     }
 
-    if light_pdf > 0. && !li.is_black() {
+    // Calculate how much the light contributes in this case. Sampling it only once.
+    let light_contrib = if light_pdf > 0. && !light_result.is_black() {
         // TODO: figure out what lobe flags we should use here:
-        // Evaluate rendering equation here:
-        let result = bsdf.eval(int.wo, wi, LobeType::ALL).scale(wi.dot(int.shading_n));
-        let pdf = bsdf.pdf(int.wo, wi, LobeType::ALL);
+        // Evaulate the bsdf at the surface:
+        let bsdf_result = bsdf.eval(int.wo, wi, LobeType::ALL).scale(wi.dot(int.shading_n).abs());
+        let bsdf_pdf = bsdf.pdf(int.wo, wi, LobeType::ALL);
 
         // Check if the light is a "delta light". This is a special case that 
         // always returns 1 for the pdf. If that is the case, we don't have to
         // worry about MIS:
         if light.is_delta() {
-            result * li.div_scale(pdf);
+            // Normal monte carlo estimator:
+            bsdf_result * light_result.div_scale(light_pdf)
         } else {
-
+            // MIS monte carlo estimator:
+            let mis_w = power2_heuristic(1, light_pdf, 1, bsdf_pdf);
+            (bsdf_result * light_result).scale(mis_w / light_pdf)
         }
-
-        Spectrum::black()
     } else {
         Spectrum::black()
-    }
+    };
+
+    // Now we see how much the bsdf contributes:
+    let bsdf_contrib = if !light.is_delta() {
+        // Sample the bsdf (TODO: figure out the LobeType flag).
+        // The bsdf only returns None for the lobe type if none of the types of lobes
+        // we are sampling match it:
+        let (bsdf_result, bsdf_wi, bsdf_pdf, lobe_type) = bsdf.sample(int.wo, bsdf_sample, LobeType::ALL);
+        if !bsdf_result.is_black() && bsdf_pdf > 0. {
+            // Project it:
+            let bsdf_result = bsdf_result.scale(bsdf_wi.dot(int.shading_n).abs());
+            // Only bother sampling the light if the lobe isn't specular. If it is,
+            // it's unlikely we will hit it:
+            if !lobe_type.contains(LobeType::SPECULAR) {
+                // TODO: figure out how to handle the case of area lights. I think I'll do what
+                // pbrt does and have some meshes with an attached light. This should allow for emissive
+                // geometry and whatnot. I'll see how much I can control it (might add support for textures and
+                // whatnot to the light):
+                
+            }
+        }
+    } else {
+        // If it's a delta distribution, then don't bother contributing
+        // anything from the bsdf as there is no way we'll hit it:
+        Spectrum::black()
+    };
 }
 
 

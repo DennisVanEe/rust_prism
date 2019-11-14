@@ -21,6 +21,8 @@ bitflags! {
         const DIFFUSE = 1 << 2;
         const GLOSSY = 1 << 3;
         const SPECULAR = 1 << 4;
+        // Useful for certain situations:
+        const NONE = 1 << 5;
         const ALL = Self::REFLECTION.bits |
             Self::TRANSMISSION.bits | Self::DIFFUSE.bits |
             Self::GLOSSY.bits | Self::SPECULAR.bits;
