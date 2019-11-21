@@ -1,5 +1,5 @@
 use crate::bvh::{BVHObject, BVH};
-use crate::geometry::{Geometry, Interaction};
+use crate::geometry::{Geometry, GeometryInteraction};
 use crate::math::bbox::BBox3;
 use crate::math::ray::Ray;
 use crate::math::util::{align, coord_system};
@@ -300,7 +300,7 @@ impl Triangle {
         max_t: f64,
         int_info: RayIntInfo,
         mesh_data: &MeshData,
-    ) -> Option<Interaction> {
+    ) -> Option<GeometryInteraction> {
         let poss = self.get_poss(mesh_data);
 
         let pt = [poss[0] - ray.org, poss[1] - ray.org, poss[2] - ray.org];
@@ -491,7 +491,7 @@ impl Triangle {
 
         let wo = -ray.dir;
 
-        Some(Interaction {
+        Some(GeometryInteraction {
             p,
             n,
             wo,
@@ -600,7 +600,7 @@ impl BVHObject for Triangle {
         max_t: f64,
         _: f64,
         &(ray_int_info, mesh_data): &Self::IntParam,
-    ) -> Option<Interaction> {
+    ) -> Option<GeometryInteraction> {
         unsafe {
             // Dirty, I know:
             Triangle::intersect(self, ray, max_t, ray_int_info, &*mesh_data)
@@ -672,7 +672,7 @@ impl Geometry for Mesh {
         )
     }
 
-    fn intersect(&self, ray: Ray<f64>, max_t: f64) -> Option<Interaction> {
+    fn intersect(&self, ray: Ray<f64>, max_t: f64) -> Option<GeometryInteraction> {
         let ray_int_info = calc_rayintinfo(ray);
         // Because in geometry space we aren't moving, curr_time is not needed and we always set it to 0.
         // Also, we don't care which triangle we specifically intersected, so we ignore the reference to

@@ -1,4 +1,3 @@
-use crate::geometry::Interaction;
 use crate::math::bbox::BBox3;
 use crate::math::ray::Ray;
 use crate::math::vector::Vec3;
@@ -13,6 +12,8 @@ pub trait BVHObject {
     type IntParam;
     // Any additional information for calculatig the bounds or centroids:
     type DataParam;
+    // What is returned when intersecting the object:
+    type IntResult;
 
     // The intersection algorithms need to support potentially moving objects:
     fn intersect_test(
@@ -29,7 +30,7 @@ pub trait BVHObject {
         max_t: f64,
         curr_time: f64,
         int_info: &Self::IntParam,
-    ) -> Option<Interaction>;
+    ) -> Option<IntResult>;
 
     fn get_centroid(&self, data: &Self::DataParam) -> Vec3<f64>;
     fn get_bound(&self, data: &Self::DataParam) -> BBox3<f64>;
@@ -77,7 +78,7 @@ impl<O: BVHObject> BVH<O> {
         mut max_t: f64,
         curr_time: f64,
         int_info: &O::IntParam,
-    ) -> Option<(Interaction, &O)> {
+    ) -> Option<(O::IntResult, &O)> {
         // This function has to be very efficient, so I'll be using a lot of unsafe code
         // here (but everything I'm doing should still be defined behavior).
         let inv_dir = ray.dir.inv_scale(1.);

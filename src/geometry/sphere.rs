@@ -1,4 +1,4 @@
-use crate::geometry::{Geometry, Interaction};
+use crate::geometry::{Geometry, GeometryInteraction};
 use crate::math::bbox::BBox3;
 use crate::math::ray::Ray;
 use crate::math::util::quadratic;
@@ -67,7 +67,7 @@ impl Geometry for Sphere {
         self.phi_max * self.radius * (self.z_max - self.z_min)
     }
 
-    fn intersect(&self, ray: Ray<f64>, max_t: f64) -> Option<Interaction> {
+    fn intersect(&self, ray: Ray<f64>, max_t: f64) -> Option<GeometryInteraction> {
         // Now we need to solve the following quadratic equation:
         let a = ray.dir.dot(ray.dir);
         let b = 2. * ray.dir.dot(ray.org);
@@ -212,7 +212,7 @@ impl Geometry for Sphere {
             + dpdv.scale(inv_begf2 * (f * bf - g * be)))
         .normalize();
 
-        Some(Interaction {
+        Some(GeometryInteraction {
             p,
             n,
             wo: -ray.dir,

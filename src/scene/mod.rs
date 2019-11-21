@@ -1,6 +1,8 @@
+pub mod scene_builder;
+
 use crate::bvh::{BVHObject, BVH};
 use crate::geometry::{Geometry, GeometryInteraction};
-use crate::light::Light;
+use crate::light::area::AreaLight;
 use crate::math::bbox::BBox3;
 use crate::math::ray::Ray;
 use crate::math::vector::{Vec2, Vec3};
@@ -11,22 +13,30 @@ use crate::transform::Transform;
 use bumpalo::Bump;
 
 // The interaction that 
-struct SceneModelInteraction {
+struct SceneModelInteraction<'a> {
+    // The geometry interaction portion:
+    geometry: GeometryInteraction,
+    light: Option<&'a dyn Light>,
+}
 
+// Whether or not the scene model 
+enum SceneModelType<'a> {
+    Light(&'a dyn Light),
+    Material(&'a dyn Material),
 }
 
 // A model has information regarding the transformation of geometry in the world.
 // This is to allow for basic instancing.
 struct SceneModel<'a> {
     geometry: &'a dyn Geometry,
-    material: &'a dyn Material,
+    type: SceneModelType<'a>,
     geom_to_world: &'a dyn Transform,
 }
 
 impl<'a> BVHObject for SceneModel<'a> {
     type IntParam = ();
     type DataParam = ();
-    type IntResult = 
+    type IntResult = SceneModelInteraction<'a>,
 
     fn intersect_test(
         &self,
@@ -47,10 +57,10 @@ impl<'a> BVHObject for SceneModel<'a> {
         max_time: f64,
         curr_time: f64,
         _: &Self::IntParam,
-    ) -> Option<Interaction> {
+    ) -> Option<SceneModelInteraction<'a>> {
         let int_geom_to_world = self.geom_to_world.interpolate(curr_time);
         let ray = int_geom_to_world.inverse().ray(ray);
-        match self.geometry.intersect(ray, max_time) {
+        let geom_int = match self.geometry.intersect(ray, max_time) {
             // Don't forget to transform it back to the original space we care about:
             Some(i) => Some(int_geom_to_world.interaction(i)),
             _ => None,
