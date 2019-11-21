@@ -1,42 +1,57 @@
 pub mod scene_builder;
 
+use self::scene_builder::SceneBuilder;
+
 use crate::bvh::{BVHObject, BVH};
 use crate::geometry::{Geometry, GeometryInteraction};
 use crate::light::area::AreaLight;
+use crate::light::Light;
 use crate::math::bbox::BBox3;
 use crate::math::ray::Ray;
 use crate::math::vector::{Vec2, Vec3};
-use crate::shading::material::{Bsdf, Material};
+use crate::shading::material::Material;
 use crate::spectrum::Spectrum;
 use crate::transform::Transform;
 
 use bumpalo::Bump;
 
-// The interaction that 
-struct SceneModelInteraction<'a> {
-    // The geometry interaction portion:
-    geometry: GeometryInteraction,
-    light: Option<&'a dyn Light>,
+// The type of SceneModel we are dealing with (an area light
+// or a material):
+enum SceneObjectType<'a> {
+    Light(&'a dyn AreaLight),
+    Material(&'a dyn Material),
 }
 
-// Whether or not the scene model 
-enum SceneModelType<'a> {
-    Light(&'a dyn Light),
-    Material(&'a dyn Material),
+// The interaction that
+struct SceneObjectInteraction<'a> {
+    // The geometry interaction portion:
+    geometry: GeometryInteraction,
+    obj_type: SceneObjectType<'a>,
+}
+
+impl<'a> SceneObjectInteraction<'a> {
+    // If the scene object emits any radiance, it returns it, otherwise
+    // it returns black:
+    pub fn emit_radiance(self, w: Vec3<f64>) -> Spectrum {
+        match self.obj_type {
+            SceneObjectType::Light(l) => l.eval(self, w),
+            _ => Spectrum::black(),
+        }
+    }
 }
 
 // A model has information regarding the transformation of geometry in the world.
 // This is to allow for basic instancing.
-struct SceneModel<'a> {
-    geometry: &'a dyn Geometry,
-    type: SceneModelType<'a>,
-    geom_to_world: &'a dyn Transform,
+struct SceneObject<'a> {
+    geometry: &'a dyn Geometry, // The geometry that represents the scene object
+    obj_type: SceneObjectType<'a>, // The type of information that is associated with the object
+    geom_to_world: &'a dyn Transform, // The transform of the scene object
 }
 
-impl<'a> BVHObject for SceneModel<'a> {
+impl<'a> BVHObject for SceneObject<'a> {
     type IntParam = ();
     type DataParam = ();
-    type IntResult = SceneModelInteraction<'a>,
+    type IntResult = SceneObjectInteraction<'a>;
 
     fn intersect_test(
         &self,
@@ -57,12 +72,16 @@ impl<'a> BVHObject for SceneModel<'a> {
         max_time: f64,
         curr_time: f64,
         _: &Self::IntParam,
-    ) -> Option<SceneModelInteraction<'a>> {
+    ) -> Option<SceneObjectInteraction> {
+        // First we transform the ray to the object's local space:
         let int_geom_to_world = self.geom_to_world.interpolate(curr_time);
         let ray = int_geom_to_world.inverse().ray(ray);
-        let geom_int = match self.geometry.intersect(ray, max_time) {
-            // Don't forget to transform it back to the original space we care about:
-            Some(i) => Some(int_geom_to_world.interaction(i)),
+        // Then we intersect the object and check if we hit something:
+        match self.geometry.intersect(ray, max_time) {
+            Some(i) => Some(SceneObjectInteraction {
+                geometry: i,
+                obj_type: self.obj_type,
+            }),
             _ => None,
         }
     }
@@ -104,7 +123,7 @@ impl<'a> SceneLight<'a> {
 pub struct Scene<'a> {
     allocator: Bump,
     //lights: Vec<SceneLight<'a>>,
-    bvh: BVH<SceneGeometry<'a>>,
+    bvh: BVH<SceneObject<'a>>,
 }
 
 impl<'a> Scene<'a> {
@@ -127,10 +146,10 @@ impl<'a> Scene<'a> {
         ray: Ray<f64>,
         max_t: f64,
         curr_time: f64,
-    ) -> Option<(Interaction, &dyn Material)> {
+    ) -> Option<SceneObjectInteraction> {
         // First we traverse the BVH and get what we want:
         match self.bvh.intersect(ray, max_t, curr_time, &()) {
-            Some((i, o)) => Some((i, o.material)),
+            Some((i, _)) => Some(i),
             _ => None,
         }
     }

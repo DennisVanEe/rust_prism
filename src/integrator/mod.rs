@@ -2,13 +2,13 @@ pub mod direct_light;
 
 use crate::geometry::Interaction;
 use crate::light::Light;
+use crate::math::ray::Ray;
+use crate::math::vector::Vec2;
 use crate::sampler::Sampler;
 use crate::scene::Scene;
-use crate::spectrum::Spectrum;
-use crate::math::vector::Vec2;
-use crate::math::ray::Ray;
-use crate::shading::material::Bsdf;
 use crate::shading::lobe::LobeType;
+use crate::shading::material::Bsdf;
+use crate::spectrum::Spectrum;
 
 use std::f64;
 
@@ -56,13 +56,20 @@ fn estimate_direct<S: Sampler>(
 
     light_sample: Vec2<f64>,
     bsdf_sample: Vec2<f64>,
-    light: &dyn Light) -> Spectrum {
-
+    light: &dyn Light,
+) -> Spectrum {
     let (light_result, light_pos, light_pdf) = light.sample(int.p, curr_time, light_sample);
     // wi points away from the surface and is normalized:
     let wi = (light_pos - int.p).normalize();
     // Now we check whether or not it's occluded:
-    if scene.intersect_test(Ray { org: int.p, dir: wi }, f64::INFINITY, curr_time) {
+    if scene.intersect_test(
+        Ray {
+            org: int.p,
+            dir: wi,
+        },
+        f64::INFINITY,
+        curr_time,
+    ) {
         return Spectrum::black();
     }
 
@@ -70,10 +77,12 @@ fn estimate_direct<S: Sampler>(
     let light_contrib = if light_pdf > 0. && !light_result.is_black() {
         // TODO: figure out what lobe flags we should use here:
         // Evaulate the bsdf at the surface:
-        let bsdf_result = bsdf.eval(int.wo, wi, LobeType::ALL).scale(wi.dot(int.shading_n).abs());
+        let bsdf_result = bsdf
+            .eval(int.wo, wi, LobeType::ALL)
+            .scale(wi.dot(int.shading_n).abs());
         let bsdf_pdf = bsdf.pdf(int.wo, wi, LobeType::ALL);
 
-        // Check if the light is a "delta light". This is a special case that 
+        // Check if the light is a "delta light". This is a special case that
         // always returns 1 for the pdf. If that is the case, we don't have to
         // worry about MIS:
         if light.is_delta() {
@@ -93,7 +102,8 @@ fn estimate_direct<S: Sampler>(
         // Sample the bsdf (TODO: figure out the LobeType flag).
         // The bsdf only returns None for the lobe type if none of the types of lobes
         // we are sampling match it:
-        let (bsdf_result, bsdf_wi, bsdf_pdf, lobe_type) = bsdf.sample(int.wo, bsdf_sample, LobeType::ALL);
+        let (bsdf_result, bsdf_wi, bsdf_pdf, lobe_type) =
+            bsdf.sample(int.wo, bsdf_sample, LobeType::ALL);
         if !bsdf_result.is_black() && bsdf_pdf > 0. {
             // Project it:
             let bsdf_result = bsdf_result.scale(bsdf_wi.dot(int.shading_n).abs());
@@ -104,7 +114,6 @@ fn estimate_direct<S: Sampler>(
                 // pbrt does and have some meshes with an attached light. This should allow for emissive
                 // geometry and whatnot. I'll see how much I can control it (might add support for textures and
                 // whatnot to the light):
-                
             }
         }
     } else {
@@ -113,7 +122,6 @@ fn estimate_direct<S: Sampler>(
         Spectrum::black()
     };
 }
-
 
 // Some important functions that may be useful for all integrators:
 
@@ -127,20 +135,20 @@ fn uniform_sample_all_lights<S: Sampler>(
     sampler: &mut S,
 ) -> Spectrum {
     // Loop over all the lights in the scene here:
-    lights.iter().fold(Spectrum::black(),
-        |total, &curr_light| {
-            // Don't worry about scattering media for now:
-            let light_samples = sampler.get_2d_array();
-            if light_samples.is_empty() {
-                total + estimate_direct()
-            } else {
-                let sum_samples = light_samples.iter().fold(Spectrum::black(),
-                    |total, &curr_sample| {
-                        total + estimate_direct()
-                    });
-                total + (sum_samples.div_scale(light_samples.len() as f64))
-            }
-        })
+    lights.iter().fold(Spectrum::black(), |total, &curr_light| {
+        // Don't worry about scattering media for now:
+        let light_samples = sampler.get_2d_array();
+        if light_samples.is_empty() {
+            total + estimate_direct()
+        } else {
+            let sum_samples = light_samples
+                .iter()
+                .fold(Spectrum::black(), |total, &curr_sample| {
+                    total + estimate_direct()
+                });
+            total + (sum_samples.div_scale(light_samples.len() as f64))
+        }
+    })
 }
 
 fn uniform_sample_one_light<S: Sampler>(

@@ -1,5 +1,7 @@
+use super::{SceneObject, SceneObjectType};
+
 use crate::geometry::Geometry;
-use crate::math::vector::{Vec2, Vec3};
+use crate::shading::material::Material;
 use crate::transform::Transform;
 
 use bumpalo::Bump;
@@ -10,12 +12,12 @@ use std::mem::{transmute, ManuallyDrop};
 
 // This is used to setup all of the scene information:
 pub struct SceneBuilder<'a> {
-    allocator: Bump,
+    pub(super) allocator: Bump,
     // Both of these are manually dropped to safe on memory as they won't
     // be needed when we are actually rendering:
-    geometry_ids: ManuallyDrop<HashMap<String, &'a dyn Geometry>>,
-    material_ids: ManuallyDrop<HashMap<String, &'a dyn Material>>,
-    models: Vec<SceneGeometry<'a>>,
+    pub(super) geometry_ids: ManuallyDrop<HashMap<String, &'a dyn Geometry>>,
+    pub(super) material_ids: ManuallyDrop<HashMap<String, &'a dyn Material>>,
+    pub(super) models: Vec<SceneObject<'a>>,
 }
 
 impl<'a> SceneBuilder<'a> {
@@ -57,7 +59,8 @@ impl<'a> SceneBuilder<'a> {
         Ok(())
     }
 
-    pub fn add_model<T: Transform>(
+    // A scene object associated with a material:
+    pub fn add_material_object<T: Transform>(
         &mut self,
         geometry_id: &str,
         material_id: &str,
@@ -76,9 +79,9 @@ impl<'a> SceneBuilder<'a> {
         // determine what to do:
         let geom_to_world =
             unsafe { transmute::<&mut T, &'a dyn Transform>(self.allocator.alloc(transform)) };
-        self.models.push(SceneGeometry {
+        self.models.push(SceneObject {
             geometry,
-            material,
+            obj_type: SceneObjectType::Material(material),
             geom_to_world,
         });
         Ok(())

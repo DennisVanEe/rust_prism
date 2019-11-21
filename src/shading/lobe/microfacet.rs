@@ -1,5 +1,5 @@
-use crate::math::vector::{Vec2, Vec3};
 use crate::math::numbers::Float;
+use crate::math::vector::{Vec2, Vec3};
 use crate::shading::lobe::specular::Fresnel;
 use crate::shading::lobe::{
     abs_cos_theta, cos2_phi, cos2_theta, sin2_phi, tan2_theta, tan_theta, BxDF, BxDFType,
@@ -43,7 +43,7 @@ impl Beckmann {
             alpha: Vec2 {
                 x: roughness_to_alpha(roughness.x),
                 y: roughness_to_alpha(roughness.y),
-            }
+            },
         }
     }
 }
@@ -94,7 +94,7 @@ impl TrowbridgeReitz {
             alpha: Vec2 {
                 x: roughness_to_alpha(roughness.x),
                 y: roughness_to_alpha(roughness.y),
-            }
+            },
         }
     }
 }

@@ -119,14 +119,17 @@ impl<'a> Bsdf<'a> {
         let wi = self.world_to_shading(wi);
 
         // We are essentially averaging the pdfs that match the flags:
-        let (pdf, num_has_type) = self.lobes.iter().fold((0., 0usize), |(pdf_sum, count), &lobe| {
-            // Don't double count the lobe we sampled:
-            if lobe.matches_type(fl) {
-                (pdf_sum + lobe.pdf(wo, wi), count + 1)
-            } else {
-                (pdf_sum, count)
-            }
-        });
+        let (pdf, num_has_type) =
+            self.lobes
+                .iter()
+                .fold((0., 0usize), |(pdf_sum, count), &lobe| {
+                    // Don't double count the lobe we sampled:
+                    if lobe.matches_type(fl) {
+                        (pdf_sum + lobe.pdf(wo, wi), count + 1)
+                    } else {
+                        (pdf_sum, count)
+                    }
+                });
         pdf / (num_has_type as f64)
     }
 
@@ -234,12 +237,7 @@ impl<'a> Bsdf<'a> {
         })
     }
 
-    pub fn rho_hh(
-        &self,
-        samples0: &[Vec2<f64>],
-        samples1: &[Vec2<f64>],
-        fl: LobeType,
-    ) -> Spectrum {
+    pub fn rho_hh(&self, samples0: &[Vec2<f64>], samples1: &[Vec2<f64>], fl: LobeType) -> Spectrum {
         self.lobes.iter().fold(Spectrum::black(), |f, &lobe| {
             // Make sure that, if it is reflected, then the lobe ONLY has reflection,
             // and if it isn't, then the lobe ONLY has transmission:

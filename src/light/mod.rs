@@ -1,5 +1,5 @@
-pub mod point;
 pub mod area;
+pub mod point;
 
 use crate::math::vector::{Vec2, Vec3};
 use crate::spectrum::Spectrum;

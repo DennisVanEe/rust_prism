@@ -4,12 +4,10 @@ pub mod sphere;
 use crate::math::bbox::BBox3;
 use crate::math::ray::Ray;
 use crate::math::vector::{Vec2, Vec3};
-use crate::light::area::AreaLight;
-use crate::spectrum::Spectrum;
 
 // Geometric interaction:
 #[derive(Clone, Copy)]
-pub struct GeometryInteraction<'a> {
+pub struct GeometryInteraction {
     pub p: Vec3<f64>,  // intersection point
     pub n: Vec3<f64>,  // geometric normal (of triangle)
     pub wo: Vec3<f64>, // direction of intersection leaving the point
