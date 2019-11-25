@@ -17,41 +17,41 @@ use bumpalo::Bump;
 
 // The type of SceneModel we are dealing with (an area light
 // or a material):
-enum SceneObjectType<'a> {
+pub enum ScnObjType<'a> {
     Light(&'a dyn AreaLight),
     Material(&'a dyn Material),
 }
 
 // The interaction that
-struct SceneObjectInteraction<'a> {
+pub struct ScnObjInt<'a> {
     // The geometry interaction portion:
-    geometry: GeometryInteraction,
-    obj_type: SceneObjectType<'a>,
+    pub geom: GeometryInteraction,
+    pub obj_type: ScnObjType<'a>,
 }
 
-impl<'a> SceneObjectInteraction<'a> {
+impl<'a> ScnObjInt<'a> {
     // If the scene object emits any radiance, it returns it, otherwise
     // it returns black:
     pub fn emit_radiance(self, w: Vec3<f64>) -> Spectrum {
         match self.obj_type {
-            SceneObjectType::Light(l) => l.eval(self, w),
+            ScnObjType::Light(l) => l.eval(self, w),
             _ => Spectrum::black(),
         }
     }
 }
 
-// A model has information regarding the transformation of geometry in the world.
+// A scene object has information regarding the transformation of geometry in the world.
 // This is to allow for basic instancing.
-struct SceneObject<'a> {
-    geometry: &'a dyn Geometry, // The geometry that represents the scene object
-    obj_type: SceneObjectType<'a>, // The type of information that is associated with the object
+struct ScnObj<'a> {
+    geom: &'a dyn Geometry, // The geometry that represents the scene object
+    obj_type: ScnObjType<'a>, // The type of information that is associated with the object
     geom_to_world: &'a dyn Transform, // The transform of the scene object
 }
 
-impl<'a> BVHObject for SceneObject<'a> {
+impl<'a> BVHObject for ScnObj<'a> {
     type IntParam = ();
     type DataParam = ();
-    type IntResult = SceneObjectInteraction<'a>;
+    type IntResult = ScnObjInt<'a>;
 
     fn intersect_test(
         &self,
@@ -63,7 +63,7 @@ impl<'a> BVHObject for SceneObject<'a> {
         let int_geom_to_world = self.geom_to_world.interpolate(curr_time);
         // Then we transform the ray itself and calculate the acceleration values:
         let ray = int_geom_to_world.inverse().ray(ray);
-        self.geometry.intersect_test(ray, max_time)
+        self.geom.intersect_test(ray, max_time)
     }
 
     fn intersect(
@@ -72,14 +72,14 @@ impl<'a> BVHObject for SceneObject<'a> {
         max_time: f64,
         curr_time: f64,
         _: &Self::IntParam,
-    ) -> Option<SceneObjectInteraction> {
+    ) -> Option<ScnObjInt> {
         // First we transform the ray to the object's local space:
         let int_geom_to_world = self.geom_to_world.interpolate(curr_time);
         let ray = int_geom_to_world.inverse().ray(ray);
         // Then we intersect the object and check if we hit something:
-        match self.geometry.intersect(ray, max_time) {
-            Some(i) => Some(SceneObjectInteraction {
-                geometry: i,
+        match self.geom.intersect(ray, max_time) {
+            Some(i) => Some(ScnObjInt {
+                geom: i,
                 obj_type: self.obj_type,
             }),
             _ => None,
@@ -87,11 +87,11 @@ impl<'a> BVHObject for SceneObject<'a> {
     }
 
     fn get_centroid(&self, _: &Self::DataParam) -> Vec3<f64> {
-        self.geometry.get_centroid()
+        self.geom.get_centroid()
     }
 
     fn get_bound(&self, _: &Self::DataParam) -> BBox3<f64> {
-        self.geom_to_world.bound_motion(self.geometry.get_bound())
+        self.geom_to_world.bound_motion(self.geom.get_bound())
     }
 }
 
@@ -123,7 +123,7 @@ impl<'a> SceneLight<'a> {
 pub struct Scene<'a> {
     allocator: Bump,
     //lights: Vec<SceneLight<'a>>,
-    bvh: BVH<SceneObject<'a>>,
+    bvh: BVH<ScnObj<'a>>,
 }
 
 impl<'a> Scene<'a> {
@@ -146,7 +146,7 @@ impl<'a> Scene<'a> {
         ray: Ray<f64>,
         max_t: f64,
         curr_time: f64,
-    ) -> Option<SceneObjectInteraction> {
+    ) -> Option<ScnObjInt> {
         // First we traverse the BVH and get what we want:
         match self.bvh.intersect(ray, max_t, curr_time, &()) {
             Some((i, _)) => Some(i),

@@ -1,11 +1,10 @@
 pub mod direct_light;
 
-use crate::geometry::Interaction;
+use crate::scene::{ScnObjInt, Scene};
 use crate::light::Light;
 use crate::math::ray::Ray;
 use crate::math::vector::Vec2;
 use crate::sampler::Sampler;
-use crate::scene::Scene;
 use crate::shading::lobe::LobeType;
 use crate::shading::material::Bsdf;
 use crate::spectrum::Spectrum;
@@ -46,7 +45,7 @@ fn power2_heuristic(num_samples: usize, pdf: f64, num_samples_o: usize, pdf_o: f
 // Call this if you only have a single random value to sample:
 fn estimate_direct<S: Sampler>(
     // Geometric information of our current position:
-    int: Interaction,
+    int: ScnObjInt,
     // The material at the point we are currently at (needed for MIS)
     bsdf: &Bsdf,
     // Current time we care about:
@@ -58,9 +57,9 @@ fn estimate_direct<S: Sampler>(
     bsdf_sample: Vec2<f64>,
     light: &dyn Light,
 ) -> Spectrum {
-    let (light_result, light_pos, light_pdf) = light.sample(int.p, curr_time, light_sample);
+    let (light_result, light_pos, light_pdf) = light.sample(int.geom.p, curr_time, light_sample);
     // wi points away from the surface and is normalized:
-    let wi = (light_pos - int.p).normalize();
+    let wi = (light_pos - int.geom.p).normalize();
     // Now we check whether or not it's occluded:
     if scene.intersect_test(
         Ray {
@@ -78,9 +77,9 @@ fn estimate_direct<S: Sampler>(
         // TODO: figure out what lobe flags we should use here:
         // Evaulate the bsdf at the surface:
         let bsdf_result = bsdf
-            .eval(int.wo, wi, LobeType::ALL)
-            .scale(wi.dot(int.shading_n).abs());
-        let bsdf_pdf = bsdf.pdf(int.wo, wi, LobeType::ALL);
+            .eval(int.geom.wo, wi, LobeType::ALL)
+            .scale(wi.dot(int.geom.shading_n).abs());
+        let bsdf_pdf = bsdf.pdf(int.geom.wo, wi, LobeType::ALL);
 
         // Check if the light is a "delta light". This is a special case that
         // always returns 1 for the pdf. If that is the case, we don't have to
