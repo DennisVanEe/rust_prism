@@ -1,9 +1,8 @@
 pub mod scene_builder;
-
-use self::scene_builder::SceneBuilder;
+use scene_builder::SceneBuilder;
 
 use crate::bvh::{BVHObject, BVH};
-use crate::geometry::{Geometry, GeometryInteraction};
+use crate::geometry::{GeomInteraction, Geometry};
 use crate::light::area::AreaLight;
 use crate::light::Light;
 use crate::math::bbox::BBox3;
@@ -15,43 +14,43 @@ use crate::transform::Transform;
 
 use bumpalo::Bump;
 
-// The type of SceneModel we are dealing with (an area light
-// or a material):
-pub enum ScnObjType<'a> {
-    Light(&'a dyn AreaLight),
-    Material(&'a dyn Material),
+// Specifies the type that the object in the scene exhibits.
+pub enum SceneObjectType<'a> {
+    Light(&'a dyn AreaLight), // The object should be treated as an area light.
+    Material(&'a dyn Material), // The object has a material attached to it.
+                              //        A material can emit radiance, but it won't be treated like a light
+                              //        so it won't be importance sampled.
 }
 
-// The interaction that
-pub struct ScnObjInt<'a> {
-    // The geometry interaction portion:
-    pub geom: GeometryInteraction,
-    pub obj_type: ScnObjType<'a>,
+// Information (in scene space) of a ray intersecting the object.
+pub struct SceneInteraction<'a> {
+    pub geom: GeomInteraction, // The geometry interaction of the object.
+    pub obj_type: SceneObjectType<'a>, // The object type (see above) of the object intersected.
 }
 
-impl<'a> ScnObjInt<'a> {
-    // If the scene object emits any radiance, it returns it, otherwise
-    // it returns black:
-    pub fn emit_radiance(self, w: Vec3<f64>) -> Spectrum {
+impl<'a> SceneInteraction<'a> {
+    // Calculates the radiance at the interaction point in the direction
+    // given by w. If the object is not a ObjectType::Light, then it always
+    // returns black
+    pub fn light_radiance(self, w: Vec3<f64>) -> Spectrum {
         match self.obj_type {
-            ScnObjType::Light(l) => l.eval(self, w),
+            SceneObjectType::Light(l) => l.eval(self, w),
             _ => Spectrum::black(),
         }
     }
 }
 
-// A scene object has information regarding the transformation of geometry in the world.
-// This is to allow for basic instancing.
-struct ScnObj<'a> {
-    geom: &'a dyn Geometry, // The geometry that represents the scene object
-    obj_type: ScnObjType<'a>, // The type of information that is associated with the object
-    geom_to_world: &'a dyn Transform, // The transform of the scene object
+// A Scene Object is a special type of object that exists in the scene.
+struct SceneObject<'a> {
+    geom: &'a dyn Geometry, // The geometry that represents the scene object.
+    obj_type: SceneObjectType<'a>, // The type of information that is associated with the object.
+    geom_to_scene: &'a dyn Transform, // Transforms from geometry to scene space.
 }
 
-impl<'a> BVHObject for ScnObj<'a> {
+impl<'a> BVHObject for SceneObject<'a> {
     type IntParam = ();
     type DataParam = ();
-    type IntResult = ScnObjInt<'a>;
+    type IntResult = SceneInteraction<'a>;
 
     fn intersect_test(
         &self,
@@ -60,9 +59,8 @@ impl<'a> BVHObject for ScnObj<'a> {
         curr_time: f64,
         _: &Self::IntParam,
     ) -> bool {
-        let int_geom_to_world = self.geom_to_world.interpolate(curr_time);
-        // Then we transform the ray itself and calculate the acceleration values:
-        let ray = int_geom_to_world.inverse().ray(ray);
+        let int_geom_to_scene = self.geom_to_scene.interpolate(curr_time);
+        let ray = int_geom_to_scene.inverse().ray(ray);
         self.geom.intersect_test(ray, max_time)
     }
 
@@ -72,13 +70,12 @@ impl<'a> BVHObject for ScnObj<'a> {
         max_time: f64,
         curr_time: f64,
         _: &Self::IntParam,
-    ) -> Option<ScnObjInt> {
-        // First we transform the ray to the object's local space:
-        let int_geom_to_world = self.geom_to_world.interpolate(curr_time);
-        let ray = int_geom_to_world.inverse().ray(ray);
+    ) -> Option<SceneInteraction> {
+        let int_geom_to_scene = self.geom_to_scene.interpolate(curr_time);
+        let ray = int_geom_to_scene.inverse().ray(ray);
         // Then we intersect the object and check if we hit something:
         match self.geom.intersect(ray, max_time) {
-            Some(i) => Some(ScnObjInt {
+            Some(i) => Some(SceneInteraction {
                 geom: i,
                 obj_type: self.obj_type,
             }),
@@ -91,7 +88,7 @@ impl<'a> BVHObject for ScnObj<'a> {
     }
 
     fn get_bound(&self, _: &Self::DataParam) -> BBox3<f64> {
-        self.geom_to_world.bound_motion(self.geom.get_bound())
+        self.geom_to_scene.bound_motion(self.geom.get_bound())
     }
 }
 
@@ -121,9 +118,9 @@ impl<'a> SceneLight<'a> {
 }
 
 pub struct Scene<'a> {
-    allocator: Bump,
-    //lights: Vec<SceneLight<'a>>,
-    bvh: BVH<ScnObj<'a>>,
+    allocator: Bump, // Holds any of the memory that we may have needed when rendering.
+    lights: Vec<SceneLight<'a>>, // Holds the importance sampled light sources in the scene.
+    bvh: BVH<SceneObject<'a>>, // Holds everything that can be intersected in the scene.
 }
 
 impl<'a> Scene<'a> {
@@ -132,6 +129,7 @@ impl<'a> Scene<'a> {
     pub fn new(scene_builder: SceneBuilder<'a>) -> Self {
         Scene {
             allocator: scene_builder.allocator,
+            lights: Vec::new(), // TODO: add support for lights here
             bvh: BVH::new(scene_builder.models, Self::MAX_MODEL_PER_NODE, &()),
         }
     }
@@ -141,12 +139,7 @@ impl<'a> Scene<'a> {
     // The intersect function also returns a reference to the material that belongs
     // to the object that was intersected. This way, the integrator can decide whether
     // or not to construct a Bsdf object.
-    pub fn intersect(
-        &self,
-        ray: Ray<f64>,
-        max_t: f64,
-        curr_time: f64,
-    ) -> Option<ScnObjInt> {
+    pub fn intersect(&self, ray: Ray<f64>, max_t: f64, curr_time: f64) -> Option<SceneInteraction> {
         // First we traverse the BVH and get what we want:
         match self.bvh.intersect(ray, max_t, curr_time, &()) {
             Some((i, _)) => Some(i),

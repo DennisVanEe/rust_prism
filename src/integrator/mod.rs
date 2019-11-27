@@ -1,10 +1,12 @@
 pub mod direct_light;
 
-use crate::scene::{ScnObjInt, Scene};
+use crate::geometry::GeomInteraction;
 use crate::light::Light;
 use crate::math::ray::Ray;
 use crate::math::vector::Vec2;
+use crate::math::numbers::Float;
 use crate::sampler::Sampler;
+use crate::scene::{Scene, SceneObjectType};
 use crate::shading::lobe::LobeType;
 use crate::shading::material::Bsdf;
 use crate::spectrum::Spectrum;
@@ -44,26 +46,22 @@ fn power2_heuristic(num_samples: usize, pdf: f64, num_samples_o: usize, pdf_o: f
 
 // Call this if you only have a single random value to sample:
 fn estimate_direct<S: Sampler>(
-    // Geometric information of our current position:
-    int: ScnObjInt,
-    // The material at the point we are currently at (needed for MIS)
-    bsdf: &Bsdf,
-    // Current time we care about:
-    curr_time: f64,
-    // The current scene that the light belongs to (for shadow ray testing):
-    scene: &Scene,
-
-    light_sample: Vec2<f64>,
-    bsdf_sample: Vec2<f64>,
-    light: &dyn Light,
+    int: GeomInteraction, // Specifies the interaction at the point where we intersected the object (geometry).
+    bsdf: &Bsdf,          // The bsdf (material) at the point that we care about.
+    curr_time: f64, // The time when we are performing this test (used for things like shadows).
+    scene: &Scene,  // The scene where all of this is taking place.
+    light_sample: Vec2<f64>, // Sample used to sample the light (if area light).
+    bsdf_sample: Vec2<f64>, // Sample used to sample the bsdf.
+    light: &dyn Light, // The light we are sampling from.
 ) -> Spectrum {
-    let (light_result, light_pos, light_pdf) = light.sample(int.geom.p, curr_time, light_sample);
+    let (light_result, light_pos, light_pdf) = light.sample(int.p, curr_time, light_sample);
     // wi points away from the surface and is normalized:
-    let wi = (light_pos - int.geom.p).normalize();
+    let wi = (light_pos - int.p).normalize();
+
     // Now we check whether or not it's occluded:
     if scene.intersect_test(
         Ray {
-            org: int.p,
+            org: int.p + wi.scale(f64::SELF_INT_COMP),
             dir: wi,
         },
         f64::INFINITY,
@@ -77,9 +75,9 @@ fn estimate_direct<S: Sampler>(
         // TODO: figure out what lobe flags we should use here:
         // Evaulate the bsdf at the surface:
         let bsdf_result = bsdf
-            .eval(int.geom.wo, wi, LobeType::ALL)
-            .scale(wi.dot(int.geom.shading_n).abs());
-        let bsdf_pdf = bsdf.pdf(int.geom.wo, wi, LobeType::ALL);
+            .eval(int.wo, wi, LobeType::ALL)
+            .scale(wi.dot(int.shading_n).abs());
+        let bsdf_pdf = bsdf.pdf(int.wo, wi, LobeType::ALL);
 
         // Check if the light is a "delta light". This is a special case that
         // always returns 1 for the pdf. If that is the case, we don't have to
@@ -99,20 +97,52 @@ fn estimate_direct<S: Sampler>(
     // Now we see how much the bsdf contributes:
     let bsdf_contrib = if !light.is_delta() {
         // Sample the bsdf (TODO: figure out the LobeType flag).
-        // The bsdf only returns None for the lobe type if none of the types of lobes
-        // we are sampling match it:
         let (bsdf_result, bsdf_wi, bsdf_pdf, lobe_type) =
             bsdf.sample(int.wo, bsdf_sample, LobeType::ALL);
         if !bsdf_result.is_black() && bsdf_pdf > 0. {
-            // Project it:
             let bsdf_result = bsdf_result.scale(bsdf_wi.dot(int.shading_n).abs());
             // Only bother sampling the light if the lobe isn't specular. If it is,
             // it's unlikely we will hit it:
-            if !lobe_type.contains(LobeType::SPECULAR) {
-                // TODO: figure out how to handle the case of area lights. I think I'll do what
-                // pbrt does and have some meshes with an attached light. This should allow for emissive
-                // geometry and whatnot. I'll see how much I can control it (might add support for textures and
-                // whatnot to the light):
+            let mis_w = if !lobe_type.contains(LobeType::SPECULAR) {
+                let light_pdf = light.pdf(int.p, bsdf_wi);
+                // If light_pdf is 0, then there is no need to do any further calculations
+                if light_pdf == 0. {
+                    return light_contrib;
+                }
+                power2_heuristic(1, bsdf_pdf, 1, light_pdf)
+            } else {
+                1.
+            };
+            // Check if we intersect the light or not:
+            let ray = Ray {
+                org: int.p + bsdf_wi.scale(f64::SELF_INT_COMP),
+                dir: bsdf_wi,
+            };
+            let scene_int = scene.intersect(ray, f64::INFINITY, curr_time);
+            if let Some(i) = scene_int {
+                // Check if the thing we hit is a light:
+                if let SceneObjectType::Light(l) = i.obj_type {
+                    
+                }
+            } else {
+                // TODO: fil with stuff
+            }
+
+            match scene_int {
+                Some(i) if let SceneObjectType::Light(l) = i.obj_type {
+                    // Check if the object we hit 
+                    match i.obj_type {
+                        SceneObjectType::Light(l) => {
+
+                        },
+                        _ => {
+
+                        }
+                    }
+                },
+                _ => {
+                    // TODO: fil with stuff
+                }
             }
         }
     } else {

@@ -4,7 +4,7 @@
 pub mod diffuse;
 
 use super::Light;
-use crate::geometry::{Geometry, Interaction};
+use crate::geometry::{GeomInteraction, Geometry};
 use crate::math::vector::Vec3;
 use crate::spectrum::Spectrum;
 
@@ -14,5 +14,5 @@ use crate::spectrum::Spectrum;
 pub trait AreaLight: Light + Geometry {
     // int: the point of interaction
     // w: the direction from which the light is coming (pointed away from the surface)
-    fn eval(&self, int: Interaction, w: Vec3<f64>) -> Spectrum;
+    fn eval(&self, int: GeomInteraction, w: Vec3<f64>) -> Spectrum;
 }

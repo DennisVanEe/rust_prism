@@ -1,8 +1,8 @@
 use crate::bvh::{BVHObject, BVH};
-use crate::geometry::{Geometry, GeometryInteraction};
+use crate::geometry::{GeomInteraction, Geometry};
 use crate::math::bbox::BBox3;
 use crate::math::ray::Ray;
-use crate::math::util::{align, coord_system};
+use crate::math::util;
 use crate::math::vector::{Vec2, Vec3, Vec3Perm};
 
 use std::cell::Cell;
@@ -300,7 +300,7 @@ impl Triangle {
         max_t: f64,
         int_info: RayIntInfo,
         mesh_data: &MeshData,
-    ) -> Option<GeometryInteraction> {
+    ) -> Option<GeomInteraction> {
         let poss = self.get_poss(mesh_data);
 
         let pt = [poss[0] - ray.org, poss[1] - ray.org, poss[2] - ray.org];
@@ -415,13 +415,13 @@ impl Triangle {
         // Compute triangle partial derivatives:
         // These vectors are parallel to the triangle:
         let (dpdu, dpdv) = if is_degen_uv {
-            coord_system((poss[2] - poss[0]).cross(poss[1] - poss[0]))
+            util::coord_system((poss[2] - poss[0]).cross(poss[1] - poss[0]))
         } else {
             // Solve the system:
             let dpdu = (dp02.scale(duv12[1]) - dp12.scale(duv02[1])).scale(inv_det);
             let dpdv = (dp02.scale(-duv12[0]) + dp12.scale(duv02[0])).scale(inv_det);
             if dpdu.cross(dpdv).length2() == 0. {
-                coord_system((poss[2] - poss[0]).cross(poss[1] - poss[0]))
+                util::coord_system((poss[2] - poss[0]).cross(poss[1] - poss[0]))
             } else {
                 (dpdu, dpdv)
             }
@@ -442,7 +442,7 @@ impl Triangle {
             }
         };
         // Update n with the new shading normal from the provided normal:
-        let n = align(shading_n, n);
+        let n = util::align(shading_n, n);
 
         // Calculate the shading dndu and dndv values:
         let (shading_dndu, shading_dndv) = if mesh_data.has_nrm() {
@@ -457,7 +457,7 @@ impl Triangle {
                 if dn.length2() == 0. {
                     (Vec3::zero(), Vec3::zero())
                 } else {
-                    coord_system(dn)
+                    util::coord_system(dn)
                 }
             } else {
                 let dndu = (dn02.scale(duv12[1]) - dn12.scale(duv02[1])).scale(inv_det);
@@ -485,13 +485,13 @@ impl Triangle {
             if sbt.length2() > 0. {
                 (sbt.cross(shading_dpdu), sbt.normalize())
             } else {
-                coord_system(shading_n)
+                util::coord_system(shading_n)
             }
         };
 
         let wo = -ray.dir;
 
-        Some(GeometryInteraction {
+        Some(GeomInteraction {
             p,
             n,
             wo,
@@ -504,8 +504,6 @@ impl Triangle {
             shading_dpdv,
             shading_dndu,
             shading_dndv,
-            // defaults to None
-            light: None,
         })
     }
 
@@ -600,7 +598,7 @@ impl BVHObject for Triangle {
         max_t: f64,
         _: f64,
         &(ray_int_info, mesh_data): &Self::IntParam,
-    ) -> Option<GeometryInteraction> {
+    ) -> Option<GeomInteraction> {
         unsafe {
             // Dirty, I know:
             Triangle::intersect(self, ray, max_t, ray_int_info, &*mesh_data)
@@ -672,7 +670,7 @@ impl Geometry for Mesh {
         )
     }
 
-    fn intersect(&self, ray: Ray<f64>, max_t: f64) -> Option<GeometryInteraction> {
+    fn intersect(&self, ray: Ray<f64>, max_t: f64) -> Option<GeomInteraction> {
         let ray_int_info = calc_rayintinfo(ray);
         // Because in geometry space we aren't moving, curr_time is not needed and we always set it to 0.
         // Also, we don't care which triangle we specifically intersected, so we ignore the reference to

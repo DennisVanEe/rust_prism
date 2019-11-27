@@ -66,7 +66,7 @@ impl<'a> SceneBuilder<'a> {
         material_id: &str,
         transform: T,
     ) -> SimpleResult<()> {
-        let &geometry = match self.geometry_ids.get(geometry_id) {
+        let &geom = match self.geometry_ids.get(geometry_id) {
             Some(g) => g,
             _ => bail!("Geometry with id: {} was not created before.", geometry_id),
         };
@@ -77,12 +77,12 @@ impl<'a> SceneBuilder<'a> {
 
         // Because the transform could be either animated or not, we need to use dynamic dispatch to
         // determine what to do:
-        let geom_to_world =
+        let geom_to_scene =
             unsafe { transmute::<&mut T, &'a dyn Transform>(self.allocator.alloc(transform)) };
         self.models.push(SceneObject {
-            geometry,
+            geom,
             obj_type: SceneObjectType::Material(material),
-            geom_to_world,
+            geom_to_scene,
         });
         Ok(())
     }

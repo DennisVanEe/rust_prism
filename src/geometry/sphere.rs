@@ -1,7 +1,7 @@
-use crate::geometry::{Geometry, GeometryInteraction};
+use crate::geometry::{GeomInteraction, Geometry};
 use crate::math::bbox::BBox3;
 use crate::math::ray::Ray;
-use crate::math::util::quadratic;
+use crate::math::util;
 use crate::math::vector::{Vec2, Vec3};
 
 use num_traits::clamp;
@@ -67,13 +67,13 @@ impl Geometry for Sphere {
         self.phi_max * self.radius * (self.z_max - self.z_min)
     }
 
-    fn intersect(&self, ray: Ray<f64>, max_t: f64) -> Option<GeometryInteraction> {
+    fn intersect(&self, ray: Ray<f64>, max_t: f64) -> Option<GeomInteraction> {
         // Now we need to solve the following quadratic equation:
         let a = ray.dir.dot(ray.dir);
         let b = 2. * ray.dir.dot(ray.org);
         let c = ray.org.dot(ray.org) - self.radius * self.radius;
 
-        let (t0, t1) = match quadratic(a, b, c) {
+        let (t0, t1) = match util::quadratic(a, b, c) {
             Some(t) => t,
             _ => return None,
         };
@@ -212,7 +212,7 @@ impl Geometry for Sphere {
             + dpdv.scale(inv_begf2 * (f * bf - g * be)))
         .normalize();
 
-        Some(GeometryInteraction {
+        Some(GeomInteraction {
             p,
             n,
             wo: -ray.dir,
@@ -227,7 +227,6 @@ impl Geometry for Sphere {
             shading_dpdv: dpdv,
             shading_dndu: dndu,
             shading_dndv: dndv,
-            light: None,
         })
     }
 
@@ -237,7 +236,7 @@ impl Geometry for Sphere {
         let b = 2. * ray.dir.dot(ray.org);
         let c = ray.org.dot(ray.org) - self.radius * self.radius;
 
-        let (t0, t1) = match quadratic(a, b, c) {
+        let (t0, t1) = match util::quadratic(a, b, c) {
             Some(t) => t,
             _ => return false,
         };

@@ -7,7 +7,7 @@ use crate::math::vector::{Vec2, Vec3};
 
 // Geometric interaction:
 #[derive(Clone, Copy)]
-pub struct GeometryInteraction {
+pub struct GeomInteraction {
     pub p: Vec3<f64>,  // intersection point
     pub n: Vec3<f64>,  // geometric normal (of triangle)
     pub wo: Vec3<f64>, // direction of intersection leaving the point
@@ -40,5 +40,5 @@ pub trait Geometry {
     // object moves.
 
     fn intersect_test(&self, ray: Ray<f64>, max_time: f64) -> bool;
-    fn intersect(&self, ray: Ray<f64>, max_time: f64) -> Option<GeometryInteraction>;
+    fn intersect(&self, ray: Ray<f64>, max_time: f64) -> Option<GeomInteraction>;
 }
