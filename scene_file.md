@@ -2,7 +2,7 @@
 
 This document is needed to specify the scene file format used by PRISM.
 
-Scene file formats are written in the JSON file format:
+Scene file formats are written in TOML.
 
 ## Geometry ##
 

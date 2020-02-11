@@ -1,4 +1,4 @@
-use crate::geometry::Interaction;
+use crate::geometry::GeomInteraction;
 use crate::math::bbox::BBox3;
 use crate::math::matrix::{Mat3, Mat4};
 use crate::math::quaternion::Quat;
@@ -154,15 +154,18 @@ impl StaticTransform {
         }
     }
 
-    pub fn interaction(self, i: Interaction) -> Interaction {
-        Interaction {
+    pub fn geom_interaction(self, i: GeomInteraction) -> GeomInteraction {
+        GeomInteraction {
             p: self.point(i.p).normalize(),
             n: self.normal(i.n),
             wo: self.vector(i.wo).normalize(),
-            time: i.time,
+
+            t: i.t,
+
             uv: i.uv,
             dpdu: self.vector(i.dpdu),
             dpdv: self.vector(i.dpdv),
+            
             shading_n: self.normal(i.shading_n).normalize(),
             shading_dpdu: self.vector(i.shading_dpdu),
             shading_dpdv: self.vector(i.shading_dpdv),

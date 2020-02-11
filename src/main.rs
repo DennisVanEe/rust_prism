@@ -18,4 +18,20 @@ mod shading;
 mod spectrum;
 mod transform;
 
-fn main() {}
+use std::env;
+
+fn main() {
+
+}
+
+static HELP_MSG: &str = 
+"
+    -scene:\tThe TOML file with the scene description.\n
+";
+
+// Parse any arguments we may have:
+fn parse_commands() {
+    
+    
+    todo!();
+}
