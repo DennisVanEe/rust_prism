@@ -12,7 +12,7 @@ Geometry refers to the mathematical description of a 3D object (like a collectio
 
 - **Sphere**: This represents a simple sphere.
 
-```json5
+```json
 "sphere_geometry": {
     "id": "sphere_a",          // id of geometry used by scene model
     "rev_orientation": true,   // if true, normals point inward
@@ -24,7 +24,7 @@ Geometry refers to the mathematical description of a 3D object (like a collectio
 
 This represents a geometric mesh. Right now, PRISM only supports .ply files, so if you set the file type to anything else it won't process it.
 
-```json5
+```json
 "mesh_geometry": {
     "id": "sphere_a",             // id of geometry used by scene model
     "file_type": "ply",           // the file type
@@ -38,7 +38,7 @@ A Scene Model is a lightweight object that actually resides in the scene. It sim
 
 Geometries and materials have a unique name that you can use to identify which geometry and material belong to this model. An example is shown below:
 
-```json5
+```json
 "scene_model": {
     "geometry": "sphere_mesh", // name of geometry created before
     "material": "blue_matte",  // name of material created before
@@ -56,16 +56,14 @@ Transformations are an important part of any scene. They describe how objects ar
 Every transform has a type specified with it. Let's go over the different types that are currently available:
 
 - **Translation**: Just a translation by a specified vector:
-    ```json5
+    ```json
     "transform": {
-        "type": "translate",
-        "trans": [34.3, 89.1, 90.8],
+        "translation": [34.3, 89.1, 90.8],
     }
     ```
 - **Rotation**: Rotates by degrees (in degrees, obviously) around the specified axis:
-    ```json5
+    ```json
     "transform": {
-        "type": "rotate",
         "degrees": 275.0,
         "axis": [1, 0, 08],
     }
@@ -73,25 +71,22 @@ Every transform has a type specified with it. Let's go over the different types 
 - **Scale**: Scales by the specified vector:
     ```json
     "transform": {
-        "type": "scale",
         "scale": [34.3, 89.1, 90.8],
     }
     ```
 - **Matrix**: If you want to specify the matrix itself, you can do so. Be mindful that if it isn't affine and invertible, you might get problems. PRISM performs a check to make sure that this is the case and tells you if it's a problem. Matrices are represented in row-major order (an array of arrays, each of which is a row):
-    ```json5
+    ```json
     "transform": {
-        "type": "matrix",
-        "mat": [1.0, 0.0, 0.0, 34.0,
+        "matrix": [1.0, 0.0, 0.0, 34.0,
                 0.0, 1.0, 0.0, 29.0,
                 0.0, 0.0, 1.0, 09.0,
                 0.0, 0.0, 0.0, 01.0],
     }
     ```
-- **Composite**: A single transformation defined as a number of transformations. This is essentially represented as an array of transformations. The order of the transformations defines the order in which they are applied (not necessarily the order in which the transformation's matrix representation is multiplied). So, the bottom example would first scale the object, then translate it:
-    ```json5
+- **Composite**: A single transformation defined as a number of transformations. This is essentially represented as an array of transformations. The order of the transformations defines the order in which they are applied (not necessarily the order in which the transformation's matrix representation is multiplied). So, the bottom example would first scale the object, then translate it. It is also important to note that you can't have a composite of animated transforms:
+    ```json
     "transform": {
-        "type": "composite",
-        "transf": [
+        "composite": [
             {
                 "type": "scale",
                 "vec": [3, 3, 3],
@@ -103,15 +98,14 @@ Every transform has a type specified with it. Let's go over the different types 
         ],
     }
     ```
-- **Animated**: These are special transformations. We interpolate between the start and end transformation, with the given start and end times. Animated transforms are more restrictive. For one, you can only specify a "top level" transform as animated. So, you can't have a composition of animated transforms, even if the top level transform is animated.
-    ```json5
+- **Animated**: These are transforms that animate from a given start transform to a given end transform. These transformations can be anything except for another animated transform:
+    ```json
     "transform": {
-        "type": "animated",
-        "start_transf": {
+        "start_transform": {
             "type": "scale",
             "vec": [3, 3, 3],
         },
-        "end_transf": {
+        "end_transform": {
                 "type": "translate",
                 "vec": [34.3, 89.1, 90.8],
         },

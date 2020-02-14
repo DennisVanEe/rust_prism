@@ -5,14 +5,15 @@ authors = ["Dennis van Ee <dennis@vanee.us>"]
 edition = "2018"
 
 [dependencies]
-# Prism scene descriptions use TOML
-toml = "0.5.6"
 # Used all over the place for math and whatnot:
 num-traits = "0.2.8"
 # Used to load PLY files:
 ply-rs = "0.1.2"
+# Used for parsing JSON scene description files:
+serde = { version = "1.0.104", features = ["derive"] }
+serde_json = "1.0.48"
+
 simple-error = "0.2.1"
-serde_json = "1.0.40"
 bitflags = "1.1.0"
 arrayvec = "0.4.11"
 bumpalo = "2.6.0"

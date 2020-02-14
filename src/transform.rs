@@ -27,7 +27,7 @@ pub struct StaticTransform {
 impl StaticTransform {
     // Because a matrix could potentially not be invertible,
     // there is no gaurantee this will work:
-    pub fn new(mat: Mat4<f64>) -> Option<Self> {
+    pub fn new_matrix(mat: Mat4<f64>) -> Option<Self> {
         let inv = match mat.inverse() {
             Some(i) => i,
             _ => return None,
@@ -100,7 +100,7 @@ impl StaticTransform {
             x: inv_tan_angle,
             y: inv_tan_angle,
             z: 1.,
-        }) * Self::new(perspective).unwrap()
+        }) * Self::new_matrix(perspective).unwrap()
     }
 
     // Returns the normal matrix:
@@ -367,7 +367,7 @@ impl Transform for AnimatedTransform {
             // We can use unwrapped because we know for a fact that the matrix
             // is invertible:
             let transf_mat = Mat4::new_translate(trans) * rot.to_mat4() * scale;
-            StaticTransform::new(transf_mat).unwrap()
+            StaticTransform::new_matrix(transf_mat).unwrap()
         }
     }
 

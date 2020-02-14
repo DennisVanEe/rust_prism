@@ -13,6 +13,34 @@ pub type Mat4f = Mat4<f32>;
 pub type Mat4d = Mat4<f64>;
 
 impl<T: Float> Mat4<T> {
+    pub fn from_arr(m: [T; 16]) -> Self {
+        let r0 = Vec4 {
+            x: m[0],
+            y: m[1],
+            z: m[2],
+            w: m[3],
+        };
+        let r1 = Vec4 {
+            x: m[4],
+            y: m[5],
+            z: m[6],
+            w: m[7],
+        };
+        let r2 = Vec4 {
+            x: m[8],
+            y: m[9],
+            z: m[10],
+            w: m[11],
+        };
+        let r3 = Vec4 {
+            x: m[12],
+            y: m[13],
+            z: m[14],
+            w: m[15],
+        };
+        Mat4 { m: [r0, r1, r2, r3] }
+    }
+
     pub fn new(m: [Vec4<T>; 4]) -> Self {
         Mat4 { m }
     }

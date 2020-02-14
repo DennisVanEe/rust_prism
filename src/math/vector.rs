@@ -190,6 +190,14 @@ pub enum Vec3Perm {
 }
 
 impl<T: Copy> Vec3<T> {
+    pub fn from_arr(v: [T;3]) -> Self {
+        Vec3 {
+            x: v[0],
+            y: v[1],
+            z: v[2],
+        }
+    }
+
     pub fn from_vec4(v: Vec4<T>) -> Self {
         Vec3 {
             x: v.x,

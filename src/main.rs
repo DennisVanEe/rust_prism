@@ -1,6 +1,7 @@
 // Clean this stuff up in the future...
 // This is here just for now.
 
+mod scene_loading;
 mod bvh;
 mod camera;
 mod film;
@@ -13,7 +14,6 @@ mod memory;
 mod pixel_buffer;
 mod sampler;
 mod scene;
-mod scene_loading;
 mod shading;
 mod spectrum;
 mod transform;
