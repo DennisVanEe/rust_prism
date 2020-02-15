@@ -7,10 +7,11 @@ use bumpalo::Bump;
 use order_stat::kth_by;
 use partition::partition;
 
+// A trait that must be implemented for any type type that wishes to be a part of 
 pub trait BVHObject {
-    // Any additional information for calculating the intersection:
+    // Any additional information for calculating the intersection (like if it's a triangular mesh)
     type IntParam;
-    // Any additional information for calculatig the bounds or centroids:
+    // Any additional information for calculating the bounds or centroids:
     type DataParam;
     // What is returned when intersecting the object:
     type IntResult;
