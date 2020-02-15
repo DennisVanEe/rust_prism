@@ -26,9 +26,9 @@ This represents a geometric mesh. Right now, PRISM only supports .ply files, so 
 
 ```json
 "mesh_geometry": {
-    "id": "sphere_a",             // id of geometry used by scene model
-    "file_type": "ply",           // the file type
-    "dir": "/models/sphere.ply",  // the location of the file representing it
+    "id": "mesh_a",              // id of geometry used by scene model
+    "file_type": "ply",          // the file type
+    "dir": "/models/sphere.ply", // the location of the file representing it
 }
 ```
 
