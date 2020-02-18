@@ -16,10 +16,10 @@ use bumpalo::Bump;
 
 // Specifies the type that the object in the scene exhibits.
 pub enum SceneObjectType<'a> {
-    Light(&'a dyn AreaLight), // The object should be treated as an area light.
+    Light(&'a dyn AreaLight),   // The object should be treated as an area light.
     Material(&'a dyn Material), // The object has a material attached to it.
-                              //        A material can emit radiance, but it won't be treated like a light
-                              //        so it won't be importance sampled.
+                                // A material can emit radiance, but it won't be treated like a light
+                                // so it won't be importance sampled.
 }
 
 // Information (in scene space) of a ray intersecting the object.

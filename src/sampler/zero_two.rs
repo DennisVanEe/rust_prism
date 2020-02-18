@@ -2,7 +2,7 @@ use crate::math::numbers::Float;
 use crate::math::random::RandGen;
 use crate::math::util::next_pow2_u64;
 use crate::math::vector::Vec2;
-use crate::memory::uninit_vec;
+use crate::mem;
 use crate::sampler::{shuffle, Sampler};
 
 pub struct ZeroTwo {
@@ -136,20 +136,20 @@ impl Sampler for ZeroTwo {
 
         let (samples_1d, samples_2d) = {
             let num_samples = num_pixel_samples * num_dim;
-            unsafe { (uninit_vec(num_samples), uninit_vec(num_samples)) }
+            unsafe { (mem::uninit_vec(num_samples), mem::uninit_vec(num_samples)) }
         };
 
         let mut arr_samples_1d = Vec::with_capacity(arr_sizes_1d.len());
         for &n in arr_sizes_1d {
             unsafe {
-                arr_samples_1d.push((n, uninit_vec(n * num_pixel_samples)));
+                arr_samples_1d.push((n, mem::uninit_vec(n * num_pixel_samples)));
             }
         }
 
         let mut arr_samples_2d = Vec::with_capacity(arr_sizes_2d.len());
         for &n in arr_sizes_2d {
             unsafe {
-                arr_samples_2d.push((n, uninit_vec(n * num_pixel_samples)));
+                arr_samples_2d.push((n, mem::uninit_vec(n * num_pixel_samples)));
             }
         }
 

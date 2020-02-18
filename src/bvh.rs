@@ -19,9 +19,9 @@ pub trait BVHObject {
     // The intersection algorithms need to support potentially moving objects:
     fn intersect_test(
         &self,
-        ray: Ray<f64>,
-        max_t: f64,
-        curr_time: f64,
+        ray: Ray<f64>,               // The ray in "BVH Space"
+        max_t: f64,                  // A max_t value used to prune intersections that are too far
+        curr_time: f64,              // The current time 
         int_info: &Self::IntParam,
     ) -> bool;
 
