@@ -18,6 +18,7 @@ impl Point {
 impl Light for Point {
     fn sample(&self, surface_point: Vec3<f64>, _: f64, u: Vec2<f64>) -> (Spectrum, Vec3<f64>, f64) {
         let distSqrt = (-surface_point).length2();
+        // In light space the light is always at the origin, so return that:
         (self.intensity.div_scale(distSqrt), Vec3::zero(), 1.)
     }
 

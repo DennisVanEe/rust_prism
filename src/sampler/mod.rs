@@ -64,7 +64,7 @@ pub trait Sampler {
     // Rounds a provided count to an appropriate count for the sampler
     // to work with (such as a power of 2, given that many samplers
     // prefer working with such values):
-    fn round_count(&self, cnt: usize) -> usize {
+    fn round_count(cnt: usize) -> usize {
         cnt
     }
 }

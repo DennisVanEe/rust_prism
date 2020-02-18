@@ -174,27 +174,33 @@ impl<P: Pixel, O: TileOrdering> PixelBuffer<P, O> {
     }
 
     // Returns a zeroed tile for the given tile_index:
-    pub fn get_zero_tile(&self, tile_index: usize) -> PixelTile<P> {
-        assert!(tile_index < self.data.len());
+    pub fn get_zero_tile(&self, tile_index: usize) -> Option<PixelTile<P>> {
+        if tile_index < self.data.len() {
+            return None;
+        }
+
         let tile_pos = self.ordering.get_pos(tile_index);
-        PixelTile {
+        Some(PixelTile {
             data: [P::zero(); TILE_DIM * TILE_DIM],
             tile_index,
             tile_pos,
             pixel_pos: tile_pos.scale(TILE_DIM),
-        }
+        })
     }
 
     // Returns the tile data present at the given tile_index:
-    pub fn get_tile(&self, tile_index: usize) -> PixelTile<P> {
-        assert!(tile_index < self.data.len());
+    pub fn get_tile(&self, tile_index: usize) -> Option<PixelTile<P>> {
+        if tile_index < self.data.len() {
+            return None;
+        }
+
         let tile_pos = self.ordering.get_pos(tile_index);
-        PixelTile {
+        Some(PixelTile {
             data: self.data[tile_index],
             tile_index,
             tile_pos,
             pixel_pos: tile_pos.scale(TILE_DIM),
-        }
+        })
     }
 
     // Given a tile, updates the values in that location:

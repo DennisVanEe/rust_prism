@@ -1,12 +1,13 @@
 use crate::camera::{Camera, CameraSample};
 use crate::film::Film;
+use crate::pixel_buffer::TileOrdering;
 use crate::math::bbox::BBox2;
 use crate::math::ray::{Ray, RayDiff};
-use crate::math::sampling::concentric_sample_disk;
+use crate::math::sampling;
 use crate::math::vector::Vec3;
 use crate::transform::{StaticTransform, Transform};
 
-pub struct PerspectiveCamera<T: Transform> {
+pub struct PerspectiveCamera<T: Transform, O: TileOrdering> {
     // Defines the position of the camera in the world
     camera_to_world: T,
     camera_to_screen: StaticTransform,
@@ -23,10 +24,10 @@ pub struct PerspectiveCamera<T: Transform> {
 
     // Film information that the camera uses. The camera is the
     // owner of the film in this case:
-    film: Film,
+    film: Film<O>,
 }
 
-impl<T: Transform> PerspectiveCamera<T> {
+impl<T: Transform, O: TileOrdering> PerspectiveCamera<T, O> {
     pub fn new(
         camera_to_world: T,
         camera_to_screen: StaticTransform,
@@ -35,7 +36,7 @@ impl<T: Transform> PerspectiveCamera<T> {
         lens_radius: f64,
         focal_dist: f64,
         screen_window: BBox2<f64>,
-        film: Film,
+        film: Film<O>,
     ) -> Self {
         let pixel_res = film.get_pixel_res();
         let screen_to_raster = StaticTransform::new_scale(Vec3 {
@@ -81,7 +82,7 @@ impl<T: Transform> PerspectiveCamera<T> {
     }
 }
 
-impl<T: Transform> Camera for PerspectiveCamera<T> {
+impl<T: Transform, O: TileOrdering> Camera for PerspectiveCamera<T, O> {
     fn generate_ray(&self, sample: CameraSample) -> Ray<f64> {
         let p_camera = self
             .raster_to_camera
@@ -93,7 +94,7 @@ impl<T: Transform> Camera for PerspectiveCamera<T> {
 
         // Check if there is a lens and, so, update the ray if that is the case:
         let ray = if self.lens_radius > 0. {
-            let p_lens = concentric_sample_disk(sample.p_lens).scale(self.lens_radius);
+            let p_lens = sampling::concentric_sample_disk(sample.p_lens).scale(self.lens_radius);
             // The point on the place of focus:
             let ft = self.focal_dist / ray.dir.z;
             let p_focus = ray.point_at(ft);
@@ -121,7 +122,7 @@ impl<T: Transform> Camera for PerspectiveCamera<T> {
         // Check whether or not there is a lens
         if self.lens_radius > 0. {
             // Calculate the focus information as normal:
-            let p_lens = concentric_sample_disk(sample.p_lens).scale(self.lens_radius);
+            let p_lens = sampling::concentric_sample_disk(sample.p_lens).scale(self.lens_radius);
 
             let ft = self.focal_dist / ray.dir.z;
             let p_focus = ray.point_at(ft);

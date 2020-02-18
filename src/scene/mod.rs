@@ -94,14 +94,14 @@ impl<'a> BVHObject for SceneObject<'a> {
 
 // A SceneLight is a light with information regarding the transformation of the light in the
 // world. This is to allow for basic instancing of lights:
-struct SceneLight<'a> {
-    light: &'a dyn Light,
+pub struct SceneLight<'a> {
+    pub light: &'a dyn Light, // the actual light of the scene light
     light_to_scene: &'a dyn Transform,
 }
 
 impl<'a> SceneLight<'a> {
     // Transforms everything to the light's space:
-    fn sample(
+    pub fn sample(
         &self,
         surface_point: Vec3<f64>,
         time: f64,
@@ -134,6 +134,10 @@ impl<'a> Scene<'a> {
         }
     }
 
+    pub fn get_lights(&self) -> &[SceneLight<'a>] {
+        &self.lights[..]
+    }
+
     // These intersection tests are in world space:
 
     // The intersect function also returns a reference to the material that belongs
@@ -141,9 +145,10 @@ impl<'a> Scene<'a> {
     // or not to construct a Bsdf object.
     pub fn intersect(&self, ray: Ray<f64>, max_t: f64, curr_time: f64) -> Option<SceneInteraction> {
         // First we traverse the BVH and get what we want:
-        match self.bvh.intersect(ray, max_t, curr_time, &()) {
-            Some((i, _)) => Some(i),
-            _ => None,
+        if let Some((i, _)) = self.bvh.intersect(ray, max_t, curr_time, &()) {
+            Some(i)
+        } else {
+            None
         }
     }
 

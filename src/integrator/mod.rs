@@ -6,11 +6,12 @@ use crate::math::ray::Ray;
 use crate::math::vector::Vec2;
 use crate::math::numbers::Float;
 use crate::sampler::Sampler;
-use crate::scene::{Scene, SceneObjectType};
+use crate::scene::{Scene, SceneLight, SceneObjectType};
 use crate::shading::lobe::LobeType;
 use crate::shading::material::Bsdf;
 use crate::spectrum::Spectrum;
 use crate::mem;
+use crate::film::FilmTile;
 
 use std::f64;
 
@@ -23,9 +24,13 @@ pub struct SamplerParam {
     seed: u64,
 }
 
+// Each thread gets its own integrator and tile. So, during rendering,
+// a thread would fill up a tile with values and, when it's done, it'll move
+// onto the next tile. It'll keep doing this until all tiles have been rendered
+// NOTE: adaptive sampling is something I will add later. It's on my todo list!
+// NOTE: If a custom integrator needs any extra stuff, just add it to the constructor
 pub trait Integrator {
-    fn setup(&mut self, scene: &Scene);
-    fn render(&mut self, scene: &Scene);
+    fn render(&mut self, film_tile: FilmTile, scene: &Scene) -> FilmTile;
 }
 
 // Calculates the balance heurisitc for the first distribution provided out of the two:
@@ -47,16 +52,16 @@ fn power2_heuristic(num_samples: usize, pdf: f64, num_samples_o: usize, pdf_o: f
 
 // Essentially we are performing MIS on both the BSDF and light distribution with the given bsdf and light:
 fn estimate_direct(
-    int: GeomInteraction,    // Specifies the interaction at the point where we intersected the object (geometry).
-    bsdf: &Bsdf,             // The bsdf (material) at the point that we care about.
-    curr_time: f64,          // The time when we are performing this test (used for things like shadows).
-    scene: &Scene,           // The scene where all of this is taking place.
-    light_sample: Vec2<f64>, // Sample used to sample the light (if area light).
-    bsdf_sample: Vec2<f64>,  // Sample used to sample the bsdf.
-    light: &dyn Light,       // The light we are sampling from.
+    int: GeomInteraction,      // Specifies the interaction at the point where we intersected the object (scene space).
+    bsdf: &Bsdf,               // The bsdf (material) at the point that we care about.
+    curr_time: f64,            // The time when we are performing this test (used for things like shadows).
+    scene: &Scene,             // The scene where all of this is taking place.
+    light_sample: Vec2<f64>,   // Sample used to sample the light (if area light).
+    bsdf_sample: Vec2<f64>,    // Sample used to sample the bsdf.
+    scene_light: &SceneLight,  // The light we are sampling from.
 ) -> Spectrum {
 
-    let (light_result, light_pos, light_pdf) = light.sample(int.p, curr_time, light_sample);
+    let (light_result, light_pos, light_pdf) = scene_light.sample(int.p, curr_time, light_sample);
     // wi points away from the surface and is normalized:
     let wi = (light_pos - int.p).normalize();
 
@@ -84,7 +89,7 @@ fn estimate_direct(
         // Check if the light is a "delta light". This is a special case that
         // always returns 1 for the pdf. If that is the case, we don't have to
         // worry about specifying a certain weight:
-        if light.is_delta() {
+        if scene_light.light.is_delta() {
             // Normal monte carlo estimator (weight = 1):
             bsdf_result * light_result.div_scale(light_pdf)
         } else {
@@ -97,7 +102,7 @@ fn estimate_direct(
     };
 
     // Now we see how much the bsdf contributes:
-    let bsdf_contrib = if !light.is_delta() {
+    let bsdf_contrib = if !scene_light.light.is_delta() {
         // Sample the bsdf (TODO: figure out the LobeType flag).
         let (bsdf_result, bsdf_wi, bsdf_pdf, lobe_type) =
             bsdf.sample(int.wo, bsdf_sample, LobeType::ALL);
@@ -107,7 +112,7 @@ fn estimate_direct(
             // Only bother sampling the light if the lobe isn't specular. If it is,
             // it's unlikely we will hit it, so the weight can be set to 1:
             let mis_w = if !lobe_type.contains(LobeType::SPECULAR) {
-                let light_pdf = light.pdf(int.p, bsdf_wi);
+                let light_pdf = scene_light.light.pdf(int.p, bsdf_wi);
                 // If light_pdf is 0, then there is no need to do any further calculations.
                 // Otherwise, we can go ahead and calculate the power2 heuristic:
                 if light_pdf == 0. {
@@ -127,7 +132,7 @@ fn estimate_direct(
             let light_result = if let Some(i) = scene_int {
                 // Check if the thing we hit is a light:
                 match i.obj_type {
-                    SceneObjectType::Light(l) if mem::is_ptr_same(l, light) => i.light_radiance(-wi),
+                    SceneObjectType::Light(l) if mem::is_ptr_same(l, scene_light.light) => i.light_radiance(-wi),
                     _ => Spectrum::black()
                 }
             } else {
@@ -156,15 +161,15 @@ fn estimate_direct(
 
 // This is an integrator that uniformly samples all lights in a scene:
 fn uniform_sample_all_lights<S: Sampler>(
-    int: GeomInteraction,    // Point from which we are sampling
-    bsdf: &Bsdf,             // The Bsdf at the point from which we are sampling
-    curr_time: f64,          // The current time used for moving objects and whatnot
-    scene: &Scene,           // The scene where the intersection is occuring
-    lights: &[&dyn Light],   // All of the lights in the scene and how many samples they need
-    sampler: &mut S,         // The Sampler we are using to sample values
+    int: GeomInteraction,        // Point from which we are sampling
+    bsdf: &Bsdf,                 // The Bsdf at the point from which we are sampling
+    curr_time: f64,              // The current time used for moving objects and whatnot
+    scene: &Scene,               // The scene where the intersection is occuring
+    scene_lights: &[SceneLight], // The lights we are sampling
+    sampler: &mut S,             // The Sampler we are using to sample values
 ) -> Spectrum {
     // Loop over all the lights in the scene here:
-    lights.iter().fold(Spectrum::black(), |total, &curr_light| {
+    scene_lights.iter().fold(Spectrum::black(), |total, curr_light| {
         // Don't worry about scattering media for now:
         let light_samples = sampler.get_2d_array();
         let bsdf_samples = sampler.get_2d_array();
@@ -189,26 +194,26 @@ fn uniform_sample_all_lights<S: Sampler>(
 }
 
 fn uniform_sample_one_light<S: Sampler>(
-    int: GeomInteraction,  // Point from which we are sampling
-    bsdf: &Bsdf,           // The Bsdf at the point from which we are sampling
-    curr_time: f64,        // The current time used for moving objects and whatnot
-    lights: &[&dyn Light], // All of the lights in the scene
-    scene: &Scene,         // The scene where the intersection is occuring
-    sampler: &mut S,       // The Sampler we are using to sample values
+    int: GeomInteraction,        // Point from which we are sampling
+    bsdf: &Bsdf,                 // The Bsdf at the point from which we are sampling
+    curr_time: f64,              // The current time used for moving objects and whatnot
+    scene: &Scene,               // The scene that we are working on
+    scene_lights: &[SceneLight], // All of the lights in the scene
+    sampler: &mut S,             // The Sampler we are using to sample values
 ) -> Spectrum {
 
     // Check if we have any lights in the scene at all:
-    if lights.is_empty() {
+    if scene_lights.is_empty() {
         return Spectrum::black();
     }
 
-    let num_lights = lights.len() as f64;
+    let num_lights = scene_lights.len() as f64;
 
     // Randomly pick a light:
     let light = {
         let sample = sampler.get_1d();
-        let light_index = (lights.len() - 1).min((num_lights * sample) as usize);
-        lights[light_index]
+        let light_index = (scene_lights.len() - 1).min((num_lights * sample) as usize);
+        &scene_lights[light_index]
     };
 
     let light_sample = sampler.get_2d();

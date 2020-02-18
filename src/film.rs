@@ -1,11 +1,12 @@
 use crate::filter::{Filter, PixelFilter};
 use crate::math::vector::Vec2;
 use crate::pixel_buffer::{Pixel, PixelBuffer, PixelTile, TileOrdering, TILE_DIM};
-use crate::spectrum::{RGBColor, XYZColor};
+use crate::spectrum::{Spectrum, XYZColor};
 
 use simple_error::{bail, SimpleResult};
 
 use std::mem::transmute;
+use std::sync::atomic::{Ordering, AtomicUsize};
 
 // Because we are using importance sampling, the weights of each sample
 // is 1. So we can just keep a count of the number of samples we have for that
@@ -18,7 +19,7 @@ struct FilmPixel {
 }
 
 impl Pixel for FilmPixel {
-    type FinalOutput = RGBColor;
+    type FinalOutput = Spectrum;
 
     fn zero() -> Self {
         FilmPixel {
@@ -43,7 +44,7 @@ impl Pixel for FilmPixel {
         let weight = 1. / (self.count as f64);
         let final_xyz = self.value.scale(weight);
         // Convert it to RGBColor space:
-        RGBColor::from_xyz(final_xyz)
+        Spectrum::from_xyz(final_xyz)
     }
 }
 
@@ -54,8 +55,7 @@ impl Pixel for FilmPixel {
 //
 // A FilmTile is not copyable (even though it could be) and not
 // clonable to prevent a thread from keeping a copy of the Film
-// tile and submitting it later (which could cause problems). Why
-// someone would write code like that does that is beyond me, though.
+// tile and submitting it later (which could cause problems).
 pub struct FilmTile {
     pub tile: PixelTile<FilmPixel>,
 }
@@ -70,6 +70,7 @@ impl FilmTile {
 pub struct Film<O: TileOrdering> {
     pixel_buffer: PixelBuffer<FilmPixel, O>,
     pixel_filter: PixelFilter,
+    AtomicUsize: curr_tile_index,
 }
 
 impl<O: TileOrdering> Film<O> {
@@ -93,6 +94,7 @@ impl<O: TileOrdering> Film<O> {
         Ok(Film {
             pixel_buffer: PixelBuffer::new_zero(tile_res),
             pixel_filter: PixelFilter::new(filter),
+            curr_tile_index: AtomicUsize::new(0),
         })
     }
 
@@ -104,6 +106,16 @@ impl<O: TileOrdering> Film<O> {
         let mut_self = unsafe { transmute::<&Self, &mut Self>(self) };
         // Now we can just go ahead and update the tile:
         mut_self.pixel_buffer.update_tile(&film_tile.tile);
+    }
+
+    // Returns None when all tiles are complete:
+    pub fn next_tile(&self) -> Option<FilmTile> {
+        let tile_index = self.curr_tile_index.fetch_add(1, Ordering::Relaxed);
+        if let Some(tile) = self.pixel_buffer.get_zero_tile(tile_index) {
+            Some(FilmTile::new(tile))
+        } else {
+            None
+        }
     }
 
     pub fn get_pixel_res(&self) -> Vec2<usize> {
