@@ -187,11 +187,11 @@ impl PixelFilter {
         }
     }
 
-    pub fn sample_pos(self, r1: f64, r2: f64) -> Vec2<f64> {
+    pub fn sample_pos(self, r: Vec2<f64>) -> Vec2<f64> {
         // First, we sample the x-value:
-        let x = self.cdf_x.iter().position(|&cdf| cdf > r1).unwrap();
+        let x = self.cdf_x.iter().position(|&cdf| cdf > r.x).unwrap();
         // Using this x-value, we can now find the y-value:
-        let y = self.cdf_y[x].iter().position(|&cdf| cdf >= r2).unwrap();
+        let y = self.cdf_y[x].iter().position(|&cdf| cdf >= r.y).unwrap();
 
         // Convert these indices to x and y coordinates:
         let x = x as f64;

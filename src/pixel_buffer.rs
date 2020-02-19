@@ -131,9 +131,11 @@ impl<T: Pixel> PixelTile<T> {
 // PixelBuffer
 //
 
+type PixelBuffer<P: Pixel> = Vec<[P; TILE_DIM * TILE_DIM]>;
+
 // Now, for that reason, data is not stored as a normal pixel buffer
 // would be (it's not just a 2D array in a 1D array form):
-pub struct PixelBuffer<P: Pixel, O: TileOrdering> {
+pub struct Film<P: Pixel, O: TileOrdering> {
     data: Vec<[P; TILE_DIM * TILE_DIM]>,
     ordering: O,
     tile_res: Vec2<usize>,
@@ -241,11 +243,14 @@ impl<P: Pixel, O: TileOrdering> PixelBuffer<P, O> {
         let mut old_tile = self.curr_tile_index.load(Ordering::Relaxed);
         loop {
             // Check if this tile is already at the max. If it is, then we are done.
-            if old_tile >= self.data.len() {
+            let new_tile = if old_tile >= self.data.len() {
+                // When I'm working on adding adaptive sampling, I can change what the tile index should
+                //  be once I've gone through all possible options here:
+                // 0
                 return None;
-            }
-            // The next tile we care about:
-            let new_tile = old_tile + 1;
+            } else {
+                old_tile + 1
+            };
 
             if let Err(x) = self.curr_tile_index.compare_exchange_weak(old_tile, new_tile, Ordering::Relaxed, Ordering::Relaxed) {
                 // Someone else changed the value, oh well, try again with a different x value:

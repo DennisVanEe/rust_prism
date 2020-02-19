@@ -1,12 +1,157 @@
-use crate::filter::{Filter, PixelFilter};
+use crate::filter::PixelFilter;
 use crate::math::vector::Vec2;
-use crate::pixel_buffer::{Pixel, PixelBuffer, PixelTile, TileOrdering, TILE_DIM};
 use crate::spectrum::{Spectrum, XYZColor};
+use crate::math::util;
 
-use simple_error::{bail, SimpleResult};
-
-use std::mem::transmute;
 use std::sync::atomic::{Ordering, AtomicUsize};
+use std::iter::IntoIterator;
+use std::slice::Iter;
+use std::mem;
+
+//
+// TileOrdering
+//
+
+// Defines how the tiles in a pixel buffer should be ordered.
+pub trait TileOrdering {
+    // Sets the resolution. Some ordering schemes might take advantage of
+    // this, others might not.
+    fn new(res: Vec2<usize>) -> Self;
+    // Converts a linear index to a position:
+    fn get_pos(&self, index: usize) -> Vec2<usize>;
+    // Converts a position to an index:
+    fn get_index(&self, pos: Vec2<usize>) -> usize;
+}
+
+// Tile ordering that follows the morton code:
+pub struct MortonOrder {}
+
+impl TileOrdering for MortonOrder {
+    fn new(_: Vec2<usize>) -> Self {
+        MortonOrder {}
+    }
+
+    fn get_pos(&self, index: usize) -> Vec2<usize> {
+        let pos = util::morton_to_2d(index as u64);
+        Vec2 {
+            x: pos.x as usize,
+            y: pos.y as usize,
+        }
+    }
+
+    fn get_index(&self, pos: Vec2<usize>) -> usize {
+        let pos = Vec2 {
+            x: pos.x as u32,
+            y: pos.y as u32,
+        };
+        util::morton_from_2d(pos) as usize
+    }
+}
+
+pub struct ScanlineOrder {
+    res: Vec2<usize>,
+}
+
+impl TileOrdering for ScanlineOrder {
+    fn new(res: Vec2<usize>) -> Self {
+        ScanlineOrder { res }
+    }
+
+    fn get_pos(&self, index: usize) -> Vec2<usize> {
+        Vec2 {
+            x: index % self.res.x,
+            y: index / self.res.x,
+        }
+    }
+
+    fn get_index(&self, pos: Vec2<usize>) -> usize {
+        self.res.x * pos.y + pos.x
+    }
+}
+
+//
+// Pixel
+//
+
+// This trait is needed so we know how to update a pixel
+// when a PixelBuffer is given a tile that we recently finished
+// work on:
+pub trait Pixel: Copy {
+    // The final output type of the image. After we run a
+    // "finalize" function over the buffer this is the final
+    // result of the buffer. Usually this can be the same type
+    // as the pixel:
+    type FinalOutput: Copy;
+
+    // Create an instance of the pixel in the "zero" state:
+    fn zero() -> Self;
+    // Sets the buffer to zero:
+    fn set_zero(&mut self);
+    // Update the current pixel given another pixel:
+    fn update(&mut self, p: &Self);
+    // Outputs a "final" result for the current pixel:
+    fn finalize(&self) -> Self::FinalOutput;
+}
+
+//
+// PixelTile
+//
+
+// Now, a single thread renderes a collection of pixels (not just one).
+// It renders in tiles which are of a certain size as defined here:
+// TILE_DIM means a tile is TILE_DIM X TILE_DIM:
+pub const TILE_DIM: usize = 8;
+
+// This is the tile that is given to a thread for it to fill out with important
+// information.
+pub struct PixelTile<P: Pixel> {
+    pub data: [P; TILE_DIM * TILE_DIM], // The actual data that we care about
+    // A lot of this information is redundant (can all be computed if given
+    // the original pixel buffer). But if a thread doesn't want to deal with
+    // checking the PixelBuffer, all of the info is here:
+    tile_index: usize,      // The index of the tile in question
+    tile_pos: Vec2<usize>,  // The (x, y) position of the tile itself
+    pixel_pos: Vec2<usize>, // The positin of the top left pixel
+}
+
+impl<P: Pixel> PixelTile<P> {
+    pub fn get_tile_index(&self) -> usize {
+        self.tile_index
+    }
+
+    pub fn get_tile_pos(&self) -> Vec2<usize> {
+        self.tile_pos
+    }
+
+    pub fn get_pixel_pos(&self) -> Vec2<usize> {
+        self.pixel_pos
+    }
+}
+
+pub struct PixelTileIter<'a, P: Pixel> {
+    tile_iter: Iter<'a, P>,
+    pixel_pos: Vec2<usize>, // Useful when sampling
+}
+
+impl<'a, P: Pixel> Iterator for PixelTileIter<'a, P> {
+    type Item = (P, Vec2<usize>); // The global position on film and the pixel
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some(pixel) = self.tile_iter.next() {
+            let result = (pixel, self.pixel_pos);
+            // update pixel position:
+            
+        } else {
+            None
+        }
+    }
+}
+
+//
+// Film
+// A collection (in the future) of pixel buffers that lends out tiles for
+// processing and whatnot
+//
 
 // Because we are using importance sampling, the weights of each sample
 // is 1. So we can just keep a count of the number of samples we have for that
@@ -48,84 +193,136 @@ impl Pixel for FilmPixel {
     }
 }
 
-// A special type that can only be created by a Film object.
-// This way, if the Film object works, we can gaurantee that
-// no two threads will ever have a tile to the same location
-// at the same time.
-//
-// A FilmTile is not copyable (even though it could be) and not
-// clonable to prevent a thread from keeping a copy of the Film
-// tile and submitting it later (which could cause problems).
-pub struct FilmTile {
-    pub tile: PixelTile<FilmPixel>,
-}
-
-impl FilmTile {
-    fn new(tile: PixelTile<FilmPixel>) -> Self {
-        Self { tile }
-    }
-}
-
-// The film class is in charge of managing all information about the film we may want.
-// TODO: the pixel buffer will change for some sort of adaptive sampling pixel buffer in the future,
-// such a buffer would allow me to define when to "end" the operation
+// Now, for that reason, data is not stored as a normal pixel buffer
+// would be (it's not just a 2D array in a 1D array form):
 pub struct Film<O: TileOrdering> {
-    pixel_buffer: PixelBuffer<FilmPixel, O>,
-    pixel_filter: PixelFilter,
-    curr_tile_index: AtomicUsize,
+    film_pixels: Vec<[FilmPixel; TILE_DIM * TILE_DIM]>,
+
+    ordering: O,                  // The order in which we visit each tile
+    filter: PixelFilter,          // The pixel filter used to determine how to sample pixels
+    tile_res: Vec2<usize>,        // The resolution in terms of tiles
+    pixel_res: Vec2<usize>,       // The resolution in terms of pixels
+    curr_tile_index: AtomicUsize, // A simple atomic counter that counts to the max value of data
 }
 
 impl<O: TileOrdering> Film<O> {
-    // This performs the check to make sure that the resolution
-    // provided is a multiple of the TILE_DIM. I could remove this
-    // constraint, but that would make the code a little bit more
-    // complex, and I don't feel like doing that:
-    pub fn new<T: Filter>(filter: &T, pixel_res: Vec2<usize>) -> SimpleResult<Self> {
-        // First we check if the resolution is a multiple of
-        // the TILE_DIM:
-        if pixel_res.x % TILE_DIM != 0 || pixel_res.y % TILE_DIM != 0 {
-            bail!(
-                "The provided Film resolution must be a multiple of: {}",
-                TILE_DIM
-            );
-        }
-        let tile_res = Vec2 {
-            x: pixel_res.x / TILE_DIM,
-            y: pixel_res.y / TILE_DIM,
-        };
-        Ok(Film {
-            pixel_buffer: PixelBuffer::new_zero(tile_res),
-            pixel_filter: PixelFilter::new(filter),
+    // Creates a new pixel buffer given the tile resolution.
+    pub fn new_zero(tile_res: Vec2<usize>, filter: PixelFilter) -> Self {
+        let pixel_res = tile_res.scale(TILE_DIM);
+
+        let film_pixels = vec![[FilmPixel::zero(); TILE_DIM * TILE_DIM]; tile_res.x * tile_res.y];
+        Film {
+            film_pixels,
+            ordering: O::new(tile_res),
+            filter,
+            tile_res,
+            pixel_res,
             curr_tile_index: AtomicUsize::new(0),
-        })
+        }
     }
 
-    // Updates the film buffer at the specified location with the given tile. Technically
-    // this is a mutable operation, but because of the use of FilmTiles, we can gaurantee
-    // that everyone accessing it will access a disjoint portion of it:
-    pub fn update_tile(&self, film_tile: FilmTile) {
-        // We can do this for the reason described above:
-        let mut_self = unsafe { transmute::<&Self, &mut Self>(self) };
-        // Now we can just go ahead and update the tile:
-        mut_self.pixel_buffer.update_tile(&film_tile.tile);
+    pub fn new(tile_res: Vec2<usize>, filter: PixelFilter, pixel: FilmPixel) -> Self {
+        let pixel_res = tile_res.scale(TILE_DIM);
+
+        let film_pixels = vec![[pixel; TILE_DIM * TILE_DIM]; tile_res.x * tile_res.y];
+        Film {
+            film_pixels,
+            ordering: O::new(tile_res),
+            filter,
+            tile_res,
+            pixel_res,
+            curr_tile_index: AtomicUsize::new(0),
+        }
     }
 
-    // Returns None when all tiles are complete:
-    pub fn next_tile(&self) -> Option<FilmTile> {
-        let tile_index = self.curr_tile_index.fetch_add(1, Ordering::Relaxed);
-        
-        if let Some(tile) = self.pixel_buffer.get_zero_tile(tile_index) {
-            Some(FilmTile::new(tile))
+    // Sets the entire pixel buffer to the pixel's "zero" state
+    pub fn set_zero(&mut self) {
+        self.film_pixels.iter_mut().for_each(|tile| {
+            tile.iter_mut().for_each(|p| {
+                p.set_zero();
+            });
+        });
+    }
+
+    // Returns a zeroed tile for the given tile_index:
+    pub fn get_zero_tile(&self) -> Option<FilmTile<FilmPixel>> {
+        if let Some(tile_index) = self.get_next_tile_index() {
+            let tile_pos = self.ordering.get_pos(tile_index);
+            Some(FilmTile {
+                data: [FilmPixel::zero(); TILE_DIM * TILE_DIM],
+                tile_index,
+                tile_pos,
+                pixel_pos: tile_pos.scale(TILE_DIM),
+            })
         } else {
             None
         }
     }
 
+    // Returns the tile data present at the given tile_index:
+    pub fn get_tile(&self) -> Option<PixelTile<FilmPixel>> {
+        if let Some(tile_index) = self.get_next_tile_index() {
+            let tile_pos = self.ordering.get_pos(tile_index);
+            Some(PixelTile {
+                data: self.data[tile_index],
+                tile_index,
+                tile_pos,
+                pixel_pos: tile_pos.scale(TILE_DIM),
+            })
+        } else {
+            None
+        }
+    }
+
+    // Given a tile, updates the values in that location. Because of the way that
+    // AtomicUsize is implemented, we can gaurantee that no two tiles will write
+    // the same location:
+    pub fn update_tile(&self, tile: &FilmTile<FilmPixel>) {
+        // We have a gaurantee that this will be safe:
+        let mut_self = unsafe { mem::transmute::<&Self, &mut Self>(self) };
+
+        let buffer_tile = mut_self.data[tile.tile_index];
+        buffer_tile
+            .iter_mut()
+            .zip(tile.data.iter())
+            .for_each(|(curr_p, p)| {
+                curr_p.update(p);
+            });
+    }
+
+    pub fn get_num_tiles(&self) -> usize {
+        self.data.len()
+    }
+
     pub fn get_pixel_res(&self) -> Vec2<usize> {
-        self.pixel_buffer.get_pixel_res()
+        self.pixel_res
     }
 
     pub fn get_tile_res(&self) -> Vec2<usize> {
-        self.pixel_buffer.get_tile_res()
+        self.tile_res
+    }
+
+    fn get_next_tile_index(&self) -> Option<usize> {
+        // Get the current tile we have:
+        let mut old_tile = self.curr_tile_index.load(Ordering::Relaxed);
+        loop {
+            // Check if this tile is already at the max. If it is, then we are done.
+            let new_tile = if old_tile >= self.data.len() {
+                // When I'm working on adding adaptive sampling, I can change what the tile index should
+                //  be once I've gone through all possible options here:
+                // 0
+                return None;
+            } else {
+                old_tile + 1
+            };
+
+            if let Err(x) = self.curr_tile_index.compare_exchange_weak(old_tile, new_tile, Ordering::Relaxed, Ordering::Relaxed) {
+                // Someone else changed the value, oh well, try again with a different x value:
+                old_tile = x;
+            } else {
+                // We return the "old_tile". The new_tile is for the next time we run the code:
+                return Some(old_tile);
+            }
+        }
     }
 }
