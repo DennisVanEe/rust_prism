@@ -4,6 +4,8 @@
 use crate::math::util::{morton_from_2d, morton_to_2d};
 use crate::math::vector::Vec2;
 
+use std::sync::atomic::{Ordering, AtomicUsize};
+
 //
 // TileOrdering
 //
@@ -136,6 +138,7 @@ pub struct PixelBuffer<P: Pixel, O: TileOrdering> {
     ordering: O,
     tile_res: Vec2<usize>,
     pixel_res: Vec2<usize>,
+    curr_tile_index: AtomicUsize,
 }
 
 impl<P: Pixel, O: TileOrdering> PixelBuffer<P, O> {
@@ -224,5 +227,9 @@ impl<P: Pixel, O: TileOrdering> PixelBuffer<P, O> {
 
     pub fn get_tile_res(&self) -> Vec2<usize> {
         self.tile_res
+    }
+
+    fn get_next_tile_index(&self) -> usize {
+        let curr_tile = 
     }
 }

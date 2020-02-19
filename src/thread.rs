@@ -11,8 +11,7 @@ pub struct ThreadData<'a, I: Integrator, O: TileOrdering> {
     film: &'a Film<O>, // A film tile for the integrator we are dealing with
 }
 
-// Specifies any return information that we may want. Not sure what we would want
-// to return yet, but it's here in case we want it:
+// Specifies the values that are returned:
 pub struct RenderThreadReturn {
 
 }

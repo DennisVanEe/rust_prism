@@ -67,10 +67,12 @@ impl FilmTile {
 }
 
 // The film class is in charge of managing all information about the film we may want.
+// TODO: the pixel buffer will change for some sort of adaptive sampling pixel buffer in the future,
+// such a buffer would allow me to define when to "end" the operation
 pub struct Film<O: TileOrdering> {
     pixel_buffer: PixelBuffer<FilmPixel, O>,
     pixel_filter: PixelFilter,
-    AtomicUsize: curr_tile_index,
+    curr_tile_index: AtomicUsize,
 }
 
 impl<O: TileOrdering> Film<O> {
@@ -111,6 +113,7 @@ impl<O: TileOrdering> Film<O> {
     // Returns None when all tiles are complete:
     pub fn next_tile(&self) -> Option<FilmTile> {
         let tile_index = self.curr_tile_index.fetch_add(1, Ordering::Relaxed);
+        
         if let Some(tile) = self.pixel_buffer.get_zero_tile(tile_index) {
             Some(FilmTile::new(tile))
         } else {
