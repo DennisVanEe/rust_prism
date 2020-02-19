@@ -5,6 +5,7 @@ use crate::math::util::{morton_from_2d, morton_to_2d};
 use crate::math::vector::Vec2;
 
 use std::sync::atomic::{Ordering, AtomicUsize};
+use std::mem;
 
 //
 // TileOrdering
@@ -133,12 +134,11 @@ impl<T: Pixel> PixelTile<T> {
 // Now, for that reason, data is not stored as a normal pixel buffer
 // would be (it's not just a 2D array in a 1D array form):
 pub struct PixelBuffer<P: Pixel, O: TileOrdering> {
-    // The data is stored in order of morton curves:
     data: Vec<[P; TILE_DIM * TILE_DIM]>,
     ordering: O,
     tile_res: Vec2<usize>,
     pixel_res: Vec2<usize>,
-    curr_tile_index: AtomicUsize,
+    curr_tile_index: AtomicUsize, // A simple atomic counter that counts to the max value of data
 }
 
 impl<P: Pixel, O: TileOrdering> PixelBuffer<P, O> {
@@ -152,6 +152,7 @@ impl<P: Pixel, O: TileOrdering> PixelBuffer<P, O> {
             ordering: O::new(tile_res),
             tile_res,
             pixel_res,
+            curr_tile_index: AtomicUsize::new(0),
         }
     }
 
@@ -164,6 +165,7 @@ impl<P: Pixel, O: TileOrdering> PixelBuffer<P, O> {
             ordering: O::new(tile_res),
             tile_res,
             pixel_res,
+            curr_tile_index: AtomicUsize::new(0),
         }
     }
 
@@ -177,38 +179,43 @@ impl<P: Pixel, O: TileOrdering> PixelBuffer<P, O> {
     }
 
     // Returns a zeroed tile for the given tile_index:
-    pub fn get_zero_tile(&self, tile_index: usize) -> Option<PixelTile<P>> {
-        if tile_index < self.data.len() {
-            return None;
+    pub fn get_zero_tile(&self) -> Option<PixelTile<P>> {
+        if let Some(tile_index) = self.get_next_tile_index() {
+            let tile_pos = self.ordering.get_pos(tile_index);
+            Some(PixelTile {
+                data: [P::zero(); TILE_DIM * TILE_DIM],
+                tile_index,
+                tile_pos,
+                pixel_pos: tile_pos.scale(TILE_DIM),
+            })
+        } else {
+            None
         }
-
-        let tile_pos = self.ordering.get_pos(tile_index);
-        Some(PixelTile {
-            data: [P::zero(); TILE_DIM * TILE_DIM],
-            tile_index,
-            tile_pos,
-            pixel_pos: tile_pos.scale(TILE_DIM),
-        })
     }
 
     // Returns the tile data present at the given tile_index:
-    pub fn get_tile(&self, tile_index: usize) -> Option<PixelTile<P>> {
-        if tile_index < self.data.len() {
-            return None;
+    pub fn get_tile(&self) -> Option<PixelTile<P>> {
+        if let Some(tile_index) = self.get_next_tile_index() {
+            let tile_pos = self.ordering.get_pos(tile_index);
+            Some(PixelTile {
+                data: self.data[tile_index],
+                tile_index,
+                tile_pos,
+                pixel_pos: tile_pos.scale(TILE_DIM),
+            })
+        } else {
+            None
         }
-
-        let tile_pos = self.ordering.get_pos(tile_index);
-        Some(PixelTile {
-            data: self.data[tile_index],
-            tile_index,
-            tile_pos,
-            pixel_pos: tile_pos.scale(TILE_DIM),
-        })
     }
 
-    // Given a tile, updates the values in that location:
-    pub fn update_tile(&mut self, tile: &PixelTile<P>) {
-        let buffer_tile = &mut self.data[tile.tile_index];
+    // Given a tile, updates the values in that location. Because of the way that
+    // AtomicUsize is implemented, we can gaurantee that no two tiles will write
+    // the same location:
+    pub fn update_tile(&self, tile: &PixelTile<P>) {
+        // We have a gaurantee that this will be safe:
+        let mut_self = unsafe { mem::transmute::<&Self, &mut Self>(self) };
+
+        let buffer_tile = mut_self.data[tile.tile_index];
         buffer_tile
             .iter_mut()
             .zip(tile.data.iter())
@@ -229,7 +236,24 @@ impl<P: Pixel, O: TileOrdering> PixelBuffer<P, O> {
         self.tile_res
     }
 
-    fn get_next_tile_index(&self) -> usize {
-        let curr_tile = 
+    fn get_next_tile_index(&self) -> Option<usize> {
+        // Get the current tile we have:
+        let mut old_tile = self.curr_tile_index.load(Ordering::Relaxed);
+        loop {
+            // Check if this tile is already at the max. If it is, then we are done.
+            if old_tile >= self.data.len() {
+                return None;
+            }
+            // The next tile we care about:
+            let new_tile = old_tile + 1;
+
+            if let Err(x) = self.curr_tile_index.compare_exchange_weak(old_tile, new_tile, Ordering::Relaxed, Ordering::Relaxed) {
+                // Someone else changed the value, oh well, try again with a different x value:
+                old_tile = x;
+            } else {
+                // We return the "old_tile". The new_tile is for the next time we run the code:
+                return Some(old_tile);
+            }
+        }
     }
 }
