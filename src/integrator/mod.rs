@@ -10,8 +10,8 @@ use crate::scene::{Scene, SceneLight, SceneObjectType};
 use crate::shading::lobe::LobeType;
 use crate::shading::material::Bsdf;
 use crate::spectrum::Spectrum;
+use crate::film::PixelTile;
 use crate::mem;
-use crate::film::FilmTile;
 
 use std::f64;
 
@@ -30,7 +30,9 @@ pub struct SamplerParam {
 // NOTE: adaptive sampling is something I will add later. It's on my todo list!
 // NOTE: If a custom integrator needs any extra stuff, just add it to the constructor
 pub trait Integrator {
-    fn render(&mut self, film_tile: FilmTile, scene: &Scene) -> Spectrum;
+    // Given a tile and Scene, render values to said tile and return it. Once it's
+    // done the thread will add the tile to the maian film buffer:
+    fn render(&mut self, film_tile: PixelTile, scene: &Scene) -> PixelTile;
 }
 
 // Calculates the balance heurisitc for the first distribution provided out of the two:

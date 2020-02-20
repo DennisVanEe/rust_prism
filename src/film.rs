@@ -8,6 +8,13 @@ use std::slice::{IterMut, Iter};
 use std::mem;
 
 //
+// TODO:
+// Unify the PixelTile so that is supports accepting multiple pixels from multiple buffers
+// Probably need some sort of dynamic work in this case
+// Add support for dynamic amount of buffers in the film and pass them into the PixelBuffer
+// This way we can add things like heat maps and whatnot
+
+//
 // TileOrdering
 //
 

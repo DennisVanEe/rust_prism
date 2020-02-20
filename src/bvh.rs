@@ -31,7 +31,7 @@ pub trait BVHObject {
         max_t: f64,
         curr_time: f64,
         int_info: &Self::IntParam,
-    ) -> Option<IntResult>;
+    ) -> Option<Self::IntResult>;
 
     fn get_centroid(&self, data: &Self::DataParam) -> Vec3<f64>;
     fn get_bound(&self, data: &Self::DataParam) -> BBox3<f64>;

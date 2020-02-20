@@ -33,22 +33,16 @@ struct RenderThread<'a, I: Integrator, O: TileOrdering>  {
     thread: JoinHandle<RenderThreadReturn>,
 }
 
-// The main render loop function that will handle the rendering.
-fn render_loop<'a, I: Integrator, O: TileOrdering>(data: ThreadData<'a, I, O>) {
-    loop {
-        // First we try to get a specific tile:
-        if let Some(tile) = data.film.get_tile() {
-            for (&mut pixel, pixel_pos) in tile.iter_mut() {
-                
-            }
-        } else {
-
-        }
-    }
-}
-
 impl<'a, I: Integrator, O: TileOrdering> RenderThread<'a, I, O> {
     fn new(id: usize, data: ThreadData<'a, I, O>) -> Self {
-        let thr = thread::spawn( move || { render_loop(data); });
+        let thr = thread::spawn( move || {
+            if let Some(tile) = data.film.get_tile() {
+
+            } else {
+                
+            }
+
+            data.integrator.render(, scene: &Scene)
+        });
     }
 }

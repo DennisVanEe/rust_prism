@@ -123,7 +123,6 @@ impl Sampler for ZeroTwo {
         _: Self::ParamType,
         num_pixel_samples: usize,
         num_dim: usize,
-        seed: u64,
         arr_sizes_1d: &[usize],
         arr_sizes_2d: &[usize],
     ) -> Self {
@@ -167,7 +166,7 @@ impl Sampler for ZeroTwo {
             index_1d: 0,
             index_2d: 0,
 
-            rng: RandGen::new(seed),
+            rng: RandGen::new_default(),
         }
     }
 
@@ -203,6 +202,10 @@ impl Sampler for ZeroTwo {
         self.index_arr_2d = 0;
         self.index_1d = 0;
         self.index_2d = 0;
+    }
+
+    fn start_tile(&mut self, seed: u64) {
+        self.rng = RandGen::new(seed);
     }
 
     fn get_num_pixel_samples(&self) -> usize {

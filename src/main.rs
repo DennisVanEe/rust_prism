@@ -1,6 +1,7 @@
 // Clean this stuff up in the future...
 // This is here just for now.
 
+mod thread;
 mod scene_loading;
 mod bvh;
 mod camera;
@@ -16,7 +17,6 @@ mod scene;
 mod shading;
 mod spectrum;
 mod transform;
-mod thread;
 
 use std::env;
 

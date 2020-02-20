@@ -21,8 +21,6 @@ pub trait Sampler {
         num_pixel_samples: usize,
         // The number of dimensions:
         num_dim: usize,
-        // Not really a seed, but is used to define the random number generator:
-        seed: u64,
         // If any arrays are to be requested for 1d, request them here:
         arr_sizes_1d: &[usize],
         // If any arrays are to be requested for 2d, request them here:
@@ -31,6 +29,12 @@ pub trait Sampler {
 
     // Use the sampler to start working on a new pixel:
     fn start_pixel(&mut self, pixel: Vec2<usize>);
+
+    // Specify that we are starting a different tile. Need to 
+    // redefine a seed as this removes potential artifacting.
+    // Note, that BEFORE EVERY PIXEL start_pixel is called. This means
+    // that this function shouldn't perform start_pixel operations:
+    fn start_tile(&mut self, seed: u64);
 
     // This gets called constantly until it returns false.
     // When it does it means we have sampled the pixel sample number of times.
