@@ -30,7 +30,7 @@ pub struct SamplerParam {
 // NOTE: adaptive sampling is something I will add later. It's on my todo list!
 // NOTE: If a custom integrator needs any extra stuff, just add it to the constructor
 pub trait Integrator {
-    fn render(&mut self, film_tile: FilmTile, scene: &Scene) -> FilmTile;
+    fn render(&mut self, film_tile: FilmTile, scene: &Scene) -> Spectrum;
 }
 
 // Calculates the balance heurisitc for the first distribution provided out of the two:

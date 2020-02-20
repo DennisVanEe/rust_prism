@@ -1,11 +1,10 @@
-use crate::filter::PixelFilter;
 use crate::math::vector::Vec2;
 use crate::spectrum::{Spectrum, XYZColor};
 use crate::math::util;
 
 use std::sync::atomic::{Ordering, AtomicUsize};
 use std::iter::IntoIterator;
-use std::slice::Iter;
+use std::slice::{IterMut, Iter};
 use std::mem;
 
 //
@@ -97,18 +96,10 @@ pub trait Pixel: Copy {
 // PixelTile
 //
 
-// Now, a single thread renderes a collection of pixels (not just one).
-// It renders in tiles which are of a certain size as defined here:
-// TILE_DIM means a tile is TILE_DIM X TILE_DIM:
 pub const TILE_DIM: usize = 8;
 
-// This is the tile that is given to a thread for it to fill out with important
-// information.
 pub struct PixelTile<P: Pixel> {
     pub data: [P; TILE_DIM * TILE_DIM], // The actual data that we care about
-    // A lot of this information is redundant (can all be computed if given
-    // the original pixel buffer). But if a thread doesn't want to deal with
-    // checking the PixelBuffer, all of the info is here:
     tile_index: usize,      // The index of the tile in question
     tile_pos: Vec2<usize>,  // The (x, y) position of the tile itself
     pixel_pos: Vec2<usize>, // The positin of the top left pixel
@@ -128,19 +119,79 @@ impl<P: Pixel> PixelTile<P> {
     }
 }
 
-pub struct PixelTileIter<'a, P: Pixel> {
-    tile_iter: Iter<'a, P>,
-    pixel_pos: Vec2<usize>, // Useful when sampling
+//
+// Iterators for PixelTile:
+//
+
+impl<'a, P: Pixel> IntoIterator for &'a mut PixelTile<P> {
+    type Item = (&'a P, Vec2<usize>);
+    type IntoIter = PixelTileIterMut<'a, P>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        PixelTileIterMut {
+            tile_iter: self.data.iter_mut(),
+            tile_pos: self.tile_pos,
+            pixel_pos: 0,
+        }
+    }
 }
 
-impl<'a, P: Pixel> Iterator for PixelTileIter<'a, P> {
-    type Item = (P, Vec2<usize>); // The global position on film and the pixel
+impl<'a, P: Pixel> IntoIterator for &'a PixelTile<P> {
+    type Item = (&'a P, Vec2<usize>);
+    type IntoIter = PixelTileIter<'a, P>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        PixelTileIter {
+            tile_iter: self.data.iter(),
+            tile_pos: self.tile_pos,
+            pixel_pos: 0,
+        }
+    } 
+}
+
+pub struct PixelTileIterMut<'a, P: Pixel> {
+    tile_iter: IterMut<'a, P>,
+    tile_pos: Vec2<usize>,  // The tile's position
+    pixel_pos: usize, // The pixel's position
+}
+
+impl<'a, P: Pixel> Iterator for PixelTileIterMut<'a, P> {
+    type Item = (&'a mut P, Vec2<usize>);
 
     fn next(&mut self) -> Option<Self::Item> {
         if let Some(pixel) = self.tile_iter.next() {
-            let result = (pixel, self.pixel_pos);
-            // update pixel position:
-            
+            let delta = Vec2 {
+                x: self.pixel_pos % TILE_DIM,
+                y: self.pixel_pos / TILE_DIM,
+            };
+            let result = (pixel, self.tile_pos + delta);
+            self.pixel_pos += 1;
+            Some(result)
+        } else {
+            None
+        }
+    }
+}
+
+pub struct PixelTileIter<'a, P: Pixel> {
+    tile_iter: Iter<'a, P>,
+    tile_pos: Vec2<usize>,  // The tile's position
+    pixel_pos: usize, // The pixel's position
+}
+
+impl<'a, P: Pixel> Iterator for PixelTileIter<'a, P> {
+    // The pixel and the vector value:
+    type Item = (&'a P, Vec2<usize>);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some(pixel) = self.tile_iter.next() {
+            let delta = Vec2 {
+                x: self.pixel_pos % TILE_DIM,
+                y: self.pixel_pos / TILE_DIM,
+            };
+            let result = (pixel, self.tile_pos + delta);
+            self.pixel_pos += 1;
+            Some(result)
         } else {
             None
         }
@@ -199,7 +250,6 @@ pub struct Film<O: TileOrdering> {
     film_pixels: Vec<[FilmPixel; TILE_DIM * TILE_DIM]>,
 
     ordering: O,                  // The order in which we visit each tile
-    filter: PixelFilter,          // The pixel filter used to determine how to sample pixels
     tile_res: Vec2<usize>,        // The resolution in terms of tiles
     pixel_res: Vec2<usize>,       // The resolution in terms of pixels
     curr_tile_index: AtomicUsize, // A simple atomic counter that counts to the max value of data
@@ -207,28 +257,26 @@ pub struct Film<O: TileOrdering> {
 
 impl<O: TileOrdering> Film<O> {
     // Creates a new pixel buffer given the tile resolution.
-    pub fn new_zero(tile_res: Vec2<usize>, filter: PixelFilter) -> Self {
+    pub fn new_zero(tile_res: Vec2<usize>) -> Self {
         let pixel_res = tile_res.scale(TILE_DIM);
 
         let film_pixels = vec![[FilmPixel::zero(); TILE_DIM * TILE_DIM]; tile_res.x * tile_res.y];
         Film {
             film_pixels,
             ordering: O::new(tile_res),
-            filter,
             tile_res,
             pixel_res,
             curr_tile_index: AtomicUsize::new(0),
         }
     }
 
-    pub fn new(tile_res: Vec2<usize>, filter: PixelFilter, pixel: FilmPixel) -> Self {
+    pub fn new(tile_res: Vec2<usize>, pixel: FilmPixel) -> Self {
         let pixel_res = tile_res.scale(TILE_DIM);
 
         let film_pixels = vec![[pixel; TILE_DIM * TILE_DIM]; tile_res.x * tile_res.y];
         Film {
             film_pixels,
             ordering: O::new(tile_res),
-            filter,
             tile_res,
             pixel_res,
             curr_tile_index: AtomicUsize::new(0),
@@ -245,10 +293,10 @@ impl<O: TileOrdering> Film<O> {
     }
 
     // Returns a zeroed tile for the given tile_index:
-    pub fn get_zero_tile(&self) -> Option<FilmTile<FilmPixel>> {
+    pub fn get_zero_tile(&self) -> Option<PixelTile<FilmPixel>> {
         if let Some(tile_index) = self.get_next_tile_index() {
             let tile_pos = self.ordering.get_pos(tile_index);
-            Some(FilmTile {
+            Some(PixelTile {
                 data: [FilmPixel::zero(); TILE_DIM * TILE_DIM],
                 tile_index,
                 tile_pos,
@@ -264,7 +312,7 @@ impl<O: TileOrdering> Film<O> {
         if let Some(tile_index) = self.get_next_tile_index() {
             let tile_pos = self.ordering.get_pos(tile_index);
             Some(PixelTile {
-                data: self.data[tile_index],
+                data: self.film_pixels[tile_index],
                 tile_index,
                 tile_pos,
                 pixel_pos: tile_pos.scale(TILE_DIM),
@@ -277,11 +325,11 @@ impl<O: TileOrdering> Film<O> {
     // Given a tile, updates the values in that location. Because of the way that
     // AtomicUsize is implemented, we can gaurantee that no two tiles will write
     // the same location:
-    pub fn update_tile(&self, tile: &FilmTile<FilmPixel>) {
+    pub fn update_tile(&self, tile: &PixelTile<FilmPixel>) {
         // We have a gaurantee that this will be safe:
         let mut_self = unsafe { mem::transmute::<&Self, &mut Self>(self) };
 
-        let buffer_tile = mut_self.data[tile.tile_index];
+        let buffer_tile = mut_self.film_pixels[tile.tile_index];
         buffer_tile
             .iter_mut()
             .zip(tile.data.iter())
@@ -291,7 +339,7 @@ impl<O: TileOrdering> Film<O> {
     }
 
     pub fn get_num_tiles(&self) -> usize {
-        self.data.len()
+        self.film_pixels.len()
     }
 
     pub fn get_pixel_res(&self) -> Vec2<usize> {
@@ -307,7 +355,7 @@ impl<O: TileOrdering> Film<O> {
         let mut old_tile = self.curr_tile_index.load(Ordering::Relaxed);
         loop {
             // Check if this tile is already at the max. If it is, then we are done.
-            let new_tile = if old_tile >= self.data.len() {
+            let new_tile = if old_tile >= self.film_pixels.len() {
                 // When I'm working on adding adaptive sampling, I can change what the tile index should
                 //  be once I've gone through all possible options here:
                 // 0

@@ -11,7 +11,6 @@ mod integrator;
 mod light;
 mod math;
 mod mem;
-mod pixel_buffer;
 mod sampler;
 mod scene;
 mod shading;
