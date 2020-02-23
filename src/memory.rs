@@ -11,15 +11,15 @@ pub unsafe fn transmute_vec<U, T>(mut src: Vec<U>) -> Vec<T> {
     let src_cap = src.capacity();
 
     // Get the size of the information:
-    let size_u = std::mem::size_of::<U>();
-    let size_t = std::mem::size_of::<T>();
+    let size_u = mem::size_of::<U>();
+    let size_t = mem::size_of::<T>();
 
     // Get new length required here:
     let src_len = (src_len * size_u) / size_t;
 
     // "Forget" src so that we don't call the destructor on src (which would delete our memory)
     std::mem::forget(src);
-    let src_ptr = std::mem::transmute::<*mut U, *mut T>(src_ptr);
+    let src_ptr = mem::transmute::<*mut U, *mut T>(src_ptr);
 
     // Construct the new vector:
     Vec::from_raw_parts(src_ptr, src_len, src_cap)
