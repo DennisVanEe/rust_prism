@@ -6,6 +6,7 @@ use crate::math::util;
 use std::sync::atomic::{Ordering, AtomicUsize};
 use std::iter::IntoIterator;
 use std::slice::{self, IterMut, Iter};
+use std::marker::PhantomData;
 use std::ptr;
 use std::mem;
 
@@ -111,10 +112,10 @@ enum AOVType {
 const TILE_DIM: usize = 8;
 const TILE_LEN: usize = TILE_DIM * TILE_DIM;
 
+// It's a wrapper for different types of AOVs so that we can
+// store a collection of AOVBuffers without worrying about them
+// being heterogeneous.
 struct AOVBuffer {
-    // It's a wrapper for different types of AOVs so that we can
-    // store a collection of AOVBuffers without worrying about them
-    // being heterogeneous.
     buffer: Vec<u8>,
     tile_dim: Vec2<usize>,
     tile_len: usize,
@@ -260,23 +261,138 @@ impl AOV for ShadNormAOV {
 // We only make public what we want to expose to the user
 // of this specific tile:
 #[derive(Clone, Copy)]
-pub struct TileIndexData {
+struct TileIndexData {
     tile_index: usize, // This is the normal, scanline index of the tile
-    pub tile_pos: Vec2<usize>, // The (x, y) coordinate of the tile if it were on film
-    pub aov_pos: Vec2<usize>, // The (x, y) coordinate of the top left most aov value
+    aov_pos: Vec2<usize>, // The (x, y) coordinate of the top left most aov value
 }
+
+// TODO: Don't ever release invalid tile indices. Instead, make it so that you can't
+// create multiple uninitialized tiles or something.
 
 // A special type that can only be created in the film crate.
 // No copy or clone is implemented for this. Once TileIndex is used
 pub struct TileIndex {
-    data: Option<TileIndexData>,
+    index: Option<(usize, Vec2<usize>)>,
 }
 
 impl TileIndex {
-    // None means it's either an initial tile or we are done
-    // rendering and there are no more tiles:
-    pub fn get_data(&self) -> Option<TileIndexData> {
-        self.data
+    // Returns the top left corner pixel position of the given tile.
+    // If none, then it's an invalid tile index and shouldn't be used.
+    pub fn aov_pos(&self) -> Option<Vec2<usize>> {
+        if let Some((_, aov_pos)) = self.index {
+            Some(aov_pos)
+        } else {
+            None
+        }
+    }
+}
+
+// A FIlm struct that references a specific film buffer. Need to force it
+// to have a certain type associated with it:
+pub struct AOVFilm<'a, P: AOV> {
+    buff: &'a AOVBuffer,
+    // Used to stop the compiler from complaining:
+    marker: PhantomData<P>,
+}
+
+impl<'a, P: AOV> AOVFilm<'a, P> {
+    pub fn get_tile(&self, index: &TileIndex) -> [P; TILE_LEN] {
+        todo!();
+    }
+
+    pub fn set_tile(&self, index: &TileIndex, )
+}
+
+// A tile is a special structure that allows you to modify data and then commit
+// the changes to the buffer.
+pub struct Tile<'a, P: AOV> {
+    // A local copy of the tile:
+    aovs: [P; TILE_LEN],
+    // A reference to the buffer:
+    buff: &'a AOVBuffer,
+    tile_index: usize,
+    aov_pos: Vec2<usize>,
+}
+
+//
+// Make sure to implement these features here:
+//
+
+impl<'a, P: AOV> IntoIterator for &'a mut Tile<'a, P> {
+    type Item = (&'a mut P, Vec2<usize>);
+    type IntoIter = TileIterMut<'a, P>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        TileIterMut {
+            tile_iter: self.aovs.iter_mut(),
+            aov_pos: self.aov_pos,
+            aov_index: 0,
+        }
+    }
+}
+
+impl<'a, P: AOV> IntoIterator for &'a Tile<'a, P> {
+    type Item = (&'a P, Vec2<usize>);
+    type IntoIter = TileIter<'a, P>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        TileIter {
+            tile_iter: self.aovs.iter(),
+            aov_pos: self.aov_pos,
+            aov_index: 0,
+        }
+    }
+}
+
+//
+// Tile Iterators to get access to pixel values:
+//
+
+pub struct TileIterMut<'a, P: AOV> {
+    tile_iter: IterMut<'a, P>, // Iterator over the array
+    aov_pos: Vec2<usize>,      // The tile's position
+    aov_index: usize,          // The pixel's position
+}
+
+impl<'a, P: AOV> Iterator for TileIterMut<'a, P> {
+    type Item = (&'a mut P, Vec2<usize>);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some(aov) = self.tile_iter.next() {
+            let delta = Vec2 {
+                x: self.aov_index % TILE_DIM,
+                y: self.aov_index / TILE_DIM,
+            };
+            let result = (aov, self.aov_pos + delta);
+            self.aov_index += 1;
+            Some(result)
+        } else {
+            None
+        }
+    }
+}
+
+pub struct TileIter<'a, P: AOV> {
+    tile_iter: Iter<'a, P>,
+    aov_pos: Vec2<usize>,   // The tile's position
+    aov_index: usize,       // The pixel's position
+}
+
+impl<'a, P: AOV> Iterator for TileIter<'a, P> {
+    type Item = (&'a P, Vec2<usize>);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some(aov) = self.tile_iter.next() {
+            let delta = Vec2 {
+                x: self.aov_index % TILE_DIM,
+                y: self.aov_index / TILE_DIM,
+            };
+            let result = (aov, self.aov_pos + delta);
+            self.aov_index += 1;
+            Some(result)
+        } else {
+            None
+        }
     }
 }
 
@@ -288,9 +404,9 @@ pub struct Film<O: TileOrdering> {
 
     ordering: O,                  // The order in which we visit each tile
     tile_res: Vec2<usize>,        // The resolution in terms of tiles
-    aov_res: Vec2<usize>,       // The resolution in terms of pixels
-    num_tiles: usize,
-    curr_tile_index: AtomicUsize, // A simple atomic counter that counts to the max value of data
+    aov_res: Vec2<usize>,         // The resolution in terms of pixels
+    num_tiles: usize,             // The total number of tiles here
+    cur_tile_index: AtomicUsize,  // A simple atomic counter that counts to the max value of data
 }
 
 impl<O: TileOrdering> Film<O> {
@@ -301,7 +417,7 @@ impl<O: TileOrdering> Film<O> {
             tile_res,
             aov_res: tile_res.scale(TILE_DIM),
             num_tiles: tile_res.x * tile_res.y,
-            curr_tile_index: AtomicUsize::new(0),
+            cur_tile_index: AtomicUsize::new(0),
         }
     }
 
@@ -336,11 +452,6 @@ impl<O: TileOrdering> Film<O> {
             panic!();
         }
     }
-
-    // TODO: Instead of constantly checking if the aov buffer exists when performing an operation
-    // on it, return some sort of handle to it that the thread can use. This way the check is only
-    // performed once. May need to encapsulate this in something so the thread doesn't do anything
-    // too stupid.
 
     // Given a tile, calls the update operation on it. Returns true if the operation was
     // complete. Returns false if the aov buffer doesn't exist:
@@ -382,19 +493,19 @@ impl<O: TileOrdering> Film<O> {
     // sent back.
     pub fn next_tile_index(&self, curr_tile_index: TileIndex) -> TileIndex {
         // Get the current tile we have:
-        let mut old_tile = self.curr_tile_index.load(Ordering::Relaxed);
+        let mut old_tile = self.cur_tile_index.load(Ordering::Relaxed);
         loop {
             // Check if this tile is already at the max. If it is, then we are done.
             let new_tile = if old_tile >= self.num_tiles {
                 // When I'm working on adding adaptive sampling, I can change what the tile index should
-                //  be once I've gone through all possible options here:
+                // be once I've gone through all possible options here:
                 // 0
                 return TileIndex { index: None };
             } else {
                 old_tile + 1
             };
 
-            if let Err(x) = self.curr_tile_index.compare_exchange_weak(old_tile, new_tile, Ordering::Relaxed, Ordering::Relaxed) {
+            if let Err(x) = self.cur_tile_index.compare_exchange_weak(old_tile, new_tile, Ordering::Relaxed, Ordering::Relaxed) {
                 // Someone else changed the value, oh well, try again with a different x value:
                 old_tile = x;
             } else {
