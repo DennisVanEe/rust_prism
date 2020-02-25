@@ -4,9 +4,7 @@ use crate::memory;
 use crate::math::util;
 
 use std::sync::atomic::{Ordering, AtomicUsize};
-use std::marker::PhantomData;
 use std::slice;
-use std::ptr;
 use std::mem;
 
 use enum_map::{Enum, EnumMap};
@@ -111,68 +109,31 @@ enum AOVType {
 const TILE_DIM: usize = 8;
 const TILE_LEN: usize = TILE_DIM * TILE_DIM;
 
-// It's a wrapper for different types of AOVs so that we can
-// store a collection of AOVBuffers without worrying about them
-// being heterogeneous.
-struct AOVBuffer {
-    buffer: Vec<u8>,
-    tile_dim: Vec2<usize>,
-    tile_len: usize,
-    aov_type: AOVType,
+struct AOVBuffer<'a, P: AOV> {
+    buff: &'a [[P; TILE_LEN]],
 }
 
-impl AOVBuffer {
-    pub fn new<P: AOV>(tile_dim: Vec2<usize>, init: P) -> Self {
-        let len = tile_dim.x * tile_dim.y * mem::size_of::<P>();
-        let aov_buffer = vec![[init; TILE_LEN]; len];
-        AOVBuffer {
-            buffer: unsafe { memory::transmute_vec(aov_buffer) },
-            tile_dim,
-            tile_len: tile_dim.x * tile_dim.y,
-            aov_type: P::Type,
-        }
-    }
-
-    pub unsafe fn set_init<P: AOV>(&mut self) {
-        debug_assert_eq!(self.aov_type, P::Type, "The type of the AOVBuffer and AOV::Type must match.");
-        let buff_ptr: *mut P = mem::transmute(self.buffer.as_mut_ptr());
-        let aov_buff = slice::from_raw_parts_mut(buff_ptr, self.buffer.len());
-        for aov in aov_buff.iter_mut() {
-            aov.set_init();
-        }
-    }
-
-    pub unsafe fn get_tile<P: AOV>(&self, tile_index: usize) -> [P; TILE_LEN] {
-        debug_assert_eq!(self.aov_type, P::Type, "The type of the AOVBuffer and AOV::Type must match.");
-        let tile_size = mem::size_of::<[P; TILE_LEN]>();
-        let byte_start = tile_index * tile_size;
-        let byte_end = byte_start + tile_size;
-        let tile_bytes = &self.buffer[byte_start..byte_end];
-        ptr::read(tile_bytes.as_ptr() as *const _) 
+impl<'a, P: AOV> AOVBuffer<'a, P> {
+    pub fn get_tile(&self, tile_index: TileIndex) -> [P; TILE_LEN] {
+        self.buff[tile_index.index]
     }
 
     // Make sure that tile isn't a reference from the buffer itself:
-    pub unsafe fn set_tile<P: AOV>(&mut self, tile_index: usize, tile: &[P; TILE_LEN]) {
-        debug_assert_eq!(self.aov_type, P::Type, "The type of the AOVBuffer and AOV::Type must match.");
-        let tile_size = mem::size_of::<[P; TILE_LEN]>();
-        let byte_start = tile_index * tile_size;
-        let byte_end = byte_start + tile_size;
-        let tile_bytes = &mut self.buffer[byte_start..byte_end];
-        ptr::copy_nonoverlapping(tile.as_ptr() as *const P, tile_bytes.as_mut_ptr() as *mut P, tile_size);
+    pub fn set_tile(&self, tile_index: TileIndex, tile: &[P; TILE_LEN]) {
+        let mut_buff: &'a mut [[P; TILE_LEN]] = unsafe {
+            mem::transmute(self.buff)
+        };
+        mut_buff[tile_index.index] = tile.clone();
     }
 
     // Performs an addition over the aov values of the tile:
-    pub unsafe fn update_tile<P: AOV>(&mut self, tile_index: usize, tile: &[P; TILE_LEN]) {
-        debug_assert_eq!(self.aov_type, P::Type, "The type of the AOVBuffer and AOV::Type must match.");
-        let tile_size = mem::size_of::<[P; TILE_LEN]>();
-        let byte_start = tile_index * tile_size;
-        let byte_end = byte_start + tile_size;
-        let tile_bytes = &mut self.buffer[byte_start..byte_end];
-        // Construct a slice of type P:
-        let dst_ptr: *mut P = mem::transmute(tile_bytes.as_mut_ptr());
-        let dst_tile = slice::from_raw_parts_mut(dst_ptr, self.tile_len);
-        for (dst_aov, src_aov) in dst_tile.iter_mut().zip(tile.iter()) {
-            dst_aov.update(src_aov);
+    pub fn update_tile(&self, tile_index: TileIndex, tile: &[P; TILE_LEN]) {
+        let mut_buff: &'a mut [[P; TILE_LEN]] = unsafe {
+            mem::transmute(self.buff)
+        };
+        let dst_tile = &mut mut_buff[tile_index.index];
+        for (dst, src) in dst_tile.iter_mut().zip(tile.iter()) {
+            dst.update(src);
         }
     }
 }
@@ -272,49 +233,11 @@ impl TileIndex {
     }
 }
 
-// A FIlm struct that references a specific film buffer. Need to force it
-// to have a certain type associated with it:
-pub struct AOVFilm<'a, P: AOV> {
-    buff: &'a AOVBuffer,
-    marker: PhantomData<P>,
-}
-
-impl<'a, P: AOV> AOVFilm<'a, P> {
-    // Retrieves a copy of the tile for your use:
-    pub fn get_tile(&self, index: &TileIndex) -> [P; TILE_LEN] {
-        unsafe {
-            self.buff.get_tile::<P>(index.index)
-        }
-    }
-
-    // This is not mutable because it should be thread safe
-    // as the index value should avoid those problems:
-    pub fn set_tile(&self, index: &TileIndex, tile: &[P; TILE_LEN]) {
-        unsafe {
-            // Trust me, I know what I'm doing... (hopefully)
-            // Because TileIndex gaurantees (well, it's suppose to) that no two threads
-            // can access the same index, this should be fine:
-            let mut_buff: &'a mut AOVBuffer = mem::transmute(self.buff);
-            mut_buff.set_tile::<P>(index.index, tile);
-        }
-    }
-
-    // Update tile calls each aov's update with the provided aov pixels in
-    // the provided tile:
-    pub fn update_tile(&self, index: &TileIndex, tile: &[P; TILE_LEN]) {
-        unsafe {
-            // See above:
-            let mut_buff: &'a mut AOVBuffer = mem::transmute(self.buff);
-            mut_buff.update_tile::<P>(index.index, tile);
-        }
-    }
-}
-
 // Now, for that reason, data is not stored as a normal pixel buffer
 // would be (it's not just a 2D array in a 1D array form):
 pub struct Film<O: TileOrdering> {
     // List out all of the different types of AOV Buffers here:
-    aov_buffers: EnumMap<AOVType, Option<AOVBuffer>>,
+    aov_buffers: EnumMap<AOVType, Option<Vec<u8>>>,
 
     ordering: O,              // The order in which we visit each tile
     tile_res: Vec2<usize>,    // The resolution in terms of tiles
@@ -351,7 +274,11 @@ impl<O: TileOrdering> Film<O> {
 
     // As per the request of the render, add AOV Films as we see fit:
     pub fn add_aov<P: AOV>(&mut self, init: P) {
-        self.aov_buffers[P::Type] = Some(AOVBuffer::new(self.tile_res, init));
+        let buff = vec![[init; TILE_LEN]; self.num_tiles];
+        let byte_buff: Vec<u8> = unsafe {
+            memory::transmute_vec(buff)
+        };
+        self.aov_buffers[P::Type] = Some(byte_buff);
     }
 
     // Used to check if the AOV is present or not. If you also want to get
@@ -362,11 +289,14 @@ impl<O: TileOrdering> Film<O> {
 
     // If an integrator wants to add stuff to a certain AOVFIlm, it must first
     // retrieve it through this function:
-    pub fn get_aovfilm<P: AOV>(&self) -> Option<AOVFilm<P>> {
-        if let Some(buff) = &self.aov_buffers[P::Type] {
-            Some(AOVFilm {
-                buff,
-                marker: PhantomData,
+    pub fn get_aovfilm<P: AOV>(&self) -> Option<AOVBuffer<P>> {
+        if let Some(byte_buff) = &self.aov_buffers[P::Type] {
+            let buff_ptr = byte_buff.as_ptr() as *const [P; TILE_LEN];
+            let buff = unsafe {
+                slice::from_raw_parts(buff_ptr, self.num_tiles)
+            };
+            Some(AOVBuffer {
+                buff
             })
         } else {
             None
@@ -376,8 +306,17 @@ impl<O: TileOrdering> Film<O> {
     // Sets the entire aov buffer to the aov's init value. Returns true on success,
     // false if that aov buffer isn't present:
     pub fn set_init<P: AOV>(&mut self) -> bool {
-        if let Some(buffer) = &mut self.aov_buffers[P::Type] {
-            unsafe { buffer.set_init::<P>(); }
+        if let Some(byte_buff) = &mut self.aov_buffers[P::Type] {
+            let buff_ptr = byte_buff.as_mut_ptr() as *mut [P; TILE_LEN];
+            let buff = unsafe {
+                slice::from_raw_parts_mut(buff_ptr, self.num_tiles)
+            };
+            // Iterate over the buffer and init all the pixels:
+            for tile in buff.iter_mut() {
+                for aov in tile.iter_mut() {
+                    aov.set_init();
+                }
+            }
             true
         } else {
             false

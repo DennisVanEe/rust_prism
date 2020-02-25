@@ -30,8 +30,10 @@ pub struct SamplerParam {
 // NOTE: adaptive sampling is something I will add later. It's on my todo list!
 // NOTE: If a custom integrator needs any extra stuff, just add it to the constructor
 pub trait Integrator {
-    // Given a tile and Scene, render values to said tile and return it. Once it's
-    // done the thread will add the tile to the maian film buffer:
+    // Allows the integrator to perform any tasks it needs to before it can begin rendering.
+    fn preprocess(&mut self, scene: &Scene);
+
+    // This function goes ahead and renders a single tile:
     fn render(&mut self, film_tile: PixelTile, scene: &Scene) -> PixelTile;
 }
 
