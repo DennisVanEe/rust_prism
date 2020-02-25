@@ -24,6 +24,10 @@ pub struct SamplerParam {
     seed: u64,
 }
 
+// TODO: Think about how to make an interface for the film and aov buffer system so that
+// it can interface with a generic integrator in the best way possible (and so that the
+// integrator doesn't repeat too much doe).
+
 // Each thread gets its own integrator and tile. So, during rendering,
 // a thread would fill up a tile with values and, when it's done, it'll move
 // onto the next tile. It'll keep doing this until all tiles have been rendered
