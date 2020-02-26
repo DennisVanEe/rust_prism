@@ -106,9 +106,6 @@ enum AOVType {
     //GeomNorm,
 }
 
-const TILE_DIM: usize = 8;
-const TILE_LEN: usize = TILE_DIM * TILE_DIM;
-
 struct AOVBuffer<'a, P: AOV> {
     buff: &'a [[P; TILE_LEN]],
 }
@@ -232,6 +229,26 @@ impl TileIndex {
         self.aov_pos
     }
 }
+
+const TILE_DIM: usize = 8;
+const TILE_LEN: usize = TILE_DIM * TILE_DIM;
+
+// A single tile that will be sent to the 
+pub struct Tile<'a> {
+    index: TileIndex,
+
+    beauty: Option<&'a [BeautyAOV]>,
+    shad_norm: Option<&'a [ShadNormAOV]>,
+}
+
+impl<'a> Tile<'a> {
+    pub fn set_index(&mut self, index: TileIndex) {
+        self.index = index;
+    }
+
+    fn get_buff<P: AO(&self) -> &
+}
+
 
 // Now, for that reason, data is not stored as a normal pixel buffer
 // would be (it's not just a 2D array in a 1D array form):
