@@ -3,6 +3,7 @@ use crate::math::vector::{Vec2, Vec3};
 use crate::memory;
 use crate::math::util;
 
+use std::cell::UnsafeCell;
 use std::sync::atomic::{Ordering, AtomicUsize};
 use std::slice;
 use std::mem;
@@ -106,35 +107,6 @@ enum AOVType {
     //GeomNorm,
 }
 
-struct AOVBuffer<'a, P: AOV> {
-    buff: &'a [[P; TILE_LEN]],
-}
-
-impl<'a, P: AOV> AOVBuffer<'a, P> {
-    pub fn get_tile(&self, tile_index: TileIndex) -> [P; TILE_LEN] {
-        self.buff[tile_index.index]
-    }
-
-    // Make sure that tile isn't a reference from the buffer itself:
-    pub fn set_tile(&self, tile_index: TileIndex, tile: &[P; TILE_LEN]) {
-        let mut_buff: &'a mut [[P; TILE_LEN]] = unsafe {
-            mem::transmute(self.buff)
-        };
-        mut_buff[tile_index.index] = tile.clone();
-    }
-
-    // Performs an addition over the aov values of the tile:
-    pub fn update_tile(&self, tile_index: TileIndex, tile: &[P; TILE_LEN]) {
-        let mut_buff: &'a mut [[P; TILE_LEN]] = unsafe {
-            mem::transmute(self.buff)
-        };
-        let dst_tile = &mut mut_buff[tile_index.index];
-        for (dst, src) in dst_tile.iter_mut().zip(tile.iter()) {
-            dst.update(src);
-        }
-    }
-}
-
 //
 // BeautyAOV. The final rendered image output result goes here.
 //
@@ -215,46 +187,85 @@ impl AOV for ShadNormAOV {
     }
 }
 
-// A special type that can only be created in the film crate.
-// No copy or clone is implemented for this. Once TileIndex is used
-pub struct TileIndex {
-    index: usize,         // Actual index of said tile
-    aov_pos: Vec2<usize>, // Top left aov position
+// Just a collection of the different AOV buffers available:
+pub struct Film {
+    pub beauty: Option<AOVBuffer<BeautyAOV>>,
+    pub shad_norm: Option<AOVBuffer<ShadNormAOV>>,
 }
 
-impl TileIndex {
-    // Returns the top left corner pixel position of the given tile.
-    // If none, then it's an invalid tile index and shouldn't be used.
-    pub fn aov_pos(&self) -> Vec2<usize> {
-        self.aov_pos
+impl Film {
+    // Defaults to an empty film:
+    pub fn new() -> Self {
+        Film {
+            beauty: None,
+            shad_norm: None,
+        }
     }
 }
 
 const TILE_DIM: usize = 8;
 const TILE_LEN: usize = TILE_DIM * TILE_DIM;
 
-// A single tile that will be sent to the 
-pub struct Tile<'a> {
-    index: TileIndex,
-
-    beauty: Option<&'a [BeautyAOV]>,
-    shad_norm: Option<&'a [ShadNormAOV]>,
+pub struct AOVBuffer<P: AOV> {
+    buff: UnsafeCell<Vec<[P; TILE_LEN]>>,
 }
 
-impl<'a> Tile<'a> {
-    pub fn set_index(&mut self, index: TileIndex) {
-        self.index = index;
+impl<P: AOV> AOVBuffer<P> {
+    // Initializes a new buffer with the given tile resolution:
+    pub fn new(tile_res: Vec2<usize>, init: P) -> Self {
+        AOVBuffer {
+            buff: UnsafeCell::new(vec![[init; TILE_LEN]; tile_res.x * tile_res.y]),
+        }
     }
 
-    fn get_buff<P: AO(&self) -> &
-}
+    // This is set to be unsafe because this isn't thread safe:
+    pub fn set_entire(&mut self, init: P) {
+        let buff = unsafe {
+            &mut *self.buff.get()
+        };
+        for tile in buff.iter_mut() {
+            for p in tile.iter_mut() {
+                p.set_init();
+            }
+        }
+    }
 
+    pub fn get_tile(&self, tile_index: &TileIndex) -> [P; TILE_LEN] {
+        let buff = unsafe {
+            &*self.buff.get()
+        };
+        buff[tile_index.index]
+    }
+
+    // Make sure that tile isn't a reference from the buffer itself:
+    pub fn set_tile(&self, tile_index: &TileIndex, tile: &[P; TILE_LEN]) {
+        let buff = unsafe {
+            &mut *self.buff.get()
+        };
+        buff[tile_index.index] = tile.clone();
+    }
+
+    // Performs an addition over the aov values of the tile:
+    pub fn update_tile(&self, tile_index: &TileIndex, tile: &[P; TILE_LEN]) {
+        let buff = unsafe {
+            &mut *self.buff.get()
+        };
+        let dst_tile = &mut buff[tile_index.index];
+        for (dst, src) in dst_tile.iter_mut().zip(tile.iter()) {
+            dst.update(src);
+        }
+    }
+}
 
 // Now, for that reason, data is not stored as a normal pixel buffer
 // would be (it's not just a 2D array in a 1D array form):
-pub struct Film<O: TileOrdering> {
-    // List out all of the different types of AOV Buffers here:
-    aov_buffers: EnumMap<AOVType, Option<Vec<u8>>>,
+pub struct TileSchedular<'a, O: TileOrdering> {
+    // The TileSchedular needs access to the Film incase certain
+    // schedules depend on the value of the aov (like for adaptive
+    // sampling or something).
+    pub film: &'a Film,
+
+    // Stuff for determining tile order and whatnot:
 
     ordering: O,              // The order in which we visit each tile
     tile_res: Vec2<usize>,    // The resolution in terms of tiles
@@ -263,10 +274,10 @@ pub struct Film<O: TileOrdering> {
     tile_index: AtomicUsize,  // A simple atomic counter that counts to the max value of data
 }
 
-impl<O: TileOrdering> Film<O> {
-    pub fn new(tile_res: Vec2<usize>) -> Self {
-        Film {
-            aov_buffers: EnumMap::new(),
+impl<'a, O: TileOrdering> TileSchedular<'a, O> {
+    pub fn new(tile_res: Vec2<usize>, film: &'a Film) -> Self {
+        TileSchedular {
+            film,
             ordering: O::new(tile_res),
             tile_res,
             aov_res: tile_res.scale(TILE_DIM),
@@ -286,57 +297,6 @@ impl<O: TileOrdering> Film<O> {
         TileIndex {
             index,
             aov_pos
-        }
-    }
-
-    // As per the request of the render, add AOV Films as we see fit:
-    pub fn add_aov<P: AOV>(&mut self, init: P) {
-        let buff = vec![[init; TILE_LEN]; self.num_tiles];
-        let byte_buff: Vec<u8> = unsafe {
-            memory::transmute_vec(buff)
-        };
-        self.aov_buffers[P::Type] = Some(byte_buff);
-    }
-
-    // Used to check if the AOV is present or not. If you also want to get
-    // access to it afterwards, just call get_aovfilm().
-    pub fn has_aov<P: AOV>(&self) -> bool {
-        self.aov_buffers[P::Type].is_some()
-    }
-
-    // If an integrator wants to add stuff to a certain AOVFIlm, it must first
-    // retrieve it through this function:
-    pub fn get_aovfilm<P: AOV>(&self) -> Option<AOVBuffer<P>> {
-        if let Some(byte_buff) = &self.aov_buffers[P::Type] {
-            let buff_ptr = byte_buff.as_ptr() as *const [P; TILE_LEN];
-            let buff = unsafe {
-                slice::from_raw_parts(buff_ptr, self.num_tiles)
-            };
-            Some(AOVBuffer {
-                buff
-            })
-        } else {
-            None
-        }
-    }
-
-    // Sets the entire aov buffer to the aov's init value. Returns true on success,
-    // false if that aov buffer isn't present:
-    pub fn set_init<P: AOV>(&mut self) -> bool {
-        if let Some(byte_buff) = &mut self.aov_buffers[P::Type] {
-            let buff_ptr = byte_buff.as_mut_ptr() as *mut [P; TILE_LEN];
-            let buff = unsafe {
-                slice::from_raw_parts_mut(buff_ptr, self.num_tiles)
-            };
-            // Iterate over the buffer and init all the pixels:
-            for tile in buff.iter_mut() {
-                for aov in tile.iter_mut() {
-                    aov.set_init();
-                }
-            }
-            true
-        } else {
-            false
         }
     }
 
@@ -382,3 +342,19 @@ impl<O: TileOrdering> Film<O> {
         self.tile_res
     }
 }
+
+// A special type that can only be created in the film crate.
+// No copy or clone is implemented for this. Once TileIndex is used
+pub struct TileIndex {
+    index: usize,         // Actual index of said tile
+    aov_pos: Vec2<usize>, // Top left aov position
+}
+
+impl TileIndex {
+    // Returns the top left corner pixel position of the given tile.
+    // If none, then it's an invalid tile index and shouldn't be used.
+    pub fn aov_pos(&self) -> Vec2<usize> {
+        self.aov_pos
+    }
+}
+

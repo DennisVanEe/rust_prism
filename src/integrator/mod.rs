@@ -10,8 +10,7 @@ use crate::scene::{Scene, SceneLight, SceneObjectType};
 use crate::shading::lobe::LobeType;
 use crate::shading::material::Bsdf;
 use crate::spectrum::Spectrum;
-use crate::film::PixelTile;
-use crate::mem;
+use crate::film::{Film, TileIndex};
 
 use std::f64;
 
@@ -33,12 +32,23 @@ pub struct SamplerParam {
 // onto the next tile. It'll keep doing this until all tiles have been rendered
 // NOTE: adaptive sampling is something I will add later. It's on my todo list!
 // NOTE: If a custom integrator needs any extra stuff, just add it to the constructor
-pub trait Integrator {
-    // Allows the integrator to perform any tasks it needs to before it can begin rendering.
-    fn preprocess(&mut self, scene: &Scene);
+pub trait Integrator<'a> {
+    // Certain integrators may require certain aov buffers to exist regardless of user
+    // demand (like a variance buffer). All required buffers will be created here with
+    // the given tile resolution. These will override user film buffer settings:
+    fn req_film(&self, tile_res: Vec2<usize>) -> Film {
+        // Default to not requiring anything:
+        Film::new()
+    }
 
-    // This function goes ahead and renders a single tile:
-    fn render(&mut self, film_tile: PixelTile, scene: &Scene) -> PixelTile;
+    // Given an immutable film, check what aov buffers are available, and get scene information
+    // as well:
+    fn preprocess(&mut self, film: &'a Film, scene: &Scene);
+
+    // This function goes ahead and renders a single tile with the given tile.
+    // Once it's done it must return the TileIndex it used as some TileSchedulers
+    // find this information important:
+    fn render(&mut self, index: TileIndex, scene: &Scene) -> TileIndex;
 }
 
 // Calculates the balance heurisitc for the first distribution provided out of the two:
