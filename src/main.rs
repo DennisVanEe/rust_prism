@@ -1,11 +1,11 @@
 // Clean this stuff up in the future...
 // This is here just for now.
 
+mod film;
 mod thread;
 mod scene_loading;
 mod bvh;
 mod camera;
-mod film;
 mod filter;
 mod geometry;
 mod integrator;
