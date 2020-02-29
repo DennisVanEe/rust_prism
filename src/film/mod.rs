@@ -1,6 +1,6 @@
 use crate::math::vector::Vec2;
 
-use pixel::{PixelBuffer, PixelType};
+use pixel::{Pixel, PixelBuffer, PixelType, TILE_LEN};
 
 pub mod tile_schedular;
 pub mod pixel;
@@ -17,12 +17,12 @@ pub struct TileIndex {
 
 impl TileIndex {
     pub fn pixel_pos(&self) -> Vec2<usize> {
-        self.aov_pos
+        self.pixel_pos
     }
 }
 
 pub struct Film {
-    pixel_buffs: EnumMap<PixelType, PixelBuffer>,
+    pixel_buffs: EnumMap<PixelType, Option<PixelBuffer>>,
     // Some properties about the film itself:
     tile_res: Vec2<usize>,
     pixel_res: Vec2<usize>,
@@ -39,6 +39,18 @@ impl Film {
         }
     }
 
-    // TODO: add functions for adding buffers, reseting buffers,
-    // and adding tiles and whatnot
+    // Adds a new buffer to the film. Doesn't have to be thread safe:
+    pub fn add_buff<P: Pixel>(&mut self, init: P) {
+        self.pixel_buffs[P::TypeID] = Some(PixelBuffer::new::<P>(self.num_tiles, init));
+    }
+
+    pub fn get_tile<P: Pixel>(&self, index: TileIndex) -> Option<&mut [P; TILE_LEN]> {
+        if let Some(buff) = &self.pixel_buffs[P::TypeID] {
+            Some(unsafe { 
+                buff.get_tile::<P>(index.index) 
+            })
+        } else {
+            None
+        }
+    }
 }

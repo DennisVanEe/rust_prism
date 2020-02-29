@@ -4,7 +4,7 @@ use enum_map::Enum;
 
 pub mod beauty;
 
-trait Pixel: Copy {
+pub trait Pixel: Copy {
     // What finalize will output
     type FinalOutput: Copy;
     // The type of AOV, used to help indicate which buffer to access:
@@ -21,7 +21,7 @@ trait Pixel: Copy {
 }
 
 #[derive(Enum, Clone, Copy, PartialEq, Debug)]
-pub (super) enum PixelType {
+pub enum PixelType {
     Beauty,
     //ShadNorm,
     //GeomNorm,
@@ -35,7 +35,7 @@ pub const TILE_LEN: usize = TILE_DIM * TILE_DIM;
 
 // A dynamic pixel buffer (dynamic in the sense that it can be
 // used to indicate how to access pixel buffers)
-pub (super) struct PixelBuffer {
+pub struct PixelBuffer {
     type_id: PixelType,
     byte_buf: Vec<u8>,
     num_tiles: usize,
@@ -51,5 +51,12 @@ impl PixelBuffer {
         }
     }
 
-    // TODO: Comlete this implementation here:
+    // Instead of having a set and get function, just always return a mutable reference.
+    // It's unsafe because it borrows the buffer immutably, but returns a mutable ref.
+    pub unsafe fn get_tile<P: Pixel>(&self, index: usize) -> &mut [P; TILE_LEN] {
+        let tile_size = std::mem::size_of::<[P; TILE_LEN]>();
+        let byte_index = index * tile_size;
+        let ptr = &self.byte_buf[byte_index] as *const u8;
+        &mut *std::mem::transmute_copy::<_, *mut [P; TILE_LEN]>(&ptr)
+    }
 }

@@ -171,7 +171,7 @@ impl Index<usize> for RGBSpectrum {
 }
 
 // The CIE XYZ color space:
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct XYZColor {
     pub x: f64,
     pub y: f64,

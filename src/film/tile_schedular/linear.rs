@@ -8,7 +8,7 @@ use std::sync::atomic::{Ordering, AtomicUsize};
 
 // A very basic linear tile schedular that just traverses the entire tile:
 pub struct LinearTileSchedular {
-    tile_len: usize,
+    num_tiles: usize,
     cur_index: AtomicUsize,
 }
 
@@ -17,9 +17,9 @@ impl TileSchedular for LinearTileSchedular {
     type Param = ();
 
     fn new(tile_res: Vec2<usize>, _: ()) -> Self {
-        let tile_len = tile_res.x * tile_res.y;
+        let num_tiles = tile_res.x * tile_res.y;
         LinearTileSchedular {
-            tile_len,
+            num_tiles,
             cur_index: AtomicUsize::new(0),
         }
     }
@@ -29,14 +29,19 @@ impl TileSchedular for LinearTileSchedular {
     }
 
     fn init_index(&mut self) -> Option<TileIndex> {
-        // Because it doesn't have to be thread safe:
+        // Because it doesn't have to be thread safe, we can do the 
+        // more naive approach here:
         let index = self.cur_index.load(Ordering::Relaxed);
-        if index < self.tile_len {
+        if index < self.num_tiles {
             // Let them out in morton order:
             self.cur_index.store(index + 1, Ordering::Relaxed);
+            let pixel_pos_u32 = util::morton_to_2d(index as u64);
             Some(TileIndex {
                 index,
-                pixel_pos: util::morton_to_2d(index as u64),
+                pixel_pos: Vec2 {
+                    x: pixel_pos_u32.x as usize,
+                    y: pixel_pos_u32.y as usize,
+                },
             })
         } else {
             None
@@ -59,17 +64,21 @@ impl TileSchedular for LinearTileSchedular {
                 old_tile = i;
             } else {
                 // We return the "old_tile". The new_tile is for the next time we run the code:
+                let pixel_pos_u32 = util::morton_to_2d(old_tile as u64);
                 return Some(TileIndex { 
                     index: old_tile,
-                    pixel_pos: util::morton_to_2d(old_tile as u64),
+                    pixel_pos: Vec2 {
+                        x: pixel_pos_u32.x as usize,
+                        y: pixel_pos_u32.y as usize,
+                    },
                 });
             }
         }
     }
 
     fn get_percent_done(&self) -> f64 {
-        let tile_len = self.tile_len as f64;
+        let num_tiles = self.num_tiles as f64;
         let done = self.cur_index.load(Ordering::Relaxed) as f64;
-        done / tile_len
+        done / num_tiles
     }
 }
