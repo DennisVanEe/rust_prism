@@ -51,6 +51,8 @@ pub trait Integrator<'a> {
     fn render(&mut self, index: TileIndex, scene: &Scene) -> TileIndex;
 }
 
+// TODO: separate these into a different file called util or something:
+
 // Calculates the balance heurisitc for the first distribution provided out of the two:
 fn balance_heuristic(num_samples: usize, pdf: f64, num_samples_o: usize, pdf_o: f64) -> f64 {
     let num_samples = num_samples as f64;

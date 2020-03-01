@@ -27,7 +27,7 @@ pub unsafe fn transmute_vec<U, T>(mut src: Vec<U>) -> Vec<T> {
 
 // Allocates a vector of uninitialized data:
 pub unsafe fn uninit_vec<T>(size: usize) -> Vec<T> {
-    let vec = Vec::with_capacity(size);
+    let mut vec = Vec::with_capacity(size);
     vec.set_len(size);
     vec
 }
@@ -36,7 +36,7 @@ pub unsafe fn uninit_vec<T>(size: usize) -> Vec<T> {
 pub fn is_ptr_same<T0: ?Sized, T1: ?Sized>(a: &T0, b: &T1) -> bool {
     unsafe {
         let bptr = b as *const T1;
-        let bptr: *const T0 = mem::transmute(b);
+        let bptr: *const T0 = mem::transmute_copy(&bptr);
         ptr::eq(a, bptr)
     }
 }
