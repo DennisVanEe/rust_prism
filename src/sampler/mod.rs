@@ -10,13 +10,12 @@ use crate::math::vector::Vec2;
 
 // Also defines any extra parameters a sampler might want:
 pub trait Sampler {
-    // Parameter type, if any. Once default parameter
-    // types aren't an unstable feature it'll be the empty tuple:
-    type ParamType;
+    // Parameter type, if any.
+    type Param;
 
     fn new(
         // If the sampler requires extra parameters, pass them here:
-        param: Self::ParamType,
+        param: Self::Param,
         // The number of pixel samples:
         num_pixel_samples: usize,
         // The number of dimensions:

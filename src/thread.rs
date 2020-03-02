@@ -1,25 +1,13 @@
 use crate::integrator::Integrator;
-use crate::film::{TileOrdering, Film};
+use crate::film::tile_schedular::TileSchedular;
+use crate::film::TileIndex;
 use crate::filter::PixelFilter;
 
 use std::thread::{self, JoinHandle};
 
-// The ThreadData struct has all of the data that is unique to a single thread. So this includes
-// its own sampler and whatnot.
-pub struct ThreadData<'a, I: Integrator, O: TileOrdering> {
-    integrator: I,           // The specific integrator we are dealing with
-    filter: &'a PixelFilter, // The filtering algorithm
-    film: &'a Film<O>,       // A film tile for the integrator we are dealing with
-}
-
-// Specifies the values that are returned:
-pub struct RenderThreadReturn {
-
-}
-
-// The threadpool that will be doing all of the rendering work we want it to:
-pub struct RenderThreadPool<'a, I: Integrator, O: TileOrdering> {
-    threads: Vec<RenderThread<'a, I, O>>,
+pub struct RenderThreadPool<'a, I: Integrator> {
+    threads: Vec<RenderThread<'a, I>>,
+    tile_scheduler: 
 }
 
 impl<'a, I: Integrator, O: TileOrdering> RenderThreadPool<'a, I, O> {
@@ -28,9 +16,16 @@ impl<'a, I: Integrator, O: TileOrdering> RenderThreadPool<'a, I, O> {
     }
 }
 
-struct RenderThread<'a, I: Integrator, O: TileOrdering>  {
+// The render thread which is used to store all of the information we would like:
+struct RenderThread<'a, I: Integrator>  {
+    // The actual thread:
+    thread: JoinHandle<()>,
+
+    // The integrator for the thread:
+
+
+    // Specifies the ID of the current thread running:
     id: usize,
-    thread: JoinHandle<RenderThreadReturn>,
 }
 
 impl<'a, I: Integrator, O: TileOrdering> RenderThread<'a, I, O> {

@@ -2,21 +2,21 @@
 // This is here just for now.
 
 mod film;
-//mod thread;
-//mod scene_loading;
-//mod bvh;
-//mod camera;
-//mod filter;
-//mod geometry;
-//mod integrator;
-//mod light;
+mod thread;
+mod scene_loading;
+mod bvh;
+mod camera;
+mod filter;
+mod geometry;
+mod integrator;
+mod light;
 mod math;
 mod memory;
-//mod sampler;
-//mod scene;
-//mod shading;
+mod sampler;
+mod scene;
+mod shading;
 mod spectrum;
-//mod transform;
+mod transform;
 
 use std::env;
 
