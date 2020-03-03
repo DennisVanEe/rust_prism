@@ -1,11 +1,12 @@
-use super::{Integrator, RenderParam, IntegratorParam};
+use super::{Integrator, IntegratorParam, RenderParam};
 
+use crate::camera::Camera;
 use crate::sampler::Sampler;
 use crate::scene::Scene;
-use crate::camera::Camera;
 
 // Specifies how to sample lights (either sample all lights (splitting) or sample
 // just one light):
+#[derive(Clone, Copy)]
 pub enum LightTechnique {
     // Sample all of the lights in the scene
     ALL,
@@ -21,8 +22,9 @@ pub struct DirectLightParam {
 // A very basic integrator that only takes into account direct light and nothing else.
 // Not really the most exciting thing in the world. Useful for quick testing of things
 // though.
-pub struct DirectLight<'a, S: Sampler, C: Camera> {                 
-    camera: &'a C,      
+#[derive(Clone)]
+pub struct DirectLight<'a, S: Sampler, C: Camera> {
+    camera: &'a C,
     light_technique: LightTechnique,
     max_depth: u32,
 }
@@ -47,16 +49,9 @@ impl<'a, S: Sampler, C: Camera> DirectLight<'a, S, C> {
             Vec::new()
         };
 
-        let sampler = S::new(
-            int_param.sampler_param,
-            int_param.num_pixel_samples,
-            int_param.num_dim,
-            &[],
-            &arr_sizes_2d[..]
-        );
+        int_param.sampler.prepare_arrays(&[], &arr_sizes_2d[..]);
 
         DirectLight {
-            sampler,
             camera: int_param.camera,
             light_technique: param.light_technique,
             max_depth: int_param.max_depth,
@@ -65,7 +60,5 @@ impl<'a, S: Sampler, C: Camera> DirectLight<'a, S, C> {
 }
 
 impl<'a, S: Sampler> Integrator for DirectLight<'a, S> {
-    fn render(&mut self, param: RenderParam) {
-        
-    }
+    fn render(&mut self, param: RenderParam) {}
 }

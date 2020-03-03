@@ -10,4 +10,3 @@ struct Mesh {
     file_type: String,
     dir: String,
 }
-

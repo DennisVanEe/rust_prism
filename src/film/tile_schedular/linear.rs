@@ -1,10 +1,10 @@
-use crate::math::vector::Vec2;
 use crate::math::util;
+use crate::math::vector::Vec2;
 
 use super::super::TileIndex;
 use super::TileSchedular;
 
-use std::sync::atomic::{Ordering, AtomicUsize};
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 // A very basic linear tile schedular that just traverses the entire tile:
 pub struct LinearTileSchedular {
@@ -29,7 +29,7 @@ impl TileSchedular for LinearTileSchedular {
     }
 
     fn init_index(&mut self) -> Option<TileIndex> {
-        // Because it doesn't have to be thread safe, we can do the 
+        // Because it doesn't have to be thread safe, we can do the
         // more naive approach here:
         let index = self.cur_index.load(Ordering::Relaxed);
         if index < self.num_tiles {
@@ -59,13 +59,18 @@ impl TileSchedular for LinearTileSchedular {
                 old_tile + 1
             };
 
-            if let Err(i) = self.cur_index.compare_exchange_weak(old_tile, new_tile, Ordering::Relaxed, Ordering::Relaxed) {
+            if let Err(i) = self.cur_index.compare_exchange_weak(
+                old_tile,
+                new_tile,
+                Ordering::Relaxed,
+                Ordering::Relaxed,
+            ) {
                 // Someone else changed the value, oh well, try again with a different i value:
                 old_tile = i;
             } else {
                 // We return the "old_tile". The new_tile is for the next time we run the code:
                 let pixel_pos_u32 = util::morton_to_2d(old_tile as u64);
-                return Some(TileIndex { 
+                return Some(TileIndex {
                     index: old_tile,
                     pixel_pos: Vec2 {
                         x: pixel_pos_u32.x as usize,

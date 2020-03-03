@@ -2,8 +2,8 @@ use crate::math::numbers::Float;
 use crate::math::random::RandGen;
 use crate::math::util::next_pow2_u64;
 use crate::math::vector::Vec2;
-use crate::sampler::{shuffle, Sampler};
 use crate::memory;
+use crate::sampler::{shuffle, Sampler};
 
 #[derive(Clone)]
 pub struct ZeroTwo {
@@ -124,8 +124,6 @@ impl Sampler for ZeroTwo {
         _: (),
         num_pixel_samples: usize,
         num_dim: usize,
-        arr_sizes_1d: &[usize],
-        arr_sizes_2d: &[usize],
     ) -> Self {
         // Update the number of pixel samples. We generate better samples
         // when this number is a power of 2:
@@ -136,30 +134,21 @@ impl Sampler for ZeroTwo {
 
         let (samples_1d, samples_2d) = {
             let num_samples = num_pixel_samples * num_dim;
-            unsafe { (memory::uninit_vec(num_samples), memory::uninit_vec(num_samples)) }
+            unsafe {
+                (
+                    memory::uninit_vec(num_samples),
+                    memory::uninit_vec(num_samples),
+                )
+            }
         };
-
-        let mut arr_samples_1d = Vec::with_capacity(arr_sizes_1d.len());
-        for &n in arr_sizes_1d {
-            unsafe {
-                arr_samples_1d.push((n, memory::uninit_vec(n * num_pixel_samples)));
-            }
-        }
-
-        let mut arr_samples_2d = Vec::with_capacity(arr_sizes_2d.len());
-        for &n in arr_sizes_2d {
-            unsafe {
-                arr_samples_2d.push((n, memory::uninit_vec(n * num_pixel_samples)));
-            }
-        }
 
         ZeroTwo {
             num_pixel_samples,
             num_dim,
             samples_1d,
             samples_2d,
-            arr_samples_1d,
-            arr_samples_2d,
+            arr_samples_1d: Vec::new(),
+            arr_samples_2d: Vec::new(),
 
             index_pixel_sample: 0,
             index_arr_1d: 0,
@@ -169,6 +158,25 @@ impl Sampler for ZeroTwo {
 
             rng: RandGen::new_default(),
         }
+    }
+
+    fn prepare_arrays(&mut self, arr_sizes_1d: &[usize], arr_sizes_2d: &[usize]) {
+        let mut arr_samples_1d = Vec::with_capacity(arr_sizes_1d.len());
+        for &n in arr_sizes_1d {
+            unsafe {
+                arr_samples_1d.push((n, memory::uninit_vec(n * self.num_pixel_samples)));
+            }
+        }
+
+        let mut arr_samples_2d = Vec::with_capacity(arr_sizes_2d.len());
+        for &n in arr_sizes_2d {
+            unsafe {
+                arr_samples_2d.push((n, memory::uninit_vec(n * self.num_pixel_samples)));
+            }
+        }
+
+        self.arr_samples_1d = arr_samples_1d;
+        self.arr_samples_2d = arr_samples_2d;
     }
 
     fn start_pixel(&mut self, _: Vec2<usize>) {

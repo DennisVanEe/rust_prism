@@ -2,8 +2,8 @@ use crate::math::vector::Vec2;
 
 use pixel::{Pixel, PixelBuffer, PixelType, TILE_LEN};
 
-pub mod tile_schedular;
 pub mod pixel;
+pub mod tile_schedular;
 
 use enum_map::EnumMap;
 
@@ -46,9 +46,7 @@ impl Film {
 
     pub fn get_tile<P: Pixel>(&self, index: TileIndex) -> Option<&mut [P; TILE_LEN]> {
         if let Some(buff) = &self.pixel_buffs[P::TypeID] {
-            Some(unsafe { 
-                buff.get_tile::<P>(index.index) 
-            })
+            Some(unsafe { buff.get_tile::<P>(index.index) })
         } else {
             None
         }

@@ -165,7 +165,7 @@ impl StaticTransform {
             uv: i.uv,
             dpdu: self.vector(i.dpdu),
             dpdv: self.vector(i.dpdv),
-            
+
             shading_n: self.normal(i.shading_n).normalize(),
             shading_dpdu: self.vector(i.shading_dpdu),
             shading_dpdv: self.vector(i.shading_dpdv),

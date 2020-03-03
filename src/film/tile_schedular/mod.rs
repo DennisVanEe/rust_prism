@@ -13,7 +13,7 @@ pub trait TileSchedular {
     // Creates a new TileSchedular:
     fn new(tile_res: Vec2<usize>, param: Self::Param) -> Self;
 
-    // Resets the TileSchedular to its originals state. This 
+    // Resets the TileSchedular to its originals state. This
     // function does not have to be thread safe:
     fn reset(&mut self);
 

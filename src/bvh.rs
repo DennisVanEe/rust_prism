@@ -7,7 +7,7 @@ use bumpalo::Bump;
 use order_stat::kth_by;
 use partition::partition;
 
-// A trait that must be implemented for any type type that wishes to be a part of 
+// A trait that must be implemented for any type type that wishes to be a part of
 pub trait BVHObject {
     // Any additional information for calculating the intersection (like if it's a triangular mesh)
     type IntParam;
@@ -19,9 +19,9 @@ pub trait BVHObject {
     // The intersection algorithms need to support potentially moving objects:
     fn intersect_test(
         &self,
-        ray: Ray<f64>,               // The ray in "BVH Space"
-        max_t: f64,                  // A max_t value used to prune intersections that are too far
-        curr_time: f64,              // The current time 
+        ray: Ray<f64>,  // The ray in "BVH Space"
+        max_t: f64,     // A max_t value used to prune intersections that are too far
+        curr_time: f64, // The current time
         int_info: &Self::IntParam,
     ) -> bool;
 

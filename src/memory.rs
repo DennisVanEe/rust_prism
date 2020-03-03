@@ -1,7 +1,7 @@
 // A bunch of useful functions when dealing with memory:
 
-use std::ptr;
 use std::mem;
+use std::ptr;
 
 // Reinterprets the memory of a vector to that of another:
 pub unsafe fn transmute_vec<U, T>(mut src: Vec<U>) -> Vec<T> {

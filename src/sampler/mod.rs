@@ -10,22 +10,23 @@ use crate::math::vector::Vec2;
 
 // Also defines any extra parameters a sampler might want:
 // Must also be clonable:
-pub trait Sampler : Clone {
+pub trait Sampler: Clone {
     // Parameter type, if any.
     type Param;
 
     fn new(
-        param: Self::Param,        // If the sampler requires extra parameters, pass them here
-        num_pixel_samples: usize,  // The number of pixel samples
-        num_dim: usize,            // The number of dimensions
-        arr_sizes_1d: &[usize],    // If any arrays are to be requested for 1d, request them here
-        arr_sizes_2d: &[usize],    // If any arrays are to be requested for 2d, request them here
+        param: Self::Param, // If the sampler requires extra parameters, pass them here
+        num_pixel_samples: usize, // The number of pixel samples
+        num_dim: usize,     // The number of dimensions
     ) -> Self;
+
+    // Some samplers may be better at generating samples if it knows the arrays it has to generate:
+    fn prepare_arrays(&mut self, arr_sizes_1d: &[usize], arr_sizes_2d: &[usize]);
 
     // Use the sampler to start working on a new pixel:
     fn start_pixel(&mut self, pixel: Vec2<usize>);
 
-    // Specify that we are starting a different tile. Need to 
+    // Specify that we are starting a different tile. Need to
     // redefine a seed as this removes potential artifacting.
     // Note, that BEFORE EVERY PIXEL start_pixel is called. This means
     // that this function shouldn't perform start_pixel operations:

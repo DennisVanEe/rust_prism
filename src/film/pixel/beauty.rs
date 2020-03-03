@@ -1,6 +1,6 @@
-use crate::spectrum::{XYZColor, RGBSpectrum};
+use crate::spectrum::{RGBSpectrum, XYZColor};
 
-use super::{PixelType, Pixel};
+use super::{Pixel, PixelType};
 
 #[derive(Clone, Copy, Debug)]
 pub struct BeautyPixel {

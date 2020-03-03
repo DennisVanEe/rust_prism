@@ -1,10 +1,10 @@
 use crate::camera::{Camera, CameraSample};
 use crate::film::Film;
-use crate::pixel_buffer::TileOrdering;
 use crate::math::bbox::BBox2;
 use crate::math::ray::{Ray, RayDiff};
 use crate::math::sampling;
 use crate::math::vector::Vec3;
+use crate::pixel_buffer::TileOrdering;
 use crate::transform::{StaticTransform, Transform};
 
 pub struct PerspectiveCamera<T: Transform, O: TileOrdering> {

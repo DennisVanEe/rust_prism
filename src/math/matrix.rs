@@ -38,7 +38,9 @@ impl<T: Float> Mat4<T> {
             z: m[14],
             w: m[15],
         };
-        Mat4 { m: [r0, r1, r2, r3] }
+        Mat4 {
+            m: [r0, r1, r2, r3],
+        }
     }
 
     pub fn new(m: [Vec4<T>; 4]) -> Self {

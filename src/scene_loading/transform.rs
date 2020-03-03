@@ -1,5 +1,5 @@
-use crate::math::vector::Vec3;
 use crate::math::matrix::Mat4;
+use crate::math::vector::Vec3;
 use crate::transform::{AnimatedTransform, StaticTransform};
 
 // Used to define the different animation types:
@@ -15,7 +15,9 @@ struct Translation {
 
 impl Translation {
     pub fn convert(self) -> SimpleResult<StaticTransform> {
-        Ok(StaticTransform::new_translate(Vec3::from_arr(self.translation)))
+        Ok(StaticTransform::new_translate(Vec3::from_arr(
+            self.translation,
+        )))
     }
 }
 
@@ -27,7 +29,10 @@ struct Rotation {
 
 impl Rotation {
     pub fn convert(self) -> SimpleResult<StaticTransform> {
-        Ok(StaticTransform::new_rotate(self.degrees, Vec3::from_arr(self.axis)))
+        Ok(StaticTransform::new_rotate(
+            self.degrees,
+            Vec3::from_arr(self.axis),
+        ))
     }
 }
 
@@ -82,7 +87,6 @@ pub enum TransformType {
 
 // Given a json object that is a transform, this will parse it into one:
 pub fn parse_transform(json: Value) -> SimpleResult<TransformType> {
-
     // We just want to parse static transformations:
     pub fn parse_static_transform(json: Value) -> SimpleResult<StaticTransform> {
         // A big if-else statement to figure out which type it is (not the most elegent solution...):
