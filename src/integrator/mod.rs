@@ -36,5 +36,5 @@ pub trait Integrator<S: Sampler, C: Camera>: Clone {
     fn new(param: Self::Param, int_param: IntegratorParam<S, C>) -> Self;
 
     // Given a tile index and the scene, go ahead and fill the film as appropriate:
-    fn render(&mut self, param: RenderParam<S, C>);
+    fn render(&mut self, param: RenderParam<S, C>) -> TileIndex;
 }
