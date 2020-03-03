@@ -2,7 +2,7 @@ use super::{Integrator, RenderParam, IntegratorParam};
 
 use crate::sampler::Sampler;
 use crate::scene::Scene;
-use crate::camera;
+use crate::camera::Camera;
 
 // Specifies how to sample lights (either sample all lights (splitting) or sample
 // just one light):
@@ -13,27 +13,24 @@ pub enum LightTechnique {
     ONE,
 }
 
+// Extra parameters that the DirectLight integrator may need:
+pub struct DirectLightParam {
+    pub light_technique: LightTechnique,
+}
+
 // A very basic integrator that only takes into account direct light and nothing else.
 // Not really the most exciting thing in the world. Useful for quick testing of things
 // though.
-pub struct DirectLight<'a, S: Sampler, Camera: camera::Camera> {
-    sampler: S,                     
-    camera: &'a Camera,      
+pub struct DirectLight<'a, S: Sampler, C: Camera> {                 
+    camera: &'a C,      
     light_technique: LightTechnique,
     max_depth: u32,
 }
 
-pub struct DirectLightParam {
-    pub light_technique: LightTechnique,
-    
-}
-
-impl<'a, S: Sampler, Camera: camera::Camera> DirectLight<'a, S, Camera> {
+impl<'a, S: Sampler, C: Camera> DirectLight<'a, S, C> {
     type Param = DirectLightParam;
 
     pub fn new(param: DirectLightParam, int_param: IntegratorParam) -> Self {
-        let light_technique = param.light_technique;
-
         // Go through and prepare all of the samples for all of the lights in the scene:
 
         let scene_lights = int_param.scene.get_lights();
