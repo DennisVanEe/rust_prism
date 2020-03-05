@@ -1,7 +1,7 @@
 pub mod direct_light;
 
 use crate::camera::Camera;
-use crate::film::{Film, TileIndex};
+use crate::film::{Film, PixelIndex};
 use crate::sampler::Sampler;
 use crate::scene::Scene;
 

@@ -1,6 +1,6 @@
 use crate::math::vector::Vec2;
 
-use super::TileIndex;
+use super::PixelIndex;
 
 pub mod linear;
 
@@ -20,11 +20,11 @@ pub trait TileSchedular {
     // Retrieve the initial tile index. This function does not
     // have to be thread safe. By the off chance that there are more
     // threads than tiles, it'll return None:
-    fn init_index(&mut self) -> Option<TileIndex>;
+    fn init_index(&mut self) -> Option<PixelIndex>;
 
-    // Retrieves the next tile for rendering. Returns None if no
+    // Retrieves the next pixel for rendering. Returns None if no
     // such tile exists anymore. This function must be thread safe:
-    fn next_index(&self, cur_index: TileIndex) -> Option<TileIndex>;
+    fn next_index(&self, cur_index: PixelIndex) -> Option<PixelIndex>;
 
     // Returns the percentage of tiles that are finished at this point.
     // Doesn't have to be very accurate but does have to be thread safe:

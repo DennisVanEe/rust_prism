@@ -1,6 +1,6 @@
 use crate::memory;
 
-use enum_map::Enum;
+use enum_map::{Enum, EnumMap};
 
 pub mod beauty;
 

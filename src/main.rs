@@ -15,7 +15,7 @@ mod scene;
 mod scene_loading;
 mod shading;
 mod spectrum;
-mod thread;
+mod threading;
 mod transform;
 
 use std::env;
