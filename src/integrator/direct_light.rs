@@ -33,6 +33,7 @@ impl<'a, S: Sampler, C: Camera> DirectLight<'a, S, C> {
     type Param = DirectLightParam;
 
     pub fn new(param: DirectLightParam, int_param: IntegratorParam) -> Self {
+        
         // Go through and prepare all of the samples for all of the lights in the scene:
 
         let scene_lights = int_param.scene.get_lights();

@@ -98,7 +98,7 @@ impl<'a, C: Camera, S: Sampler, I: Integrator<S, C>, T: TileSchedular>
         // Now have the main thread also render the scene:
 
         let integrator = &self.integrator;
-        let sampler = &self.sampler;
+        let sampler = &mut self.sampler;
 
         // Have the main thread render the tile as well:
         render(
@@ -167,7 +167,7 @@ impl<'a, C: Camera, S: Sampler, I: Integrator<S, C>, T: TileSchedular>
         );
 
         let integrator = &self.integrator;
-        let sampler = &self.sampler;
+        let sampler = &mut self.sampler;
         let camera = self.camera;
         let film = self.film;
         let tile_schedular = self.tile_schedular;
@@ -200,7 +200,7 @@ impl<'a, C: Camera, S: Sampler, I: Integrator<S, C>, T: TileSchedular>
 // The function that executed the rendering step:
 fn render<C: Camera, S: Sampler, I: Integrator<S, C>, T: TileSchedular>(
     integrator: &I,
-    sampler: &S,
+    sampler: &mut S,
     camera: &C,
     film: &Film,
     tile_schedular: &T,
@@ -210,6 +210,9 @@ fn render<C: Camera, S: Sampler, I: Integrator<S, C>, T: TileSchedular>(
     // The render loop:
     let mut tile_index = init_index;
     loop {
+        // Prepare the sampler for another tile:
+        sampler.start_tile(tile_index.seed());
+
         // Prepare the render parameters:
         let render_param = RenderParam {
             film,

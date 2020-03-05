@@ -16,6 +16,12 @@ pub struct TileIndex {
 }
 
 impl TileIndex {
+    // Returns a unique seed for the tile. Becomes more complicated when
+    // adaptive sampling is utilized:
+    pub fn seed(&self) -> u64 {
+        self.index as u64
+    }
+
     pub fn pixel_pos(&self) -> Vec2<usize> {
         self.pixel_pos
     }
