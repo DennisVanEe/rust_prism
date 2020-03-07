@@ -2,7 +2,7 @@ use crate::math::util;
 use crate::math::vector::Vec2;
 
 use super::super::pixel::{TILE_DIM, TILE_LEN};
-use super::super::PixelIndex;
+use super::super::TileIndex;
 use super::TileSchedular;
 
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -29,40 +29,29 @@ impl TileSchedular for LinearTileSchedular {
         self.cur_index.store(0, Ordering::Relaxed);
     }
 
-    fn init_index(&mut self) -> Option<PixelIndex> {
+    fn init_index(&mut self) -> Option<TileIndex> {
         // Because it doesn't have to be thread safe, we can do the
         // more naive approach here:
-        let tile_index = self.cur_index.load(Ordering::Relaxed);
-        if tile_index < self.num_tiles {
+        let index = self.cur_index.load(Ordering::Relaxed);
+        if index < self.num_tiles {
             // Let them out in morton order:
-            self.cur_index.store(tile_index + 1, Ordering::Relaxed);
-            let tile_pos_u32 = util::morton_to_2d(tile_index as u64);
-            let tile_pos = Vec2 {
-                x: tile_pos_u32.x as usize,
-                y: tile_pos_u32.y as usize,
+            self.cur_index.store(index + 1, Ordering::Relaxed);
+            let pos_u32 = util::morton_to_2d(index as u64);
+            let pos = Vec2 {
+                x: pos_u32.x as usize,
+                y: pos_u32.y as usize,
             };
-            Some(PixelIndex {
-                tile_index,
-                tile_pos,
-                pixel_index: 0,
-                pixel_pos: tile_pos,
+            Some(TileIndex {
+                index,
+                seed: index as u64, // Because we only visit each tile once, this should work
+                pos,
             })
         } else {
             None
         }
     }
 
-    fn next_index(&self, mut index: PixelIndex) -> Option<PixelIndex> {
-        // Update the PixelIndex normally if we're good:
-        if index.pixel_index < TILE_LEN {
-            index.pixel_index += 1;
-            index.pixel_pos = Vec2 {
-                x: index.pixel_index % TILE_DIM,
-                y: index.pixel_index / TILE_DIM,
-            };
-            return index;
-        }
-
+    fn next_index(&self, mut index: TileIndex) -> Option<TileIndex> {
         // Get the current tile we have:
         let mut old_tile = self.cur_index.load(Ordering::Relaxed);
         loop {
@@ -83,12 +72,13 @@ impl TileSchedular for LinearTileSchedular {
                 old_tile = i;
             } else {
                 // We return the "old_tile". The new_tile is for the next time we run the code:
-                let pixel_pos_u32 = util::morton_to_2d(old_tile as u64);
+                let pos_u32 = util::morton_to_2d(old_tile as u64);
                 return Some(TileIndex {
                     index: old_tile,
-                    pixel_pos: Vec2 {
-                        x: pixel_pos_u32.x as usize,
-                        y: pixel_pos_u32.y as usize,
+                    seed: old_tile as u64,
+                    pos: Vec2 {
+                        x: pos_u32.x as usize,
+                        y: pos_u32.y as usize,
                     },
                 });
             }

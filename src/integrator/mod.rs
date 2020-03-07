@@ -1,7 +1,7 @@
 pub mod direct_light;
 
 use crate::camera::Camera;
-use crate::film::{Film, PixelIndex};
+use crate::film::{FilmPixel, TileIndex};
 use crate::sampler::Sampler;
 use crate::scene::Scene;
 
@@ -21,10 +21,9 @@ pub struct IntegratorParam<'a, S: Sampler, C: Camera> {
 // The parameters that get passed to the integrator everytime
 // we render the scene:
 pub struct RenderParam<'a, S: Sampler, C: Camera> {
-    film: &'a Film,        // The film that is being written to
-    tile_index: TileIndex, // The tile index of the film being written to
-    scene: &'a Scene<'a>,  // The scene that is being rendered
-    sampler: &'a mut S,    // The sampler used to extract samples as it's rendering
+    pixel: &'a FilmPixel<'a>,  // The film that is being written to
+    scene: &'a Scene<'a>,      // The scene that is being rendered
+    sampler: &'a mut S,        // The sampler used to extract samples as it's rendering
 }
 
 pub trait Integrator<S: Sampler, C: Camera>: Clone {
@@ -36,5 +35,5 @@ pub trait Integrator<S: Sampler, C: Camera>: Clone {
     fn new(param: Self::Param, int_param: IntegratorParam<S, C>) -> Self;
 
     // Given a tile index and the scene, go ahead and fill the film as appropriate:
-    fn render(&mut self, param: RenderParam<S, C>) -> TileIndex;
+    fn render(&mut self, param: RenderParam<S, C>);
 }

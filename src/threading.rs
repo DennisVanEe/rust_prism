@@ -1,6 +1,6 @@
 use crate::camera::Camera;
 use crate::film::tile_schedular::TileSchedular;
-use crate::film::Film;
+use crate::film::{FilmPixel, Film};
 use crate::film::TileIndex;
 use crate::integrator::{Integrator, RenderParam};
 use crate::sampler::Sampler;
@@ -208,26 +208,38 @@ fn render<C: Camera, S: Sampler, I: Integrator<S, C>, T: TileSchedular>(
     init_index: TileIndex,
 ) {
     // The render loop:
+    let mut seed = init_index.seed();
     let mut tile_index = init_index;
+    let mut film_pixel = FilmPixel::new(film, tile_index);
     loop {
-        // Prepare the sampler for another tile:
-        sampler.start_tile(tile_index.seed());
+        sampler.start_tile(seed);
 
-        // Prepare the render parameters:
-        let render_param = RenderParam {
-            film,
-            tile_index,
-            scene,
-            sampler,
-        };
+        // Loop over a tile:
+        loop {
+            sampler.start_tile(seed);
 
-        let finished_tile_index = integrator.render(render_param);
+            // Prepare the render parameters:
+            let render_param = RenderParam {
+                pixel: &film_pixel,
+                scene,
+                sampler,
+            };
+
+            // Render the provided pixel:
+            integrator.render(render_param);
+
+            if !film_pixel.next_pixel() {
+                break;
+            }
+        }
 
         // Get the next tile. If wer are done, then we go ahead and exit:
-        if let Some(index) = tile_schedular.next_index(finished_tile_index) {
+        if let Some(index) = tile_schedular.next_index(tile_index) {
             tile_index = index;
         } else {
             break;
         }
+
+        film_pixel.set_tile(tile_index);
     }
 }
