@@ -2,7 +2,7 @@ use crate::math::numbers::Float;
 use crate::math::vector::{Vec2, Vec3};
 use crate::shading::lobe::specular::Fresnel;
 use crate::shading::lobe::{
-    abs_cos_theta, cos2_phi, cos2_theta, sin2_phi, tan2_theta, tan_theta, BxDF, BxDFType,
+    abs_cos_theta, cos2_phi, cos2_theta, sin2_phi, tan2_theta, tan_theta, Lobe, LobeType,
 };
 // use crate::spectrum::RGBSpectrum;
 
@@ -130,11 +130,11 @@ impl MicrofacetDistribution for TrowbridgeReitz {
 // The bottom two microfacet models use the microfacet distribution above
 // and uses the Torrance–Sparrow model.
 
-struct MicrofacetReflection<F: Fresnel, M: MicrofacetDistribution> {
-    microfacet: M, // the distribution
-    fresnel: F,    // the fresnel reflection
-    r_scale: RGBSpectrum,
-}
+// struct MicrofacetReflection<F: Fresnel, M: MicrofacetDistribution> {
+//     microfacet: M, // the distribution
+//     fresnel: F,    // the fresnel reflection
+//     r_scale: RGBSpectrum,
+// }
 
 // impl<F: Fresnel, M: MicrofacetDistribution> MicrofacetReflection<F, M> {
 //     pub fn new(r_scale: RGBSpectrum, microfacet: M, fresnel: F) -> Self {

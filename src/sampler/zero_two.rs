@@ -45,6 +45,51 @@ pub struct ZeroTwo {
 }
 
 impl ZeroTwo {
+    /// New creates a new `ZeroTwo` struct.
+    /// 
+    /// # Arguments
+    /// * `num_pixel_samples` - The number of samples per pixel
+    /// * `num_dim` - The number of dimensions when sampling
+    pub fn new(
+        // Not used in our case
+        num_pixel_samples: usize,
+        num_dim: usize,
+    ) -> Self {
+        // Update the number of pixel samples. We generate better samples
+        // when this number is a power of 2:
+        let num_pixel_samples = next_pow2_u64(num_pixel_samples as u64) as usize;
+
+        // Allocates the memory needed for the sampler (uninitialized, they will be
+        // initialized when pixel start is called):
+
+        let (samples_1d, samples_2d) = {
+            let num_samples = num_pixel_samples * num_dim;
+            unsafe {
+                (
+                    memory::uninit_vec(num_samples),
+                    memory::uninit_vec(num_samples),
+                )
+            }
+        };
+
+        ZeroTwo {
+            num_pixel_samples,
+            num_dim,
+            samples_1d,
+            samples_2d,
+            arr_samples_1d: Vec::new(),
+            arr_samples_2d: Vec::new(),
+
+            index_pixel_sample: 0,
+            index_arr_1d: 0,
+            index_arr_2d: 0,
+            index_1d: 0,
+            index_2d: 0,
+
+            rng: RandGen::new_default(),
+        }
+    }
+
     fn gen_1d_samples(
         &mut self,
         // The number of samples per pixel sample:
@@ -117,49 +162,6 @@ impl ZeroTwo {
 }
 
 impl Sampler for ZeroTwo {
-    type Param = ();
-
-    fn new(
-        // Not used in our case
-        _: (),
-        num_pixel_samples: usize,
-        num_dim: usize,
-    ) -> Self {
-        // Update the number of pixel samples. We generate better samples
-        // when this number is a power of 2:
-        let num_pixel_samples = next_pow2_u64(num_pixel_samples as u64) as usize;
-
-        // Allocates the memory needed for the sampler (uninitialized, they will be
-        // initialized when pixel start is called):
-
-        let (samples_1d, samples_2d) = {
-            let num_samples = num_pixel_samples * num_dim;
-            unsafe {
-                (
-                    memory::uninit_vec(num_samples),
-                    memory::uninit_vec(num_samples),
-                )
-            }
-        };
-
-        ZeroTwo {
-            num_pixel_samples,
-            num_dim,
-            samples_1d,
-            samples_2d,
-            arr_samples_1d: Vec::new(),
-            arr_samples_2d: Vec::new(),
-
-            index_pixel_sample: 0,
-            index_arr_1d: 0,
-            index_arr_2d: 0,
-            index_1d: 0,
-            index_2d: 0,
-
-            rng: RandGen::new_default(),
-        }
-    }
-
     fn prepare_arrays(&mut self, arr_sizes_1d: &[usize], arr_sizes_2d: &[usize]) {
         let mut arr_samples_1d = Vec::with_capacity(arr_sizes_1d.len());
         for &n in arr_sizes_1d {

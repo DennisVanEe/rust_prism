@@ -6,18 +6,17 @@ edition = "2018"
 
 [dependencies]
 # Used all over the place for math and whatnot:
-num-traits = "0.2.8"
+num-traits = "0.2.11"
 # Used to load PLY files:
 ply-rs = "0.1.2"
 # Used for parsing JSON scene description files:
-serde = { version = "1.0.104", features = ["derive"] }
+serde = { version = "1.0.105", features = ["derive"] }
 serde_json = "1.0.48"
 
 simple-error = "0.2.1"
-bitflags = "1.1.0"
-arrayvec = "0.4.11"
-bumpalo = "2.6.0"
-enum-map = "0.6.2"
+bitflags = "1.2.1"
+arrayvec = "0.5.1"
+bumpalo = "3.2.0"
 
 # These are needed because rust doesn't have an implace partition
 # function or nth_element (in stable) function that I am aware of:

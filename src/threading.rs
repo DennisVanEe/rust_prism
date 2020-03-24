@@ -1,45 +1,50 @@
 use crate::camera::Camera;
-use crate::film::tile_schedular::TileSchedular;
-use crate::film::{FilmPixel, Film};
-use crate::film::TileIndex;
+use crate::film::{Pixel, Film, TILE_DIM};
 use crate::integrator::{Integrator, RenderParam};
 use crate::sampler::Sampler;
 use crate::scene::Scene;
+use crate::math::vector::Vec2;
 
 use simple_error::{self, SimpleResult};
 
 use std::thread::{self, JoinHandle};
 
-pub struct RenderThreadPool<'a, C: Camera, S: Sampler, I: Integrator<S, C>, T: TileSchedular> {
-    threads: Vec<RenderThread<'a, C, S, I, T>>, // All of the threads the renderpool manages (including the thread it manages itself)
+/// The `RenderThreadPool` is in charge of the threads that will be rendering the scene as. It is also the owner of the resources
+/// that are passed into each thread. This includes the `Camera`, `Film`, and `Scene`.
+pub struct RenderThreadPool<'a> {
+    threads: Vec<RenderThread<'a>>, // All of the threads the renderpool manages (including the thread it manages itself)
     num_threads: usize,
-    integrator: I, // The RenderThreadPool obtains ownership of both the sampler and the integrator, film and camera
-    sampler: S,
-    camera: C,
-    tile_schedular: T,
+    integrator: Box<dyn Integrator>,
+    sampler: Box<dyn Sampler>,
+    camera: Box<dyn Camera>,
     film: Film,
     scene: Scene<'a>,
 }
 
-impl<'a, C: Camera, S: Sampler, I: Integrator<S, C>, T: TileSchedular>
-    RenderThreadPool<'a, C, S, I, T>
+impl<'a> RenderThreadPool<'a>
 {
-    // The number threads is the TOTAL number of threads, including the current "main" thread:
+    /// Creates a new `RenderThreadPool` with the given number of threads.
+    /// 
+    /// # Arguments
+    /// * `num_threads` - The number of threads to use, including the main thread.
+    /// * `integrator` - The integrator that is to be used with rendering.
+    /// * `sampler` - The sampler that is to be used with rendering.
+    /// * `camera` - The camera that is to be used with rendering.
+    /// * `film` - The film that is being rendered to.
+    /// * `scene` - The scene that is being rendered.
+    /// 
+    /// # Panics
+    /// Panics if the number of threads is invalid. Note that more threads than the HW supports
+    /// concurrently is allowed, just not recommended.
     pub fn new(
         num_threads: usize,
-        integrator: I,
-        sampler: S,
-        camera: C,
+        integrator: Box<dyn Integrator>,
+        sampler: Box<dyn Sampler>,
+        camera: Box<dyn Camera>,
         film: Film,
-        tile_schedular: T,
         scene: Scene,
-    ) -> SimpleResult<Self> {
-        if num_threads < 1 {
-            simple_error::bail!(
-                "The specified number of threads: {} is invalid",
-                num_threads
-            );
-        }
+    ) -> Self {
+        assert_ne!(num_threads, 0);
 
         // Exclude the main thread:
         let num_threads = -1;
@@ -49,26 +54,23 @@ impl<'a, C: Camera, S: Sampler, I: Integrator<S, C>, T: TileSchedular>
             integrator,
             sampler,
             camera,
-            tile_schedular,
             film,
             scene,
         })
     }
 
-    // This is a blocking function, that is, this function won't exit until all of the threads are finished with
-    // their rendering task:
+    /// Starts the render process. The function doesn't return until all of the rendering was deamed complete.
     pub fn start_render(&mut self) {
         // Go through and create the different threads:
         // ID 0 is reserved for the main thread:
 
-        let camera = &self.camera;
+        let camera = self.camera.deref();
         let film = &self.film;
-        let tile_schedular = &self.tile_schedular;
         let scene = &self.scene;
 
         for id in 1..=self.num_threads {
-            let clone_integrator = self.integrator.clone();
-            let clone_sampler = self.sampler.clone();
+            let clone_integrator = Box::new(self.integrator.deref().clone());
+            let clone_sampler = Box::new(self.sampler.deref().clone());
 
             self.threads.push(RenderThread::new(
                 id,
@@ -76,7 +78,6 @@ impl<'a, C: Camera, S: Sampler, I: Integrator<S, C>, T: TileSchedular>
                 clone_sampler,
                 camera,
                 film,
-                tile_schedular,
                 scene,
             ));
         }
@@ -106,7 +107,6 @@ impl<'a, C: Camera, S: Sampler, I: Integrator<S, C>, T: TileSchedular>
             sampler,
             camera,
             film,
-            tile_schedular,
             scene,
             main_init_index,
         );
@@ -118,30 +118,26 @@ impl<'a, C: Camera, S: Sampler, I: Integrator<S, C>, T: TileSchedular>
     }
 }
 
-// The render thread which is used to store all of the information we would like:
-struct RenderThread<'a, C: Camera, S: Sampler, I: Integrator<S, C>, T: TileSchedular> {
+struct RenderThread<'a> {
     thread: Option<JoinHandle<()>>,
 
-    integrator: I,
-    sampler: S,
-    camera: &'a C,
+    integrator: Box<dyn Integrator>,  // This needs to be a box because each thread needs to manage one of these themselves.
+    sampler: Box<dyn Sampler>,        // Read the above snippet.
+    camera: &'a dyn Camera,
     film: &'a Film,
-    tile_schedular: &'a T,
     scene: &'a Scene<'a>,
 
     id: usize,
 }
 
-impl<'a, C: Camera, S: Sampler, I: Integrator<S, C>, T: TileSchedular>
-    RenderThread<'a, C, S, I, T>
+impl<'a> RenderThread<'a>
 {
     fn new(
         id: usize,
-        integrator: I,
-        sampler: S,
-        camera: &C,
+        integrator: Box<dyn Integrator>,
+        sampler: Box<dyn Sampler>,
+        camera: &dyn Camera,
         film: &Film,
-        tile_schedular: &T,
         scene: &Scene,
     ) -> Self {
         // Don't spawn the thread yet:
@@ -151,14 +147,12 @@ impl<'a, C: Camera, S: Sampler, I: Integrator<S, C>, T: TileSchedular>
             sampler,
             camera,
             film,
-            tile_schedular,
             scene,
             id,
         }
     }
 
-    // Starts the thread for rendering witht the given tile index:
-    fn start_render(&mut self, init_index: TileIndex) {
+    fn start_render(&mut self) {
         // If the thread was already spawned, panic!
         assert!(
             self.thread.is_none(),
@@ -197,49 +191,62 @@ impl<'a, C: Camera, S: Sampler, I: Integrator<S, C>, T: TileSchedular>
     }
 }
 
-// The function that executed the rendering step:
-fn render<C: Camera, S: Sampler, I: Integrator<S, C>, T: TileSchedular>(
-    integrator: &I,
-    sampler: &mut S,
-    camera: &C,
+/// The render function is the function that loops over specified tiles until the film
+/// returns `None` for the tiles.
+/// 
+/// # Arguments
+/// * `integrator` - The integrator that is being used to render the scene.
+/// * `Sampler` - The sampler that is being used by the integrator.
+/// * `Camera` - The camera that is being used to render the scene.
+/// * `Film` - The film being rendered to.
+/// * `Scene` - The scene being rendered.
+fn render(
+    integrator: &dyn Integrator,
+    sampler: &mut dyn Sampler,
+    camera: &dyn Camera,
     film: &Film,
-    tile_schedular: &T,
     scene: &Scene,
-    init_index: TileIndex,
 ) {
-    // The render loop:
-    let mut seed = init_index.seed();
-    let mut tile_index = init_index;
-    let mut film_pixel = FilmPixel::new(film, tile_index);
     loop {
-        sampler.start_tile(seed);
+        // We start by getting a tile:
+        let mut film_tile = if let Some(film_tile) = film.get_tile() {
+            film_tile
+        } else {
+            break
+        };
+        let base_pixel_pos = film_tile.pos;
 
-        // Loop over a tile:
-        loop {
-            sampler.start_tile(seed);
+        // Prepare the sampler to start a new pixel tile:
+        sampler.start_tile(film_tile.seed);
 
-            // Prepare the render parameters:
-            let render_param = RenderParam {
-                pixel: &film_pixel,
-                scene,
-                sampler,
+        for (i, pixel) in film_tile.iter_mut().enumerate() {
+            let pixel_pos_delta = Vec2 {
+                x: i % TILE_DIM,
+                y: i / TILE_DIM,
             };
+            sampler.start_pixel(base_pixel_pos + pixel_pos_delta);
 
-            // Render the provided pixel:
-            integrator.render(render_param);
+            // TODO: prepare other values for the integrator (like
+            // camera values and whatnot)
 
-            if !film_pixel.next_pixel() {
-                break;
+            // We loop until we exhausted all of the pixel samples:
+            loop {
+                // Prepare the render parameters:
+                let param = RenderParam {
+                    pixel: pixel.to_render_pixel(),
+                    scene,
+                    sampler,
+                };
+                // Render the pixel and set the updated value:
+                let result = integrator.render(param);
+                pixel = Pixel::from_render_pixel(result);
+
+                // We loop over the same pixel until we have run out of pixel
+                // samples.
+                if !sampler.next_pixel_sample() {
+                    break;
+                }
             }
         }
-
-        // Get the next tile. If wer are done, then we go ahead and exit:
-        if let Some(index) = tile_schedular.next_index(tile_index) {
-            tile_index = index;
-        } else {
-            break;
-        }
-
-        film_pixel.set_tile(tile_index);
     }
 }

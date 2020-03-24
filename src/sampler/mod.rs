@@ -11,15 +11,6 @@ use crate::math::vector::Vec2;
 // Also defines any extra parameters a sampler might want:
 // Must also be clonable:
 pub trait Sampler: Clone {
-    // Parameter type, if any.
-    type Param;
-
-    fn new(
-        param: Self::Param, // If the sampler requires extra parameters, pass them here
-        num_pixel_samples: usize, // The number of pixel samples
-        num_dim: usize,     // The number of dimensions
-    ) -> Self;
-
     // Some samplers may be better at generating samples if it knows the arrays it has to generate:
     fn prepare_arrays(&mut self, arr_sizes_1d: &[usize], arr_sizes_2d: &[usize]);
 

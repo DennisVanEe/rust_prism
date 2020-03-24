@@ -1,6 +1,3 @@
-// This file contains a bunch of functions useful for sampling
-// different shapes:
-
 use crate::math::numbers::Float;
 use crate::math::vector::{Vec2, Vec3};
 
@@ -54,4 +51,18 @@ pub fn concentric_sample_disk<T: Float>(u: Vec2<T>) -> Vec2<T> {
         x: r * theta.cos(),
         y: r * theta.sin(),
     }
+}
+
+pub fn cos_sample_sphere<T: Float>(u: Vec2<T>) -> Vec3<T> {
+    let d = concentric_sample_disk(u);
+    let z = T::zero().max(T::one() - d.x * d.x - d.y * d.y).sqrt();
+    Vec3 {
+        x: d.x,
+        y: d.y,
+        z,
+    }
+}
+
+pub fn cos_sphere_pdf<T: Float>(cos_theta: T) -> T {
+    cos_theta * T::INV_PI
 }
