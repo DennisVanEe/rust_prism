@@ -4,6 +4,7 @@ pub mod zero_two;
 use crate::camera::CameraSample;
 use crate::math::random::RandGen;
 use crate::math::vector::Vec2;
+use crate::filter::PixelFilter;
 
 // Each thread, when working on a tile, gets access to their own
 // sampler when rendering.
@@ -14,8 +15,14 @@ pub trait Sampler: Clone {
     // Some samplers may be better at generating samples if it knows the arrays it has to generate:
     fn prepare_arrays(&mut self, arr_sizes_1d: &[usize], arr_sizes_2d: &[usize]);
 
-    // Use the sampler to start working on a new pixel:
+    /// Tells the sampler that we are starting on a new specific pixel.
+    /// 
+    /// # Arguments
+    /// * `pixel` - The pixel's top left position.
     fn start_pixel(&mut self, pixel: Vec2<usize>);
+
+    /// Returns the current pixel's top left position.
+    fn get_curr_pixel_pos(&self) -> Vec2<usize>;
 
     // Specify that we are starting a different tile. Need to
     // redefine a seed as this removes potential artifacting.
@@ -37,12 +44,15 @@ pub trait Sampler: Clone {
     fn get_1d(&mut self) -> f64;
     fn get_2d(&mut self) -> Vec2<f64>;
 
-    fn get_camera_sample(&mut self) -> CameraSample {
-        // Because of the way we do filtering, we don't
-        // care about the position relative to the entire film.
-        // Instead, we care about the position relative to the
-        // specific pixel.
-        let p_film = self.get_2d();
+    /// Uses the sampler to generate a `CameraSample`. This would be passed into 
+    /// a camera to generate a `Ray` and `RayDiff`.
+    /// 
+    /// # Arguments
+    /// * `filter` - The pixel filter used to determine a point on the film.
+    fn gen_camera_sample(&mut self, filter: &PixelFilter) -> CameraSample {
+        // Sample a value for the specific pixel and offset it by the pixel's
+        // actual position.
+        let p_film = filter.sample_pos(self.get_2d()) + self.get_curr_pixel_pos();
         let time = self.get_1d();
         let p_lens = self.get_2d();
         CameraSample {

@@ -4,6 +4,7 @@ use crate::integrator::{Integrator, RenderParam};
 use crate::sampler::Sampler;
 use crate::scene::Scene;
 use crate::math::vector::Vec2;
+use crate::filter::PixelFilter;
 
 use simple_error::{self, SimpleResult};
 
@@ -19,6 +20,7 @@ pub struct RenderThreadPool<'a> {
     camera: Box<dyn Camera>,
     film: Film,
     scene: Scene<'a>,
+    filter: PixelFilter,
 }
 
 impl<'a> RenderThreadPool<'a>
@@ -32,6 +34,7 @@ impl<'a> RenderThreadPool<'a>
     /// * `camera` - The camera that is to be used with rendering.
     /// * `film` - The film that is being rendered to.
     /// * `scene` - The scene that is being rendered.
+    /// * `filter` - The filter used with filter importance sampling.
     /// 
     /// # Panics
     /// Panics if the number of threads is invalid. Note that more threads than the HW supports
@@ -67,6 +70,7 @@ impl<'a> RenderThreadPool<'a>
         let camera = self.camera.deref();
         let film = &self.film;
         let scene = &self.scene;
+        let filter = &self.filter;
 
         for id in 1..=self.num_threads {
             let clone_integrator = Box::new(self.integrator.deref().clone());
@@ -79,6 +83,7 @@ impl<'a> RenderThreadPool<'a>
                 camera,
                 film,
                 scene,
+                filter,
             ));
         }
 
@@ -109,6 +114,7 @@ impl<'a> RenderThreadPool<'a>
             film,
             scene,
             main_init_index,
+            filter,
         );
 
         // Wait for the other threads to have finished as well:
@@ -126,6 +132,7 @@ struct RenderThread<'a> {
     camera: &'a dyn Camera,
     film: &'a Film,
     scene: &'a Scene<'a>,
+    filter: &'a PixelFilter,
 
     id: usize,
 }
@@ -139,6 +146,7 @@ impl<'a> RenderThread<'a>
         camera: &dyn Camera,
         film: &Film,
         scene: &Scene,
+        filter: &PixelFilter,
     ) -> Self {
         // Don't spawn the thread yet:
         RenderThread {
@@ -148,6 +156,7 @@ impl<'a> RenderThread<'a>
             camera,
             film,
             scene,
+            filter,
             id,
         }
     }
@@ -175,7 +184,7 @@ impl<'a> RenderThread<'a>
             film,
             tile_schedular,
             scene,
-            init_index,
+            filter,
         )));
     }
 
@@ -196,16 +205,18 @@ impl<'a> RenderThread<'a>
 /// 
 /// # Arguments
 /// * `integrator` - The integrator that is being used to render the scene.
-/// * `Sampler` - The sampler that is being used by the integrator.
-/// * `Camera` - The camera that is being used to render the scene.
-/// * `Film` - The film being rendered to.
-/// * `Scene` - The scene being rendered.
+/// * `sampler` - The sampler that is being used by the integrator.
+/// * `camera` - The camera that is being used to render the scene.
+/// * `film` - The film being rendered to.
+/// * `scene` - The scene being rendered.
+/// * `filter` - The filter used when sampling points on the film.
 fn render(
     integrator: &dyn Integrator,
     sampler: &mut dyn Sampler,
     camera: &dyn Camera,
     film: &Film,
     scene: &Scene,
+    filter: &PixelFilter,
 ) {
     loop {
         // We start by getting a tile:
@@ -220,6 +231,7 @@ fn render(
         sampler.start_tile(film_tile.seed);
 
         for (i, pixel) in film_tile.iter_mut().enumerate() {
+            // Make sure we are able to retrieve the next pixel position:
             let pixel_pos_delta = Vec2 {
                 x: i % TILE_DIM,
                 y: i / TILE_DIM,

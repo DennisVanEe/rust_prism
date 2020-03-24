@@ -18,6 +18,8 @@ pub struct RenderParam<'a> {
     scene: &'a Scene<'a>,
     /// The current sampler to use when needing random variables.
     sampler: &'a dyn Sampler,
+    /// The current time of the scene when rendering.
+    time: f64,
 }
 
 /// The `Integrator` is in charge of rendering an individual pixel at a time. It doesn't have to worry about

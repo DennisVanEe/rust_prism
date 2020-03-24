@@ -94,13 +94,11 @@ impl Filter for GaussianFilter {
     }
 }
 
-// The pixel filter uses the technique described here:
-// "Filter Importance Sampling" - Manfred Ernst, Marc Stamminger, Gunther Greiner
-// This isn't exposed to the user, as the user just passes a filter.
-
 const FILTER_TABLE_WIDTH: usize = 64;
 
-#[derive(Clone, Copy)]
+/// The pixel filter uses the technique described here:
+/// "Filter Importance Sampling" - Manfred Ernst, Marc Stamminger, Gunther Greiner
+/// Essentially we use a filter distribution to sample points on a pixel.
 pub struct PixelFilter {
     // A CDF Py(x) that allows us to sample the x value:
     cdf_x: [f64; FILTER_TABLE_WIDTH],
