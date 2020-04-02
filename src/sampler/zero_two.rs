@@ -46,7 +46,7 @@ pub struct ZeroTwo {
 
 impl ZeroTwo {
     /// New creates a new `ZeroTwo` struct.
-    /// 
+    ///
     /// # Arguments
     /// * `num_pixel_samples` - The number of samples per pixel
     /// * `num_dim` - The number of dimensions when sampling

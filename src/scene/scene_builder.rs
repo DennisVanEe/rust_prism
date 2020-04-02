@@ -4,26 +4,22 @@ use crate::geometry::Geometry;
 use crate::shading::material::Material;
 use crate::transform::Transform;
 
-use bumpalo::Bump;
 use simple_error::{bail, SimpleResult};
 
 use std::collections::HashMap;
 use std::mem::{transmute, ManuallyDrop};
 
-// This is used to setup all of the scene information:
+/// A `SceneBuilder1 is used to create a scene by allocating memory for the different scene objects
+/// and whatnot.
 pub struct SceneBuilder<'a> {
-    pub(super) allocator: Bump,
-    // Both of these are manually dropped to safe on memory as they won't
-    // be needed when we are actually rendering:
-    pub(super) geometry_ids: ManuallyDrop<HashMap<String, &'a dyn Geometry>>,
-    pub(super) material_ids: ManuallyDrop<HashMap<String, &'a dyn Material>>,
+    pub(super) geometry_ids: ManuallyDrop<HashMap<String, Box<dyn Geometry>>>,
+    pub(super) material_ids: ManuallyDrop<HashMap<String, Box<dyn Material>>>,
     pub(super) models: Vec<SceneObject<'a>>,
 }
 
 impl<'a> SceneBuilder<'a> {
     pub fn new() -> Self {
         SceneBuilder {
-            allocator: Bump::new(),
             geometry_ids: ManuallyDrop::new(HashMap::new()),
             material_ids: ManuallyDrop::new(HashMap::new()),
             models: Vec::new(),
@@ -31,15 +27,12 @@ impl<'a> SceneBuilder<'a> {
     }
 
     // We want id to move ownership of the string. That should be more efficient.
-    pub fn add_geometry<T: Geometry>(&mut self, geometry: T, id: String) -> SimpleResult<()> {
+    pub fn add_geometry(&mut self, geometry: T, id: String) -> SimpleResult<()> {
         // First check if we already have an ID that matches this one:
         if self.geometry_ids.contains_key(&id) {
             bail!("Geometry id: \"{}\" is not unique.", id);
         }
 
-        // Allocate the memory. This is dirty and I feel dirty for doing it this way, but I can't figure out
-        // a clean way of doing this without the lifetime getting in the way. Rust doesn't support self-referential
-        // stuff as the lifetimes get in the way.
         let geometry =
             unsafe { transmute::<&mut T, &'a dyn Geometry>(self.allocator.alloc(geometry)) };
         self.geometry_ids.insert(id, geometry);

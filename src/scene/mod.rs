@@ -40,41 +40,30 @@ impl<'a> SceneInteraction<'a> {
     }
 }
 
-// A Scene Object is a special type of object that exists in the scene.
+/// Something that can be rendered in the scene.
 struct SceneObject<'a> {
     geom: &'a dyn Geometry, // The geometry that represents the scene object.
     obj_type: SceneObjectType<'a>, // The type of information that is associated with the object.
     geom_to_scene: &'a dyn Transform, // Transforms from geometry to scene space.
 }
 
+// SceneObjects are organized as BVHs in the scene.
 impl<'a> BVHObject for SceneObject<'a> {
     type IntParam = ();
     type DataParam = ();
     type IntResult = SceneInteraction<'a>;
 
-    fn intersect_test(
-        &self,
-        ray: Ray<f64>,
-        max_time: f64,
-        curr_time: f64,
-        _: &Self::IntParam,
-    ) -> bool {
-        let int_geom_to_scene = self.geom_to_scene.interpolate(curr_time);
+    fn intersect_test(&self, ray: Ray<f64>, _: &Self::IntParam) -> bool {
+        let int_geom_to_scene = self.geom_to_scene.interpolate(ray.time);
         let ray = int_geom_to_scene.inverse().ray(ray);
-        self.geom.intersect_test(ray, max_time)
+        self.geom.intersect_test(ray)
     }
 
-    fn intersect(
-        &self,
-        ray: Ray<f64>,
-        max_time: f64,
-        curr_time: f64,
-        _: &Self::IntParam,
-    ) -> Option<SceneInteraction> {
-        let int_geom_to_scene = self.geom_to_scene.interpolate(curr_time);
+    fn intersect(&self, ray: Ray<f64>, _: &Self::IntParam) -> Option<SceneInteraction> {
+        let int_geom_to_scene = self.geom_to_scene.interpolate(ray.time);
         let ray = int_geom_to_scene.inverse().ray(ray);
         // Then we intersect the object and check if we hit something:
-        match self.geom.intersect(ray, max_time) {
+        match self.geom.intersect(ray) {
             Some(i) => Some(SceneInteraction {
                 geom: i,
                 obj_type: self.obj_type,
@@ -118,9 +107,9 @@ impl<'a> SceneLight<'a> {
 }
 
 pub struct Scene<'a> {
-    allocator: Bump, // Holds any of the memory that we may have needed when rendering.
+    allocator: Bump,             // Holds all of the memory for the different scene objects.
     lights: Vec<SceneLight<'a>>, // Holds the importance sampled light sources in the scene.
-    bvh: BVH<SceneObject<'a>>, // Holds everything that can be intersected in the scene.
+    bvh: BVH<SceneObject<'a>>,   // Holds everything that can be intersected in the scene.
 }
 
 impl<'a> Scene<'a> {
@@ -134,6 +123,7 @@ impl<'a> Scene<'a> {
         }
     }
 
+    /// Returns all of the lights in a scene for next event estimation.
     pub fn get_lights(&self) -> &[SceneLight<'a>] {
         &self.lights[..]
     }
@@ -143,16 +133,15 @@ impl<'a> Scene<'a> {
     // The intersect function also returns a reference to the material that belongs
     // to the object that was intersected. This way, the integrator can decide whether
     // or not to construct a Bsdf object.
-    pub fn intersect(&self, ray: Ray<f64>, max_t: f64, curr_time: f64) -> Option<SceneInteraction> {
-        // First we traverse the BVH and get what we want:
-        if let Some((i, _)) = self.bvh.intersect(ray, max_t, curr_time, &()) {
+    pub fn intersect(&self, ray: Ray<f64>) -> Option<SceneInteraction> {
+        if let Some((i, _)) = self.bvh.intersect(ray, &()) {
             Some(i)
         } else {
             None
         }
     }
 
-    pub fn intersect_test(&self, ray: Ray<f64>, max_t: f64, curr_time: f64) -> bool {
-        self.bvh.intersect_test(ray, max_t, curr_time, &())
+    pub fn intersect_test(&self, ray: Ray<f64>) -> bool {
+        self.bvh.intersect_test(ray, &())
     }
 }

@@ -6,7 +6,7 @@ Scene file formats are written in TOML.
 
 ## Geometry ##
 
-Geometry refers to the mathematical description of a 3D object (like a collection of vertices representing a mesh or a point and radius representing a sphere).
+Geometry refers to the mathematical description of a 3D object (like a collection of vertices representing a mesh or a point and radius representing a sphere). At most one material definition can be applied to a single geometry. Thus, one must either produce a complex material or break the geometry into smaller parts to replicate a multi-material geometry.
 
 ### Basic Shapes ###
 
@@ -28,18 +28,103 @@ This represents a geometric mesh. Right now, PRISM only supports .ply files, so 
 "mesh_geometry": {
     "id": "mesh_a",              // id of geometry used by scene model
     "file_type": "ply",          // the file type
+    "face_type": "triangle",     // the face type, can be a triangle or a quad
     "dir": "/models/sphere.ply", // the location of the file representing it
 }
 ```
 
-## Scene Model ##
+## Groups and Instancing ##
 
-A Scene Model is a lightweight object that actually resides in the scene. It simply stores a pointer to both the geometry and the material that make it up. This way, you can reuse materials and geometries throughout the scene. A model also takes a transformation type. This is a geometry space to world space transformation (so where in the scene one is placing the model).
+A group refers to a collection of geometries. There are two types of groups: a `"master_group"` and a `"sub_group"`. Every scene has exactely one `"master_group"`. And if there is no instancing, then this is probably the only group required.
 
-Geometries and materials have a unique name that you can use to identify which geometry and material belong to this model. An example is shown below:
+For one-level instancing (multi-level instanting not yet supported), one must store the geometry in a `"sub_group"` and instance that in the `"master_group"`.
+
+Below is an example of a `"sub_group"`:
 
 ```json
-"scene_model": {
+"sub_group": {
+    "id": "group_a",
+    "members": [
+        {
+            "geometry_id": "mesh_a",   // the geometry referenced by its id
+            "transform": //...         // see the section on transformations
+        },      
+        {
+            "geometry_id": "sphere_b", // the geometry referenced by its id
+            "transform": //...         // see the section on transformations
+        }
+        //...
+    ]
+}
+```
+
+Every geometry in a group must be unique. If you need copies of a mesh then you need to instance them at the `"master_group"` level (again, support for multi-level instancing is planned).
+
+Below is an example of a `"master_group"`:
+
+```json
+"master_group": {
+    "members": [
+        {
+            "geometry_id": "mesh_a",   // the geometry referenced by its id
+            "transform": //...         // see the section on transformations
+        },      
+        {
+            "sub_group_id": "group_b",   // the geometry referenced by its id
+            "instance_id": "starts0",    // id of the sub_group instance
+            "transform": //...           // see the section on transformations
+        },
+        {
+            "sub_group_id": "group_b",   // the geometry referenced by its id
+            "instance_id": "starts2",    // id of the sub_group instance
+            "transform": //...           // see the section on transformations
+        }
+        //...
+    ]
+}
+```
+If one is instancing a `"sub_group"` then one must remember to include an instance_id. This is used to tie materials to geometries, allowing for different materials for different instances of the same geometry (see the material section for more details).
+
+## Materials ##
+
+A material is tied to a single geometry. If you need a geometry with partitioned materials then make a complex material or break the geometry down.
+
+TODO: talk about materials
+
+### Material Instance ###
+
+A `"material_instance"` binds a material to a specific geometry.
+
+```json
+"material_instance": {
+    "material_id": "lambertian_red", // The material being bound
+    "instance_id": "red_cars",       // The id of this particular instance
+    "geometries": [                  // A list of geometries to bind this material to
+        {
+            "geometry_id": "car_mesh", // this applies to ALL car_mesh geometries (instanced or not)
+        },
+        {
+            "geometry_id": "bus_mesh", // this only applies to the bus_mesh in the master_group
+            "instance_id": "",           
+        },
+        {
+            "geometry_id": "",         // this only applies to ALL meshes in the "vans" sub_group
+            "instance_id": "vans", 
+        }
+        {
+            "geometry_id": "monster",  // this only applies to the master geoemtry in the trucks instance
+            "instance_id": "trucks", 
+        },
+    ]
+}
+```
+
+## Scene Objects ##
+
+There are two types of scene objects, geometric object and group object. A geometric object is used for 
+
+```json
+"scene_object": {
     "geometry": "sphere_mesh", // name of geometry created before
     "material": "blue_matte",  // name of material created before
     "transform": {             // see transform section for more details

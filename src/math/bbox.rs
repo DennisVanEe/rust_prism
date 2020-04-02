@@ -178,9 +178,9 @@ impl<T: PartialOrd + Bounded + Copy> Index<usize> for BBox3<T> {
 
 // We only need to worry about intersections with f64 levels of percision:
 impl BBox3<f64> {
-    pub fn intersect(&self, ray: Ray<f64>, max_time: f64) -> Option<(f64, f64)> {
+    pub fn intersect(&self, ray: Ray<f64>) -> Option<(f64, f64)> {
         let mut t0 = 0.;
-        let mut t1 = max_time;
+        let mut t1 = ray.max_t;
 
         for i in 0..3 {
             let inv_dir = 1. / ray.dir[i];
@@ -204,7 +204,6 @@ impl BBox3<f64> {
     pub fn intersect_test(
         &self,
         ray: Ray<f64>,
-        max_time: f64,
         inv_dir: Vec3<f64>,
         is_dir_neg: Vec3<bool>,
     ) -> bool {
@@ -242,6 +241,6 @@ impl BBox3<f64> {
         let t_min = if tz_min > t_min { tz_min } else { t_min };
         let t_max = if tz_max < t_max { tz_max } else { t_max };
 
-        t_min < max_time && t_max > 0.
+        t_min < ray.max_t && t_max > 0.
     }
 }

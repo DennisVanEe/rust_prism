@@ -19,19 +19,11 @@ pub trait BVHObject {
     // The intersection algorithms need to support potentially moving objects:
     fn intersect_test(
         &self,
-        ray: Ray<f64>,  // The ray in "BVH Space"
-        max_t: f64,     // A max_t value used to prune intersections that are too far
-        curr_time: f64, // The current time
+        ray: Ray<f64>, // The ray in "BVH Space"
         int_info: &Self::IntParam,
     ) -> bool;
 
-    fn intersect(
-        &self,
-        ray: Ray<f64>,
-        max_t: f64,
-        curr_time: f64,
-        int_info: &Self::IntParam,
-    ) -> Option<Self::IntResult>;
+    fn intersect(&self, ray: Ray<f64>, int_info: &Self::IntParam) -> Option<Self::IntResult>;
 
     fn get_centroid(&self, data: &Self::DataParam) -> Vec3<f64>;
     fn get_bound(&self, data: &Self::DataParam) -> BBox3<f64>;
@@ -75,13 +67,9 @@ impl<O: BVHObject> BVH<O> {
 
     pub fn intersect(
         &self,
-        ray: Ray<f64>,
-        mut max_t: f64,
-        curr_time: f64,
+        mut ray: Ray<f64>,
         int_info: &O::IntParam,
     ) -> Option<(O::IntResult, &O)> {
-        // This function has to be very efficient, so I'll be using a lot of unsafe code
-        // here (but everything I'm doing should still be defined behavior).
         let inv_dir = ray.dir.inv_scale(1.);
         let is_dir_neg = ray.dir.comp_wise_is_neg();
 
@@ -92,11 +80,8 @@ impl<O: BVHObject> BVH<O> {
         let mut result = None;
 
         loop {
-            let curr_node = *unsafe { self.linear_nodes.get_unchecked(curr_node_index) };
-            if curr_node
-                .bound
-                .intersect_test(ray, max_t, inv_dir, is_dir_neg)
-            {
+            let curr_node = self.linear_nodes[curr_node_index];
+            if curr_node.bound.intersect_test(ray, inv_dir, is_dir_neg) {
                 match curr_node.kind {
                     LinearNodeKind::Leaf {
                         obj_start_index,
@@ -104,16 +89,12 @@ impl<O: BVHObject> BVH<O> {
                     } => {
                         let obj_start = obj_start_index as usize;
                         let obj_end = obj_end_index as usize;
-                        unsafe {
-                            for obj in self.objects.get_unchecked(obj_start..obj_end).iter() {
-                                if let Some(intersection) =
-                                    obj.intersect(ray, max_t, curr_time, int_info)
-                                {
-                                    // Update the max time for more efficient culling:
-                                    max_t = intersection.t;
-                                    // Can't return immediately, have to make sure this is the closest intersection
-                                    result = Some((intersection, obj));
-                                }
+                        for obj in self.objects[obj_start..obj_end].iter() {
+                            if let Some(intersection) = obj.intersect(ray, int_info) {
+                                // Update the max time for more efficient culling:
+                                ray.max_t = intersection.t;
+                                // Can't return immediately, have to make sure this is the closest intersection
+                                result = Some((intersection, obj));
                             }
                         }
 
@@ -130,15 +111,11 @@ impl<O: BVHObject> BVH<O> {
                         // Check which child it's most likely to be:
                         if is_dir_neg[split_axis as usize] {
                             // Push the first child onto the stack to perform later:
-                            unsafe {
-                                node_stack.push_unchecked(curr_node_index + 1);
-                            }
+                            node_stack.push(curr_node_index + 1);
                             curr_node_index = right_child_index as usize;
                         } else {
                             // Push the second child onto the stack to perform later:
-                            unsafe {
-                                node_stack.push_unchecked(right_child_index as usize);
-                            }
+                            node_stack.push(right_child_index as usize);
                             curr_node_index += 1; // the first child
                         }
                     }
@@ -155,28 +132,16 @@ impl<O: BVHObject> BVH<O> {
         result
     }
 
-    pub fn intersect_test(
-        &self,
-        ray: Ray<f64>,
-        max_t: f64,
-        curr_time: f64,
-        int_info: &O::IntParam,
-    ) -> bool {
-        // This function has to be very efficient, so I'll be using a lot of unsafe code
-        // here (but everything I'm doing should still be defined behavior).
-
+    pub fn intersect_test(&self, ray: Ray<f64>, int_info: &O::IntParam) -> bool {
         let inv_dir = ray.dir.inv_scale(1.);
         let is_dir_neg = ray.dir.comp_wise_is_neg();
 
         let mut node_stack = ArrayVec::<[_; 64]>::new();
-        let mut curr_node_index = 0usize;
+        let mut curr_node_index = 0;
 
         loop {
-            let curr_node = *unsafe { self.linear_nodes.get_unchecked(curr_node_index) };
-            if curr_node
-                .bound
-                .intersect_test(ray, max_t, inv_dir, is_dir_neg)
-            {
+            let curr_node = self.linear_nodes[curr_node_index];
+            if curr_node.bound.intersect_test(ray, inv_dir, is_dir_neg) {
                 match curr_node.kind {
                     LinearNodeKind::Leaf {
                         obj_start_index,
@@ -184,11 +149,9 @@ impl<O: BVHObject> BVH<O> {
                     } => {
                         let obj_start = obj_start_index as usize;
                         let obj_end = obj_end_index as usize;
-                        unsafe {
-                            for obj in self.objects.get_unchecked(obj_start..obj_end).iter() {
-                                if obj.intersect_test(ray, max_t, curr_time, int_info) {
-                                    return true;
-                                }
+                        for obj in self.objects[obj_start..obj_end].iter() {
+                            if obj.intersect_test(ray, int_info) {
+                                return true;
                             }
                         }
 
@@ -205,15 +168,11 @@ impl<O: BVHObject> BVH<O> {
                         // Check which child it's most likely to be:
                         if is_dir_neg[split_axis as usize] {
                             // Push the first child onto the stack to perform later:
-                            unsafe {
-                                node_stack.push_unchecked(curr_node_index + 1);
-                            }
+                            node_stack.push(curr_node_index + 1);
                             curr_node_index = right_child_index as usize;
                         } else {
                             // Push the second child onto the stack to perform later:
-                            unsafe {
-                                node_stack.push_unchecked(right_child_index as usize);
-                            }
+                            node_stack.push(right_child_index as usize);
                             curr_node_index += 1; // the first child
                         }
                     }
@@ -489,7 +448,7 @@ impl<O: BVHObject> BVH<O> {
                     unsafe { linear_nodes.set_len(curr_pos + 1) };
                     generate_linear_nodes(linear_nodes, left);
                     let right_child_index = generate_linear_nodes(linear_nodes, right) as u32;
-                    *unsafe { linear_nodes.get_unchecked_mut(curr_pos) } = LinearNode {
+                    linear_nodes[curr_pos] = LinearNode {
                         bound,
                         kind: LinearNodeKind::Interior {
                             right_child_index,

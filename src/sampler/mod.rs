@@ -2,9 +2,9 @@ pub mod stratified;
 pub mod zero_two;
 
 use crate::camera::CameraSample;
+use crate::filter::PixelFilter;
 use crate::math::random::RandGen;
 use crate::math::vector::Vec2;
-use crate::filter::PixelFilter;
 
 // Each thread, when working on a tile, gets access to their own
 // sampler when rendering.
@@ -16,7 +16,7 @@ pub trait Sampler: Clone {
     fn prepare_arrays(&mut self, arr_sizes_1d: &[usize], arr_sizes_2d: &[usize]);
 
     /// Tells the sampler that we are starting on a new specific pixel.
-    /// 
+    ///
     /// # Arguments
     /// * `pixel` - The pixel's top left position.
     fn start_pixel(&mut self, pixel: Vec2<usize>);
@@ -44,9 +44,9 @@ pub trait Sampler: Clone {
     fn get_1d(&mut self) -> f64;
     fn get_2d(&mut self) -> Vec2<f64>;
 
-    /// Uses the sampler to generate a `CameraSample`. This would be passed into 
+    /// Uses the sampler to generate a `CameraSample`. This would be passed into
     /// a camera to generate a `Ray` and `RayDiff`.
-    /// 
+    ///
     /// # Arguments
     /// * `filter` - The pixel filter used to determine a point on the film.
     fn gen_camera_sample(&mut self, filter: &PixelFilter) -> CameraSample {

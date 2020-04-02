@@ -4,8 +4,8 @@ pub mod oren_nayar;
 pub mod specular;
 
 use crate::math::numbers::Float;
-use crate::math::vector::{Vec2, Vec3};
 use crate::math::sampling;
+use crate::math::vector::{Vec2, Vec3};
 use crate::spectrum::Spectrum;
 
 use num_traits::clamp;

@@ -1,9 +1,9 @@
+use crate::math::util;
 use crate::math::vector::Vec2;
 use crate::spectrum::{Spectrum, XYZColor};
-use crate::math::util;
 
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::cell::Cell;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 /// A pixel is NOT an AOV. An AOV is a value that can be written to
 /// but doesn't have to be. A Pixel must always be present. Any information that
@@ -72,11 +72,11 @@ pub struct Film {
 
 impl Film {
     /// Generates a new Film struct.
-    /// 
+    ///
     /// # Arguments
     /// * `tile_res` - The resolution, in tiles, of the Film
     /// * `init_pixel` - What value every pixel in the Film should initially have
-    /// 
+    ///
     /// # Panics
     /// If `tile_res` leads to the total number of tiles being zero, new will panic.
     pub fn new(tile_res: Vec2<usize>, init_pixel: Pixel) -> Self {

@@ -4,10 +4,9 @@ use crate::math::bbox::BBox2;
 use crate::math::ray::{Ray, RayDiff};
 use crate::math::sampling;
 use crate::math::vector::Vec3;
-use crate::pixel_buffer::TileOrdering;
 use crate::transform::{StaticTransform, Transform};
 
-pub struct PerspectiveCamera<T: Transform, O: TileOrdering> {
+pub struct PerspectiveCamera<T: Transform> {
     // Defines the position of the camera in the world
     camera_to_world: T,
     camera_to_screen: StaticTransform,
@@ -21,13 +20,9 @@ pub struct PerspectiveCamera<T: Transform, O: TileOrdering> {
     // Cached these values for efficient generation:
     dx_camera: Vec3<f64>,
     dy_camera: Vec3<f64>,
-
-    // Film information that the camera uses. The camera is the
-    // owner of the film in this case:
-    film: Film<O>,
 }
 
-impl<T: Transform, O: TileOrdering> PerspectiveCamera<T, O> {
+impl<T: Transform> PerspectiveCamera<T, O> {
     pub fn new(
         camera_to_world: T,
         camera_to_screen: StaticTransform,
@@ -82,7 +77,7 @@ impl<T: Transform, O: TileOrdering> PerspectiveCamera<T, O> {
     }
 }
 
-impl<T: Transform, O: TileOrdering> Camera for PerspectiveCamera<T, O> {
+impl<T: Transform> Camera for PerspectiveCamera<T, O> {
     fn generate_ray(&self, sample: CameraSample) -> Ray<f64> {
         let p_camera = self
             .raster_to_camera

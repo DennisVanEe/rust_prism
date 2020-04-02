@@ -1,10 +1,10 @@
 use crate::camera::Camera;
-use crate::film::{Pixel, Film, TILE_DIM};
+use crate::film::{Film, Pixel, TILE_DIM};
+use crate::filter::PixelFilter;
 use crate::integrator::{Integrator, RenderParam};
+use crate::math::vector::Vec2;
 use crate::sampler::Sampler;
 use crate::scene::Scene;
-use crate::math::vector::Vec2;
-use crate::filter::PixelFilter;
 
 use simple_error::{self, SimpleResult};
 
@@ -23,10 +23,9 @@ pub struct RenderThreadPool<'a> {
     filter: PixelFilter,
 }
 
-impl<'a> RenderThreadPool<'a>
-{
+impl<'a> RenderThreadPool<'a> {
     /// Creates a new `RenderThreadPool` with the given number of threads.
-    /// 
+    ///
     /// # Arguments
     /// * `num_threads` - The number of threads to use, including the main thread.
     /// * `integrator` - The integrator that is to be used with rendering.
@@ -35,7 +34,7 @@ impl<'a> RenderThreadPool<'a>
     /// * `film` - The film that is being rendered to.
     /// * `scene` - The scene that is being rendered.
     /// * `filter` - The filter used with filter importance sampling.
-    /// 
+    ///
     /// # Panics
     /// Panics if the number of threads is invalid. Note that more threads than the HW supports
     /// concurrently is allowed, just not recommended.
@@ -127,8 +126,8 @@ impl<'a> RenderThreadPool<'a>
 struct RenderThread<'a> {
     thread: Option<JoinHandle<()>>,
 
-    integrator: Box<dyn Integrator>,  // This needs to be a box because each thread needs to manage one of these themselves.
-    sampler: Box<dyn Sampler>,        // Read the above snippet.
+    integrator: Box<dyn Integrator>, // This needs to be a box because each thread needs to manage one of these themselves.
+    sampler: Box<dyn Sampler>,       // Read the above snippet.
     camera: &'a dyn Camera,
     film: &'a Film,
     scene: &'a Scene<'a>,
@@ -137,8 +136,7 @@ struct RenderThread<'a> {
     id: usize,
 }
 
-impl<'a> RenderThread<'a>
-{
+impl<'a> RenderThread<'a> {
     fn new(
         id: usize,
         integrator: Box<dyn Integrator>,
@@ -202,7 +200,7 @@ impl<'a> RenderThread<'a>
 
 /// The render function is the function that loops over specified tiles until the film
 /// returns `None` for the tiles.
-/// 
+///
 /// # Arguments
 /// * `integrator` - The integrator that is being used to render the scene.
 /// * `sampler` - The sampler that is being used by the integrator.
@@ -223,7 +221,7 @@ fn render(
         let mut film_tile = if let Some(film_tile) = film.get_tile() {
             film_tile
         } else {
-            break
+            break;
         };
         let base_pixel_pos = film_tile.pos;
 
