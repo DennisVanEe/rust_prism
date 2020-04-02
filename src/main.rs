@@ -22,15 +22,14 @@ mod memory;
 //mod threading;
 //mod transform;
 
-use std::env;
+use geometry::mesh::TriMesh;
 
-fn main() {}
+fn main() {
+    let result = file_io::ply::load_tri_mesh("E:\\apple.ply");
+    let mesh = match result {
+        Ok(m) => m,
+        Err(msg) => panic!(msg),
+    };
 
-static HELP_MSG: &str = "
-    -scene:\tThe JSON file with the scene description.\n
-";
-
-// Parse any arguments we may have:
-fn parse_commands() {
-    todo!();
+    println!("{}", mesh.has_nrm());
 }

@@ -37,7 +37,7 @@ mod tests {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug)]
 pub struct Triangle {
     pub indices: [u32; 3],
 }
@@ -51,7 +51,7 @@ impl Triangle {
         a.cross(b).length() * 0.5
     }
 
-    fn get_vertices<T>(&self, data: &[T]) -> [T; 3] {
+    fn get_vertices<T: Copy>(&self, data: &[T]) -> [T; 3] {
         unsafe {
             [
                 *data.get_unchecked(self.indices[0] as usize),
@@ -77,12 +77,15 @@ pub struct TriMesh {
 
 impl Geometry for TriMesh {
     fn create_rtcgeom(&self, device: embree::RTCDevice) -> SimpleResult<embree::RTCGeometry> {
-        let rtcgeom =
-            embree::rtcNewGeometry(device, embree::RTCGeometryType_RTC_GEOMETRY_TYPE_TRIANGLE);
+        let rtcgeom = unsafe {
+            embree::rtcNewGeometry(device, embree::RTCGeometryType_RTC_GEOMETRY_TYPE_TRIANGLE)
+        };
         // Check if there was an error:
         if ptr::eq(rtcgeom, ptr::null()) {
             // Get the error code:
-            let error_code = embree::rtcGetDeviceError(device);
+            let error_code = unsafe {
+                embree::rtcGetDeviceError(device)
+            };
             bail!("Error creating geometry with code: {}", error_code);
         }
 
@@ -176,11 +179,7 @@ impl Geometry for TriMesh {
         };
 
         // We can extract 3D barycentric coordinates as follows:
-        let bs = [
-            1. - hit.uv.x - hit.uv.y,
-            hit.uv.x,
-            hit.uv.y,
-        ];
+        let bs = [1. - hit.uv.x - hit.uv.y, hit.uv.x, hit.uv.y];
 
         // Calculate the hit point:
         let p = poss[0].scale(bs[0]) + poss[1].scale(bs[1]) + poss[2].scale(bs[2]);
@@ -210,7 +209,7 @@ impl Geometry for TriMesh {
 
             // Make sure the geometric normal points in the same direction as the provided shading normal:
             (dndu, dndv, align(shading_n, n), shading_n)
-        } else {    
+        } else {
             (Vec3::zero(), Vec3::zero(), n, n)
         };
 
@@ -242,7 +241,7 @@ impl Geometry for TriMesh {
             shading_dpdu: ss,
             shading_dpdv: ts,
             shading_dndu: dndu,
-            shading_dndv: dndv
+            shading_dndv: dndv,
         }
     }
 }

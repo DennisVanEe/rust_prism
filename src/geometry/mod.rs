@@ -38,7 +38,6 @@ pub struct RTCInteraction {
     /// primitive id
     pub prim_id: usize,
     // Note that instance ID and geometry ID aren't included.
-
     /// From RTCRay, specifies the t value of the intersection
     pub tfar: f32,
     /// From RTCRay, specifies the direction of the ray
@@ -63,7 +62,7 @@ impl RTCInteraction {
                 x: rtc_ray.dir_x,
                 y: rtc_ray.dir_y,
                 z: rtc_ray.dir_z,
-            }
+            },
         }
     }
 }

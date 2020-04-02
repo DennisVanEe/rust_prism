@@ -170,14 +170,14 @@ pub fn align<T: Float>(refv: Vec3<T>, vec: Vec3<T>) -> Vec3<T> {
 
 pub fn gamma_f32(n: i32) -> f32 {
     let n = n as f32;
-    const half_eps: f32 = std::f32::EPSILON / 2.;
-    (n * half_eps) / (1. - n * half_eps)
+    const HALF_EPS: f32 = std::f32::EPSILON / 2.;
+    (n * HALF_EPS) / (1. - n * HALF_EPS)
 }
 
 pub fn gamma_f64(n: i64) -> f64 {
     let n = n as f64;
-    const half_eps: f64 = std::f64::EPSILON / 2.;
-    (n * half_eps) / (1. - n * half_eps)
+    const HALF_EPS: f64 = std::f64::EPSILON / 2.;
+    (n * HALF_EPS) / (1. - n * HALF_EPS)
 }
 
 // This is used so that we can have efficient comparisons
