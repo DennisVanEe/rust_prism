@@ -282,13 +282,27 @@ impl<T: Float> Mat4<T> {
         }
     }
 
-    /// Performs a matrix multiplication with a vector:
+    /// Performs a matrix multiplication with a vector in a generic manner:
     pub fn mul_vec(self, vec: Vec4<T>) -> Vec4<T> {
         let x = vec.dot(self.m[0]);
         let y = vec.dot(self.m[1]);
         let z = vec.dot(self.m[2]);
         let w = vec.dot(self.m[3]);
         Vec4 { x, y, z, w }
+    }
+
+    pub fn mul_vec_one(self, vec: Vec3<T>) -> Vec3<T> {
+        let x = self.m[0].dot_one(vec);
+        let y = self.m[1].dot_one(vec);
+        let z = self.m[2].dot_one(vec);
+        Vec3 { x, y, z }
+    }
+
+    pub fn mul_vec_zero(self, vec: Vec3<T>) -> Vec3<T> {
+        let x = self.m[0].dot_zero(vec);
+        let y = self.m[1].dot_zero(vec);
+        let z = self.m[2].dot_zero(vec);
+        Vec3 { x, y, z }
     }
 
     pub fn scale(self, s: T) -> Self {

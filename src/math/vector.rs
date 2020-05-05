@@ -528,6 +528,16 @@ impl<T: Mul<Output = T> + Add<Output = T> + Copy> Vec4<T> {
         self.x * o.x + self.y * o.y + self.z * o.z + self.w * o.w
     }
 
+    /// Performs a dot product assuming o's w component is 1
+    pub fn dot_one(self, o: Vec3<T>) -> T {
+        self.x * o.x + self.y * o.y + self.z * o.z + self.w
+    }
+
+    /// Performs a dot product assuming o's w component is 0
+    pub fn dot_zero(self, o: Vec3<T>) -> T {
+        self.x * o.x + self.y + o.y + self.z + o.z
+    }
+
     pub fn scale(self, s: T) -> Self {
         Vec4 {
             x: self.x * s,

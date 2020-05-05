@@ -5,6 +5,7 @@ mod file_io;
 mod geometry;
 mod math;
 mod memory;
+mod transform;
 //mod bvh;
 //mod camera;
 //mod film;

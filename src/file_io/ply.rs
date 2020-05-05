@@ -67,9 +67,9 @@ extern "C" fn vec2_cb(argument: rply::p_ply_argument) -> raw::c_int {
 }
 
 enum IndexProcStatus {
-    NoIssue,      // Nothing wrong happened.
+    NoIssue,     // Nothing wrong happened.
     IncFaceSize, // i.e. If it's a triangle and there are more than 3 points.
-    NegIndex,     // If a negative index was passed.
+    NegIndex,    // If a negative index was passed.
 }
 
 struct IndexBuffer {
@@ -123,8 +123,11 @@ extern "C" fn index_cb(argument: rply::p_ply_argument) -> raw::c_int {
 
     //let buff_index = (face_index as usize) + num_indices * index;
     unsafe {
-        *buffer.buffer.get_unchecked_mut(index).indices.get_unchecked_mut(face_index as usize) =
-            rply::ply_get_argument_value(argument) as u32;
+        *buffer
+            .buffer
+            .get_unchecked_mut(index)
+            .indices
+            .get_unchecked_mut(face_index as usize) = rply::ply_get_argument_value(argument) as u32;
     }
 
     1

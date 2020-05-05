@@ -39,19 +39,25 @@ A group refers to a collection of geometries. There are two types of groups: a `
 
 For one-level instancing (multi-level instanting not yet supported), one must store the geometry in a `"sub_group"` and instance that in the `"master_group"`.
 
-Below is an example of a `"sub_group"`:
+Below is an example of a `"sub_group"`.
+
+It's important to note that, every geometry in a group is a copy of said geometry. If you don't want to copy geometries, put them into a `sub_group` and instance them.
 
 ```json
 "sub_group": {
     "id": "group_a",
     "members": [
         {
-            "geometry_id": "mesh_a",   // the geometry referenced by its id
-            "transform": //...         // see the section on transformations
+            "geometry_id": "mesh_a",   // A COPY of mesh_a exists in this group
+            "transform": //...         
         },      
         {
-            "geometry_id": "sphere_b", // the geometry referenced by its id
-            "transform": //...         // see the section on transformations
+            "geometry_id": "sphere_b",
+            "transform": //...         
+        },
+        {
+            "group_id": "group_b",     // An INSTANCE of this group exists (not a copy)
+            "transform": //..
         }
         //...
     ]

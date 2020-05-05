@@ -1,6 +1,7 @@
 use super::{GeomInteraction, Geometry, RTCInteraction};
 use crate::math::util::{align, coord_system};
 use crate::math::vector::{Vec2, Vec3};
+use crate::transform::Transform;
 
 use embree;
 use simple_error::{bail, SimpleResult};
@@ -83,15 +84,8 @@ impl Geometry for TriMesh {
         // Check if there was an error:
         if ptr::eq(rtcgeom, ptr::null()) {
             // Get the error code:
-            let error_code = unsafe {
-                embree::rtcGetDeviceError(device)
-            };
+            let error_code = unsafe { embree::rtcGetDeviceError(device) };
             bail!("Error creating geometry with code: {}", error_code);
-        }
-
-        // Now we need to add up the number of slots for the geometry:
-        unsafe {
-            embree::rtcSetGeometryVertexAttributeCount(rtcgeom, 2);
         }
 
         // Attach the vertex buffer:
@@ -263,6 +257,14 @@ impl TriMesh {
             indices,
             surface_area: Cell::new(None),
         }
+    }
+
+    // Transforms the vectors of the mesh, updating the buffer:
+    pub fn transform(&mut self, transf: Transform) {
+        // Go ahead and transform the tangent, normal, and positions:
+        transf.points(&mut self.pos);
+        transf.normals(&mut self.nrm);
+        transf.vectors(&mut self.tan);
     }
 
     pub fn num_vert(&self) -> usize {
