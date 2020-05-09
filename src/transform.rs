@@ -1,275 +1,52 @@
-use crate::geometry::GeomInteraction;
+use crate::geometry::Interaction;
 use crate::math::bbox::BBox3;
-use crate::math::matrix::{Mat3, Mat4};
+use crate::math::matrix::{Mat3, Mat3x4};
 use crate::math::quaternion::Quat;
 use crate::math::ray::{Ray, RayDiff};
 use crate::math::vector::{Vec3, Vec4};
 
-use std::f32;
 use std::ops::Mul;
-
-#[derive(Clone, Copy)]
-pub struct Transform {
-    mat: Mat4<f32>,
-    inv: Mat4<f32>,
-}
-
-impl Transform {
-    // Because a matrix could potentially not be invertible,
-    // there is no gaurantee this will work:
-    pub fn from_matrix(mat: Mat4<f32>) -> Option<Self> {
-        let inv = match mat.inverse() {
-            Some(i) => i,
-            _ => return None,
-        };
-        Some(Transform { mat, inv })
-    }
-
-    // Create a StaticTransform from a bunch of common ones:
-
-    pub fn identity() -> Self {
-        Transform {
-            mat: Mat4::new_identity(),
-            inv: Mat4::new_identity(),
-        }
-    }
-
-    pub fn translate(trans: Vec3<f32>) -> Self {
-        Transform {
-            mat: Mat4::new_translate(trans),
-            inv: Mat4::new_translate(-trans),
-        }
-    }
-
-    pub fn scale(scale: Vec3<f32>) -> Self {
-        Transform {
-            mat: Mat4::new_scale(scale),
-            inv: Mat4::new_scale(scale.inv_scale(1.)),
-        }
-    }
-
-    pub fn rotate(deg: f32, axis: Vec3<f32>) -> Self {
-        let mat = Mat4::new_rotate(deg, axis);
-        // inverse of rotation matrix is transpose
-        let inv = mat.transpose();
-        Transform { mat, inv }
-    }
-
-    // Note that fov is in degrees
-    pub fn perspective(fov: f32, near: f32, far: f32) -> Self {
-        let perspective = Mat4::new([
-            Vec4 {
-                x: 1.,
-                y: 0.,
-                z: 0.,
-                w: 0.,
-            },
-            Vec4 {
-                x: 0.,
-                y: 1.,
-                z: 0.,
-                w: 0.,
-            },
-            Vec4 {
-                x: 0.,
-                y: 0.,
-                z: far / (far - near),
-                w: -far * near / (far - near),
-            },
-            Vec4 {
-                x: 0.,
-                y: 0.,
-                z: 1.,
-                w: 0.,
-            },
-        ]);
-        // Calculate the FOV information:
-        let inv_tan_angle = 1. / (fov.to_radians() / 2.).tan();
-        // Calculate the scale used:
-        Self::scale(Vec3 {
-            x: inv_tan_angle,
-            y: inv_tan_angle,
-            z: 1.,
-        }) * Self::from_matrix(perspective).unwrap()
-    }
-
-    /// Inverses the transformation
-    pub fn inverse(&self) -> Self {
-        Transform {
-            mat: self.inv,
-            inv: self.mat,
-        }
-    }
-
-    // Returns the normal matrix:
-    pub fn get_mat(self) -> Mat4<f32> {
-        self.mat
-    }
-
-    pub fn point(self, p: Vec3<f32>) -> Vec3<f32> {
-        self.mat.mul_vec_one(p)
-    }
-
-    pub fn points(self, ps: &mut [Vec3<f32>]) {
-        for p in ps.iter_mut() {
-            *p = self.point(*p);
-        }
-    }
-
-    pub fn proj_point(self, p: Vec3<f32>) -> Vec3<f32> {
-        let homog_p = Vec4::from_vec3(p, 1.);
-        let homog_r = self.mat.mul_vec(homog_p);
-        Vec3::from_vec4(homog_r).scale(1. / homog_r.w)
-    }
-
-    pub fn proj_points(self, ps: &mut [Vec3<f32>]) {
-        for p in ps.iter_mut() {
-            *p = self.proj_point(*p);
-        }
-    }
-
-    pub fn normal(self, n: Vec3<f32>) -> Vec3<f32> {
-        self.inv.transpose().mul_vec_zero(n)
-    }
-
-    pub fn normals(self, ns: &mut [Vec3<f32>]) {
-        let mat = self.inv.transpose();
-        for n in ns.iter_mut() {
-            *n = mat.mul_vec_zero(*n);
-        }
-    }
-
-    pub fn vector(self, v: Vec3<f32>) -> Vec3<f32> {
-        self.mat.mul_vec_zero(v)
-    }
-
-    pub fn vectors(self, vs: &mut [Vec3<f32>]) {
-        for v in vs.iter_mut() {
-            *v = self.mat.mul_vec_zero(*v);
-        }
-    }
-}
-
-// Given a matrix, this will decompose it into a translation, rotation, and scale component.
-// Because some matrices are not invertible, it returns an option.
-// The decomposition is such that: p' = (TRS)p
-pub fn decompose(mat: Mat4<f32>) -> Option<(Vec3<f32>, Quat<f32>, Mat4<f32>)> {
-    let trans = Vec3::from_vec4(mat.get_column(3));
-
-    // keep the rotational information that we are interested
-    // in this case (the RS component):
-    let upper_mat = {
-        let r0 = Vec4 {
-            x: mat[0][0],
-            y: mat[0][1],
-            z: mat[0][2],
-            w: 0.,
-        };
-        let r1 = Vec4 {
-            x: mat[1][0],
-            y: mat[1][1],
-            z: mat[1][2],
-            w: 0.,
-        };
-        let r2 = Vec4 {
-            x: mat[2][0],
-            y: mat[2][1],
-            z: mat[2][2],
-            w: 0.,
-        };
-        let r3 = Vec4 {
-            x: mat[3][0],
-            y: mat[3][1],
-            z: mat[3][2],
-            w: 0.,
-        };
-
-        Mat4::new([r0, r1, r2, r3])
-    };
-
-    // Polar decomposition:
-    let mut count = 0u32; // we want to limit the number of times we perform this operation
-    let mut norm = f32::INFINITY; // so that we get at least one iteration
-    let mut r_mat = upper_mat; // represents rotation and scale (RS)
-
-    while count < 100 && norm > 0.0001 {
-        let r_next = match r_mat.transpose().inverse() {
-            Some(mat) => mat.scale(0.5),
-            _ => return None,
-        };
-
-        let n0 = (r_mat[0] - r_next[0]).abs().horizontal_add();
-        let n1 = (r_mat[1] - r_next[1]).abs().horizontal_add();
-        let n2 = (r_mat[2] - r_next[2]).abs().horizontal_add();
-
-        norm = n0.max(n1.max(n2));
-        r_mat = r_next;
-        count += 1;
-    }
-
-    let rot = Quat::from_mat4(r_mat);
-    let scale = match r_mat.inverse() {
-        Some(mat) => mat * upper_mat,
-        _ => return None,
-    };
-
-    Some((trans, rot, scale))
-}
-
-impl Mul for Transform {
-    type Output = Self;
-
-    fn mul(self, rhs: Self) -> Self {
-        Transform {
-            mat: self.mat * rhs.mat,
-            inv: self.inv * rhs.inv,
-        }
-    }
-}
 
 #[derive(Clone, Copy)]
 pub struct AnimatedTransform {
     start_transf: Transform,
     end_transf: Transform,
 
-    start_time: f32,
-    end_time: f32,
+    start_time: f64,
+    end_time: f64,
 
     // Decomposed information:
-    start_trans: Vec3<f32>,
-    end_trans: Vec3<f32>,
+    start_trans: Vec3<f64>,
+    end_trans: Vec3<f64>,
 
-    start_rot: Quat<f32>,
-    end_rot: Quat<f32>,
+    start_rot: Quat<f64>,
+    end_rot: Quat<f64>,
 
-    start_scale: Mat4<f32>,
-    end_scale: Mat4<f32>,
+    start_scale: Mat3x4<f64>,
+    end_scale: Mat3x4<f64>,
 
     // Knowing this can help with performance problems we may get:
     has_rot: bool,
+    animated: bool,
 }
 
 impl AnimatedTransform {
     pub fn new(
         start_transf: Transform,
         end_transf: Transform,
-        start_time: f32,
-        end_time: f32,
+        start_time: f64,
+        end_time: f64,
     ) -> Self {
         // Because both start_transf and end_transf are invertible, their decomposition should also
         // be invertible.
-        let (start_trans, start_rot, start_scale) =
-            Self::decompose(start_transf.get_mat()).unwrap();
-        let (end_trans, end_rot, end_scale) = Self::decompose(end_transf.get_mat()).unwrap();
+        let (start_trans, start_rot, start_scale) = Self::decompose(start_transf.get_mat());
+        let (end_trans, end_rot, end_scale) = Self::decompose(end_transf.get_mat());
 
         let end_rot = if start_rot.dot(end_rot).is_sign_negative() {
             -end_rot
         } else {
             end_rot
         };
-        // Check if the quaternions rotate enough for us to care. This is the constant
-        // used in pbrt, so it should be fine here:
-        let has_rot = start_rot.dot(end_rot) < 0.9995;
 
         AnimatedTransform {
             start_transf,
@@ -282,13 +59,18 @@ impl AnimatedTransform {
             end_rot,
             start_scale,
             end_scale,
-            has_rot,
+            has_rot: start_rot.dot(end_rot) < 0.9995,
+            animated: start_time == end_time,
         }
+    }
+
+    pub fn is_animated(self) -> bool {
+        self.animated
     }
 
     // Given a matrix, this will decompose it into a translation, rotation, and scale component.
     // Because some matrices are not invertible, it returns an option:
-    fn decompose(mat: Mat4<f32>) -> Option<(Vec3<f32>, Quat<f32>, Mat4<f32>)> {
+    fn decompose(mat: Mat3x4<f64>) -> (Vec3<f64>, Quat<f64>, Mat3x4<f64>) {
         let trans = Vec3::from_vec4(mat.get_column(3));
 
         // keep the rotational information that we are interested
@@ -312,26 +94,17 @@ impl AnimatedTransform {
                 z: mat[2][2],
                 w: 0.,
             };
-            let r3 = Vec4 {
-                x: mat[3][0],
-                y: mat[3][1],
-                z: mat[3][2],
-                w: 0.,
-            };
 
-            Mat4::new([r0, r1, r2, r3])
+            Mat3x4::new([r0, r1, r2])
         };
 
         // Polar decomposition:
         let mut count = 0u32; // we want to limit the number of times we perform this operation
-        let mut norm = f32::INFINITY; // so that we get at least one iteration
+        let mut norm = f64::INFINITY; // so that we get at least one iteration
         let mut r_mat = upper_mat; // represents rotation and scale
 
         while count < 100 && norm > 0.0001 {
-            let r_next = match r_mat.transpose().inverse() {
-                Some(mat) => mat.scale(0.5),
-                _ => return None,
-            };
+            let r_next = r_mat.transpose().inverse().scale(0.5);
 
             let n0 = (r_mat[0] - r_next[0]).abs().horizontal_add();
             let n1 = (r_mat[1] - r_next[1]).abs().horizontal_add();
@@ -342,16 +115,13 @@ impl AnimatedTransform {
             count += 1;
         }
 
-        let rot = Quat::from_mat4(r_mat);
-        let scale = match r_mat.inverse() {
-            Some(mat) => mat * upper_mat,
-            _ => return None,
-        };
+        let rot = Quat::from_mat3x4(r_mat);
+        let scale = r_mat.inverse() * upper_mat;
 
-        Some((trans, rot, scale))
+        (trans, rot, scale)
     }
 
-    fn interpolate(&self, t: f32) -> Transform {
+    pub fn interpolate(self, t: f64) -> Transform {
         // Check if the time is out of bounds, in which case we just return
         // the transform we care about:
         if t <= self.start_time {
@@ -366,8 +136,258 @@ impl AnimatedTransform {
 
             // We can use unwrapped because we know for a fact that the matrix
             // is invertible:
-            let transf_mat = Mat4::new_translate(trans) * rot.to_mat4() * scale;
-            Transform::from_matrix(transf_mat).unwrap()
+            let transf_mat = Mat3x4::new_translate(trans) * rot.to_mat3x4() * scale;
+            Transform::from_matrix(transf_mat)
+        }
+    }
+
+    pub fn bound_motion(self, b: BBox3<f64>) -> BBox3<f64> {
+        const NUM_BOUND_SAMPLES: usize = 32;
+
+        // If there is no rotation, we can just combine the transformations
+        // of the two bounding boxes:
+        if !self.animated {
+            self.start_transf.bbox3(b)
+        } else if !self.has_rot {
+            self.start_transf
+                .bbox3(b)
+                .combine_bnd(self.end_transf.bbox3(b))
+        } else {
+            // I could do what pbrt does, but I'm too lazy. This bound transform should
+            // only get called once in the preprocess step anyways, so it would only get called once.
+            // This should be robust enough to handle most everything:
+            let mut final_bbox = b;
+            for i in 1..=NUM_BOUND_SAMPLES {
+                let t = (i as f64) / (NUM_BOUND_SAMPLES as f64);
+                let dt = (1. - t) * self.start_time + t * self.end_time;
+                final_bbox = self.interpolate(dt).bbox3(b).combine_bnd(final_bbox);
+            }
+            final_bbox
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+pub struct Transform {
+    mat: Mat3x4<f64>,
+    inv: Mat3x4<f64>,
+}
+
+impl Transform {
+    // Because a matrix could potentially not be invertible,
+    // there is no gaurantee this will work:
+    pub fn from_matrix(mat: Mat3x4<f64>) -> Self {
+        let inv = mat.inverse();
+        Transform { mat, inv }
+    }
+
+    // Create a StaticTransform from a bunch of common ones:
+
+    pub fn identity() -> Self {
+        Transform {
+            mat: Mat3x4::new_identity(),
+            inv: Mat3x4::new_identity(),
+        }
+    }
+
+    pub fn translate(trans: Vec3<f64>) -> Self {
+        Transform {
+            mat: Mat3x4::new_translate(trans),
+            inv: Mat3x4::new_translate(-trans),
+        }
+    }
+
+    pub fn scale(scale: Vec3<f64>) -> Self {
+        Transform {
+            mat: Mat3x4::new_scale(scale),
+            inv: Mat3x4::new_scale(scale.inv_scale(1.)),
+        }
+    }
+
+    pub fn rotate(deg: f64, axis: Vec3<f64>) -> Self {
+        let mat = Mat3x4::new_rotate(deg, axis);
+        // inverse of rotation matrix is transpose
+        let inv = mat.transpose();
+        Transform { mat, inv }
+    }
+
+    /// Inverses the transformation
+    pub fn inverse(&self) -> Self {
+        Transform {
+            mat: self.inv,
+            inv: self.mat,
+        }
+    }
+
+    // Returns the normal matrix:
+    pub fn get_mat(self) -> Mat3x4<f64> {
+        self.mat
+    }
+
+    pub fn get_inv(self) -> Mat3x4<f64> {
+        self.inv
+    }
+
+    pub fn point(self, p: Vec3<f64>) -> Vec3<f64> {
+        self.mat.mul_vec_one(p)
+    }
+
+    pub fn points(self, ps: &mut [Vec3<f64>]) {
+        for p in ps.iter_mut() {
+            *p = self.point(*p);
+        }
+    }
+
+    pub fn points_f32(self, ps: &mut [Vec3<f32>]) {
+        for p in ps.iter_mut() {
+            let pf64 = Vec3 {
+                x: p.x as f64,
+                y: p.y as f64,
+                z: p.z as f64,
+            };
+            let pf64 = self.point(pf64);
+            *p = Vec3 {
+                x: pf64.x as f32,
+                y: pf64.y as f32,
+                z: pf64.z as f32,
+            }
+        }
+    }
+
+    pub fn normal(self, n: Vec3<f64>) -> Vec3<f64> {
+        self.inv.transpose().mul_vec_zero(n)
+    }
+
+    pub fn normals(self, ns: &mut [Vec3<f64>]) {
+        let mat = self.inv.transpose();
+        for n in ns.iter_mut() {
+            *n = mat.mul_vec_zero(*n);
+        }
+    }
+
+    pub fn normals_f32(self, ns: &mut [Vec3<f32>]) {
+        let mat = self.inv.transpose();
+        for n in ns.iter_mut() {
+            let nf64 = Vec3 {
+                x: n.x as f64,
+                y: n.y as f64,
+                z: n.z as f64,
+            };
+            let nf64 = mat.mul_vec_zero(nf64);
+            *n = Vec3 {
+                x: nf64.x as f32,
+                y: nf64.y as f32,
+                z: nf64.z as f32,
+            }
+        }
+    }
+
+    pub fn vector(self, v: Vec3<f64>) -> Vec3<f64> {
+        self.mat.mul_vec_zero(v)
+    }
+
+    pub fn vectors(self, vs: &mut [Vec3<f64>]) {
+        for v in vs.iter_mut() {
+            *v = self.mat.mul_vec_zero(*v);
+        }
+    }
+
+    pub fn vectors_f32(self, vs: &mut [Vec3<f32>]) {
+        for v in vs.iter_mut() {
+            let vf64 = Vec3 {
+                x: v.x as f64,
+                y: v.y as f64,
+                z: v.z as f64,
+            };
+            let vf64 = self.point(vf64);
+            *v = Vec3 {
+                x: vf64.x as f32,
+                y: vf64.y as f32,
+                z: vf64.z as f32,
+            }
+        }
+    }
+
+    pub fn bbox3(&self, b: BBox3<f64>) -> BBox3<f64> {
+        // From Arvo 1990 Graphics Gems 1
+
+        let pmin = Vec3::from_vec4(self.mat.get_column(3));
+        let pmax = pmin;
+
+        let rot = Mat3::from_mat3x4(self.mat);
+
+        let a0 = rot.get_column(0) * b.pmin;
+        let a1 = rot.get_column(0) * b.pmax;
+        let pmin = pmin + a0.min(a1);
+        let pmax = pmax + a0.max(a1);
+
+        let a0 = rot.get_column(1) * b.pmin;
+        let a1 = rot.get_column(1) * b.pmax;
+        let pmin = pmin + a0.min(a1);
+        let pmax = pmax + a0.max(a1);
+
+        let a0 = rot.get_column(2) * b.pmin;
+        let a1 = rot.get_column(2) * b.pmax;
+        let pmin = pmin + a0.min(a1);
+        let pmax = pmax + a0.max(a1);
+
+        BBox3 { pmin, pmax }
+    }
+
+    pub fn interaction(self, i: Interaction) -> Interaction {
+        Interaction {
+            p: self.point(i.p),
+            n: self.normal(i.n).normalize(),
+            wo: self.vector(i.wo).normalize(),
+
+            t: i.t,
+
+            uv: i.uv,
+            dpdu: self.vector(i.dpdu),
+            dpdv: self.vector(i.dpdv),
+
+            shading_n: self.normal(i.shading_n).normalize(),
+            shading_dpdu: self.vector(i.shading_dpdu),
+            shading_dpdv: self.vector(i.shading_dpdv),
+            shading_dndu: self.normal(i.shading_dndu),
+            shading_dndv: self.normal(i.shading_dndv),
+
+            attribute_id: i.attribute_id,
+            mesh_id: i.mesh_id,
+        }
+    }
+
+    pub fn ray(self, r: Ray<f64>) -> Ray<f64> {
+        Ray {
+            org: self.point(r.dir),
+            dir: self.vector(r.dir),
+            time: r.time,
+            max_t: r.max_t,
+            ray_diff: match r.ray_diff {
+                Some(diff) => Some(self.ray_diff(diff)),
+                _ => None,
+            },
+        }
+    }
+
+    pub fn ray_diff(self, r: RayDiff<f64>) -> RayDiff<f64> {
+        RayDiff {
+            rx_org: self.point(r.rx_org),
+            ry_org: self.point(r.ry_org),
+
+            rx_dir: self.vector(r.rx_dir),
+            ry_dir: self.vector(r.ry_dir),
+        }
+    }
+}
+
+impl Mul for Transform {
+    type Output = Self;
+
+    fn mul(self, rhs: Self) -> Self {
+        Transform {
+            mat: self.mat * rhs.mat,
+            inv: self.inv * rhs.inv,
         }
     }
 }

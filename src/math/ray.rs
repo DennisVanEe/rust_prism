@@ -13,6 +13,9 @@ pub struct Ray<T: Float> {
     /// The parametric extent of the ray. Usually only modified by intersection routines
     /// to allow for earlier termination.
     pub max_t: T,
+
+    // The ray differential if present for this specific ray:
+    pub ray_diff: Option<RayDiff<T>>,
 }
 
 impl<T: Float> Ray<T> {
@@ -24,6 +27,17 @@ impl<T: Float> Ray<T> {
             dir,
             time,
             max_t: T::infinity(),
+            ray_diff: None,
+        }
+    }
+
+    pub fn new_diff(org: Vec3<T>, dir: Vec3<T>, time: T, ray_diff: RayDiff<T>) -> Self {
+        Ray {
+            org,
+            dir,
+            time,
+            max_t: T::infinity(),
+            ray_diff: Some(ray_diff),
         }
     }
 

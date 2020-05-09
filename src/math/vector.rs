@@ -4,6 +4,7 @@ use crate::math::util::{max, min};
 use num_traits::{One, Signed, Zero};
 
 use std::cmp::{PartialEq, PartialOrd};
+use std::convert::From;
 use std::ops::{Add, Div, Index, IndexMut, Mul, Neg, Sub};
 
 #[derive(Copy, Clone, Debug)]
@@ -55,6 +56,12 @@ impl<T: One + Copy> Vec2<T> {
     }
 }
 
+impl<T: Add<Output = T> + Copy> Vec2<T> {
+    pub fn horizontal_add(self) -> T {
+        self.x + self.y
+    }
+}
+
 impl<T: Mul<Output = T> + Add<Output = T> + Copy> Vec2<T> {
     pub fn dot(self, o: Vec2<T>) -> T {
         self.x * o.x + self.y * o.y
@@ -93,6 +100,24 @@ impl<T: PartialOrd + Copy> Vec2<T> {
         Vec2 {
             x: min(self.x, o.x),
             y: min(self.y, o.y),
+        }
+    }
+}
+
+impl<T: Copy + Into<f64>> Vec2<T> {
+    pub fn to_f64(self) -> Vec2<f64> {
+        Vec2 {
+            x: self.x.into(),
+            y: self.y.into(),
+        }
+    }
+}
+
+impl<T: Copy + Into<f32>> Vec2<T> {
+    pub fn to_f32(self) -> Vec2<f32> {
+        Vec2 {
+            x: self.x.into(),
+            y: self.y.into(),
         }
     }
 }
@@ -156,6 +181,16 @@ impl<T: Copy> Index<usize> for Vec2<T> {
         match i {
             0 => &self.x,
             1 => &self.y,
+            _ => panic!("Index out of range for Vec"),
+        }
+    }
+}
+
+impl<T: Copy> IndexMut<usize> for Vec2<T> {
+    fn index_mut(&mut self, i: usize) -> &mut T {
+        match i {
+            0 => &mut self.x,
+            1 => &mut self.y,
             _ => panic!("Index out of range for Vec"),
         }
     }
@@ -335,6 +370,26 @@ impl<T: Mul<Output = T> + Sub<Output = T> + Copy> Vec3<T> {
         let y = self.z * o.x - self.x * o.z;
         let z = self.x * o.y - self.y * o.x;
         Vec3 { x, y, z }
+    }
+}
+
+impl<T: Copy + Into<f64>> Vec3<T> {
+    pub fn to_f64(self) -> Vec3<f64> {
+        Vec3 {
+            x: self.x.into(),
+            y: self.y.into(),
+            z: self.z.into(),
+        }
+    }
+}
+
+impl<T: Copy + Into<f32>> Vec3<T> {
+    pub fn to_f32(self) -> Vec3<f32> {
+        Vec3 {
+            x: self.x.into(),
+            y: self.y.into(),
+            z: self.z.into(),
+        }
     }
 }
 

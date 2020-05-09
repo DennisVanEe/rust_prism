@@ -1,153 +1,247 @@
-use super::{GeomInteraction, Geometry, RTCInteraction};
-use crate::math::util::{align, coord_system};
+use crate::geometry::{Interaction, RayIntInfo};
+use crate::math::bbox::BBox3;
+use crate::math::ray::Ray;
+use crate::math::util;
 use crate::math::vector::{Vec2, Vec3};
-use crate::transform::Transform;
-
-use embree;
-use simple_error::{bail, SimpleResult};
+use crate::transform::AnimatedTransform;
 
 use std::cell::Cell;
-use std::mem;
-use std::os::raw;
-use std::ptr;
 
-// Some tests to run to make sure that everything is aligned and sized properly.
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn correct_vec3_f32_format() {
-        assert_eq!(
-            mem::size_of::<Vec3<f32>>(),
-            mem::size_of::<raw::c_float>() * 3
-        );
-        assert_eq!(
-            mem::align_of::<Vec3<f32>>(),
-            mem::align_of::<raw::c_float>()
-        );
-    }
-
-    #[test]
-    fn correct_triangle_format() {
-        assert_eq!(
-            mem::size_of::<Triangle>(),
-            mem::size_of::<raw::c_uint>() * 3
-        );
-        assert_eq!(mem::align_of::<Triangle>(), mem::align_of::<raw::c_uint>());
-    }
-}
-
+// Triangle specifically for loading information and whatnot.
 #[derive(Clone, Copy, Debug)]
 pub struct Triangle {
-    pub indices: [u32; 3],
+    pub indices: [u32; 3], // Indices into a triangle
+    pub attribute_id: u32, // The upper bits are a material id, the lower bits are a attribute pointer
 }
 
 impl Triangle {
+    pub fn surface_area(self, mesh: &Mesh) -> f64 {
+        // Get the attribute associated with the triangle:
+        let attrib = {
+            let attribute_index = self.attribute_id as usize;
+            unsafe { mesh.attributes.get_unchecked(attribute_index) }
+        };
+
+        // If we already cached it, then just return that:
+        if let Some(sa) = attrib.surface_area.get() {
+            return sa;
+        }
+
+        let end_pos = attrib.triangle_start + attrib.num_triangles;
+        let attrib_triangles =
+            unsafe { mesh.triangles.get_unchecked(attrib.triangle_start..end_pos) };
+        let sa = attrib_triangles
+            .iter()
+            .fold(0.0, |sa, triangle| sa + triangle.calc_area(mesh));
+        attrib.surface_area.set(Some(sa));
+        sa
+    }
+
     // Calculates the surface area of a specific triangle:
-    fn area(&self, pos: &[Vec3<f32>]) -> f32 {
-        let poss = self.get_vertices(pos);
-        let a = poss[1] - poss[0];
-        let b = poss[2] - poss[0];
+    pub fn calc_area(self, mesh: &Mesh) -> f64 {
+        let pos = self.get_pos(mesh);
+        let a = pos[1] - pos[0];
+        let b = pos[2] - pos[0];
         a.cross(b).length() * 0.5
     }
 
-    fn get_vertices<T: Copy>(&self, data: &[T]) -> [T; 3] {
-        unsafe {
-            [
-                *data.get_unchecked(self.indices[0] as usize),
-                *data.get_unchecked(self.indices[1] as usize),
-                *data.get_unchecked(self.indices[2] as usize),
-            ]
-        }
+    // Calculates the bounding box of a specific triangle:
+    pub fn calc_bound(self, mesh: &Mesh) -> BBox3<f64> {
+        let poss = self.get_pos(mesh);
+        BBox3::from_pnts(poss[0], poss[1]).combine_pnt(poss[2])
     }
-}
 
-// MeshData represents the collection of data used to represent
-// the 3D geometry.
-#[derive(Clone, Debug)]
-pub struct TriMesh {
-    pos: Vec<Vec3<f32>>,
-    nrm: Vec<Vec3<f32>>,
-    tan: Vec<Vec3<f32>>,
-    uvs: Vec<Vec2<f32>>,
-    indices: Vec<Triangle>,
+    pub fn calc_centroid(self, mesh: &Mesh) -> Vec3<f64> {
+        let pos = self.get_pos(mesh);
+        (pos[0] + pos[1] + pos[2]).scale(1. / 3.)
+    }
 
-    surface_area: Cell<Option<f32>>,
-}
+    // The ray should be in the same space as the triangle:
+    pub fn intersect_test(&self, ray: Ray<f64>, int_info: RayIntInfo, mesh: &Mesh) -> bool {
+        let poss = self.get_pos(mesh);
 
-impl Geometry for TriMesh {
-    fn create_rtcgeom(&self, device: embree::RTCDevice) -> SimpleResult<embree::RTCGeometry> {
-        let rtcgeom = unsafe {
-            embree::rtcNewGeometry(device, embree::RTCGeometryType_RTC_GEOMETRY_TYPE_TRIANGLE)
+        let pt = [poss[0] - ray.org, poss[1] - ray.org, poss[2] - ray.org];
+        let pt = [
+            pt[0].permute(int_info.perm),
+            pt[1].permute(int_info.perm),
+            pt[2].permute(int_info.perm),
+        ];
+        let pt = [
+            Vec3 {
+                x: int_info.shear.x * pt[0].z + pt[0].x,
+                y: int_info.shear.y * pt[0].z + pt[0].y,
+                z: pt[0].z,
+            },
+            Vec3 {
+                x: int_info.shear.x * pt[1].z + pt[1].x,
+                y: int_info.shear.y * pt[1].z + pt[1].y,
+                z: pt[1].z,
+            },
+            Vec3 {
+                x: int_info.shear.x * pt[2].z + pt[2].x,
+                y: int_info.shear.y * pt[2].z + pt[2].y,
+                z: pt[2].z,
+            },
+        ];
+
+        // Calculate the edge function results:
+        let e = [
+            pt[1].x * pt[2].y - pt[1].y * pt[2].x,
+            pt[2].x * pt[0].y - pt[2].y * pt[0].x,
+            pt[0].x * pt[1].y - pt[0].y * pt[1].x,
+        ];
+
+        // Check if our ray lands outside of the edges of the triangle:
+        if (e[0] < 0. || e[1] < 0. || e[2] < 0.) && (e[0] > 0. || e[1] > 0. || e[2] > 0.) {
+            return false;
         };
-        // Check if there was an error:
-        if ptr::eq(rtcgeom, ptr::null()) {
-            // Get the error code:
-            let error_code = unsafe { embree::rtcGetDeviceError(device) };
-            bail!("Error creating geometry with code: {}", error_code);
-        }
 
-        // Attach the vertex buffer:
-        let pos_ptr = self.pos.as_ptr();
-        unsafe {
-            let pos_void_ptr = pos_ptr as *const raw::c_void;
-            embree::rtcSetSharedGeometryBuffer(
-                rtcgeom,
-                embree::RTCBufferType_RTC_BUFFER_TYPE_VERTEX,
-                0,
-                embree::RTCFormat_RTC_FORMAT_FLOAT3,
-                pos_void_ptr,
-                0,
-                mem::size_of::<Vec3<f32>>() as embree::size_t,
-                (self.pos.len() - 1) as embree::size_t, // This was done so that embree can load 4 at a time
-            );
-        }
+        let sum_e = e[0] + e[1] + e[2];
+        // Checks if it's a degenerate triangle:
+        if sum_e == 0. {
+            return false;
+        };
 
-        // Attach the index buffer:
-        let indices_ptr = self.indices.as_ptr();
-        unsafe {
-            let indices_void_ptr = indices_ptr as *const raw::c_void;
-            embree::rtcSetSharedGeometryBuffer(
-                rtcgeom,
-                embree::RTCBufferType_RTC_BUFFER_TYPE_INDEX,
-                1,
-                embree::RTCFormat_RTC_FORMAT_UINT3,
-                indices_void_ptr,
-                0,
-                mem::size_of::<Triangle>() as embree::size_t,
-                self.indices.len() as embree::size_t,
-            );
-        }
+        // Now we finish transforming the z value:
+        let pt = [
+            Vec3 {
+                x: pt[0].x,
+                y: pt[0].y,
+                z: pt[0].z * int_info.shear.z,
+            },
+            Vec3 {
+                x: pt[1].x,
+                y: pt[1].y,
+                z: pt[1].z * int_info.shear.z,
+            },
+            Vec3 {
+                x: pt[2].x,
+                y: pt[2].y,
+                z: pt[2].z * int_info.shear.z,
+            },
+        ];
 
-        Ok(rtcgeom)
+        let t_scaled = e[0] * pt[0].z + e[1] * pt[1].z + e[2] * pt[2].z;
+
+        // Now check if the sign of sum is different from the sign of tScaled, it it is, then no good:
+        if (sum_e < 0. && (t_scaled >= 0. || t_scaled < ray.max_t * sum_e))
+            || (sum_e > 0. && (t_scaled <= 0. || t_scaled > ray.max_t * sum_e))
+        {
+            return false;
+        };
+
+        let inv_sum_e = 1. / sum_e;
+        // The t of the intersection (make sure it's positive):
+        t_scaled * inv_sum_e > 0.
     }
 
-    fn surface_area(&self) -> f32 {
-        if let Some(s) = self.surface_area.get() {
-            s
-        } else {
-            let s = self
-                .indices
-                .iter()
-                .fold(0., |area, face| area + face.area(&self.pos));
-            self.surface_area.set(Some(s));
-            s
+    // The ray should be in the same space as the triangle:
+    pub fn intersect(
+        &self,
+        ray: Ray<f64>,
+        int_info: RayIntInfo,
+        mesh: &Mesh,
+    ) -> Option<Interaction> {
+        let poss = self.get_pos(mesh);
+
+        let pt = [poss[0] - ray.org, poss[1] - ray.org, poss[2] - ray.org];
+        let pt = [
+            pt[0].permute(int_info.perm),
+            pt[1].permute(int_info.perm),
+            pt[2].permute(int_info.perm),
+        ];
+        let pt = [
+            Vec3 {
+                x: int_info.shear.x * pt[0].z + pt[0].x,
+                y: int_info.shear.y * pt[0].z + pt[0].y,
+                z: pt[0].z,
+            },
+            Vec3 {
+                x: int_info.shear.x * pt[1].z + pt[1].x,
+                y: int_info.shear.y * pt[1].z + pt[1].y,
+                z: pt[1].z,
+            },
+            Vec3 {
+                x: int_info.shear.x * pt[2].z + pt[2].x,
+                y: int_info.shear.y * pt[2].z + pt[2].y,
+                z: pt[2].z,
+            },
+        ];
+
+        // Calculate the edge function results:
+        let e = [
+            pt[1].x * pt[2].y - pt[1].y * pt[2].x,
+            pt[2].x * pt[0].y - pt[2].y * pt[0].x,
+            pt[0].x * pt[1].y - pt[0].y * pt[1].x,
+        ];
+
+        // Check if our ray lands outside of the edges of the triangle:
+        if (e[0] < 0. || e[1] < 0. || e[2] < 0.) && (e[0] > 0. || e[1] > 0. || e[2] > 0.) {
+            return None;
+        };
+
+        let sum_e = e[0] + e[1] + e[2];
+        // Checks if it's a degenerate triangle:
+        if sum_e == 0. {
+            return None;
+        };
+
+        // Now we finish transforming the z value:
+        let pt = [
+            Vec3 {
+                x: pt[0].x,
+                y: pt[0].y,
+                z: pt[0].z * int_info.shear.z,
+            },
+            Vec3 {
+                x: pt[1].x,
+                y: pt[1].y,
+                z: pt[1].z * int_info.shear.z,
+            },
+            Vec3 {
+                x: pt[2].x,
+                y: pt[2].y,
+                z: pt[2].z * int_info.shear.z,
+            },
+        ];
+
+        let t_scaled = e[0] * pt[0].z + e[1] * pt[1].z + e[2] * pt[2].z;
+
+        // Now check if the sign of sum is different from the sign of tScaled, it it is, then no good:
+        if (sum_e < 0. && (t_scaled >= 0. || t_scaled < ray.max_t * sum_e))
+            || (sum_e > 0. && (t_scaled <= 0. || t_scaled > ray.max_t * sum_e))
+        {
+            return None;
+        };
+
+        let inv_sum_e = 1. / sum_e;
+        // The time of the intersection:
+        let t = t_scaled * inv_sum_e;
+
+        if t <= 0. {
+            return None;
         }
-    }
 
-    fn proc_interaction(&self, hit: RTCInteraction) -> GeomInteraction {
-        // The triangle that the ray had hit:
-        let triangle = unsafe { *self.indices.get_unchecked(hit.prim_id) };
+        // Baycentric coordinates:
+        let b = [e[0] * inv_sum_e, e[1] * inv_sum_e, e[2] * inv_sum_e];
+        // The hit point:
+        let p = poss[0].scale(b[0]) + poss[1].scale(b[1]) + poss[2].scale(b[2]);
 
-        // Calculate the geometric normal:
-        let n = hit.ng.normalize();
+        // The edges along the triangle:
+        let dp02 = poss[0] - poss[2];
+        let dp12 = poss[1] - poss[2];
+        // The geometric normal of the hitpoint (according to just the position info)
+        let n = dp02.cross(dp12).normalize();
 
-        // Calculate the partial derivatives of the triangle
+        // Get the attribute associated with the triangle:
+        let attrib = {
+            let attribute_index = self.attribute_id as usize;
+            unsafe { mesh.attributes.get_unchecked(attribute_index) }
+        };
 
-        let poss = triangle.get_vertices(self.get_pos());
-        let uvs = if self.has_uvs() {
-            triangle.get_vertices(self.get_uvs())
+        // Get the UV coordinates:
+        let uvs = if attrib.has_uvs() {
+            unsafe { self.get_uvs(attrib) }
         } else {
             [
                 Vec2 { x: 0., y: 0. },
@@ -155,122 +249,191 @@ impl Geometry for TriMesh {
                 Vec2 { x: 1., y: 1. },
             ]
         };
+        // Calculate the uv point where we intersect now:
+        let uv = uvs[0].scale(b[0]) + uvs[1].scale(b[1]) + uvs[2].scale(b[2]);
 
+        // Matrix entries for calculating dpdu and dpdv:
         let duv02 = uvs[0] - uvs[2];
         let duv12 = uvs[1] - uvs[2];
-        let dp02 = poss[0] - poss[2];
-        let dp12 = poss[1] - poss[2];
+        let det = duv02[0] * duv12[1] - duv02[1] * duv12[0];
+        let is_degen_uv = det.abs() < 1e-8; // This is quite a hack, so we should do something about this
+        let inv_det = if is_degen_uv { 0. } else { 1. / det };
 
-        let determinant = duv02.x * duv12.y - duv02.y * duv12.x;
-        let (dpdu, dpdv) = if determinant == 0. {
-            coord_system(n)
+        // Compute triangle partial derivatives:
+        // These vectors are parallel to the triangle:
+        let (dpdu, dpdv) = if is_degen_uv {
+            util::coord_system((poss[2] - poss[0]).cross(poss[1] - poss[0]))
         } else {
-            let inv_determinant = 1. / determinant;
-            (
-                (dp02.scale(duv12.y) - dp12.scale(duv02.y)).scale(inv_determinant),
-                (dp02.scale(-duv12.x) + dp12.scale(duv02.x)).scale(inv_determinant),
-            )
+            // Solve the system:
+            let dpdu = (dp02.scale(duv12[1]) - dp12.scale(duv02[1])).scale(inv_det);
+            let dpdv = (dp02.scale(-duv12[0]) + dp12.scale(duv02[0])).scale(inv_det);
+            if dpdu.cross(dpdv).length2() == 0. {
+                util::coord_system((poss[2] - poss[0]).cross(poss[1] - poss[0]))
+            } else {
+                (dpdu, dpdv)
+            }
         };
 
-        // We can extract 3D barycentric coordinates as follows:
-        let bs = [1. - hit.uv.x - hit.uv.y, hit.uv.x, hit.uv.y];
+        // TODO: texture stuff goes here
 
-        // Calculate the hit point:
-        let p = poss[0].scale(bs[0]) + poss[1].scale(bs[1]) + poss[2].scale(bs[2]);
-        // Calculate the uv point:
-        let uv = uvs[0].scale(bs[0]) + uvs[1].scale(bs[1]) + uvs[2].scale(bs[2]);
-
-        // TODO: add support for texture alpha checking
-
-        // Compute the shading normal and update the geometric normal:
-        let (dndu, dndv, n, shading_n) = if self.has_nrm() {
-            let norms = triangle.get_vertices(self.get_nrm());
-            let shading_n = norms[0].scale(bs[0]) + norms[1].scale(bs[1]) + norms[2].scale(bs[2]);
-
-            // Calculate the dndu, dndv now:
-            let dn1 = norms[0] - norms[2];
-            let dn2 = norms[1] - norms[2];
-
-            let (dndu, dndv) = if determinant == 0. {
-                (Vec3::zero(), Vec3::zero())
+        // Calculate the shading normals now:
+        let (shading_n, shading_dndu, shading_dndv) = if attrib.has_nrm() {
+            // Calculate the shading normal:
+            let norms = unsafe { self.get_nrm(attrib) };
+            let sn = norms[0].scale(b[0]) + norms[1].scale(b[1]) + norms[2].scale(b[2]);
+            let shading_n = if sn.length2() == 0. {
+                n
             } else {
-                let inv_determinant = 1. / determinant;
-                (
-                    (dn1.scale(duv12.y) - dn2.scale(duv02.y)).scale(inv_determinant),
-                    (dn1.scale(-duv12.x) + dn2.scale(duv02.x)).scale(inv_determinant),
-                )
+                sn.normalize()
             };
 
-            // Make sure the geometric normal points in the same direction as the provided shading normal:
-            (dndu, dndv, align(shading_n, n), shading_n)
+            let dn02 = norms[0] - norms[2];
+            let dn12 = norms[1] - norms[2];
+
+            let (shading_dndu, shading_dndv) = if is_degen_uv {
+                let dn = (norms[2] - norms[0]).cross(norms[1] - norms[0]);
+                if dn.length2() == 0. {
+                    (Vec3::zero(), Vec3::zero())
+                } else {
+                    util::coord_system(dn)
+                }
+            } else {
+                let dndu = (dn02.scale(duv12[1]) - dn12.scale(duv02[1])).scale(inv_det);
+                let dndv = (dn02.scale(-duv12[0]) + dn12.scale(duv02[0])).scale(inv_det);
+                (dndu, dndv)
+            };
+
+            (shading_n, shading_dndu, shading_dndv)
         } else {
-            (Vec3::zero(), Vec3::zero(), n, n)
+            (n, Vec3::zero(), Vec3::zero())
         };
 
-        // Compute the tangent:
-        let ss = if self.has_tan() {
-            let tans = triangle.get_vertices(self.get_tan());
-            tans[0].scale(bs[0]) + tans[1].scale(bs[1]) + tans[2].scale(bs[2])
+        // Update n with the new shading normal from the provided normal:
+        let n = util::align(shading_n, n);
+
+        // Calculate the shading tangents:
+        let shading_dpdu = if attrib.has_tan() {
+            let tans = unsafe { self.get_tan(attrib) };
+            let st = tans[0].scale(b[0]) + tans[1].scale(b[1]) + tans[2].scale(b[2]);
+            if st.length2() == 0. {
+                dpdu.normalize() // Just the same dpdu value as before
+            } else {
+                st.normalize()
+            }
         } else {
             dpdu.normalize()
         };
 
-        let ts = shading_n.cross(ss);
-        let (ss, ts) = if ts.length2() > 0. {
-            let ts = ts.normalize();
-            (ts.cross(shading_n), ts)
-        } else {
-            coord_system(shading_n)
+        // Calculate the shaind bitangent:
+        let (shading_dpdu, shading_dpdv) = {
+            let sbt = shading_n.cross(shading_dpdu);
+            if sbt.length2() > 0. {
+                (sbt.cross(shading_dpdu), sbt.normalize())
+            } else {
+                util::coord_system(shading_n)
+            }
         };
 
-        GeomInteraction {
+        let wo = -ray.dir;
+
+        Some(Interaction {
             p,
             n,
-            wo: -(hit.dir.normalize()),
-            t: hit.tfar,
+            wo,
+            t,
             uv,
             dpdu,
             dpdv,
             shading_n,
-            shading_dpdu: ss,
-            shading_dpdv: ts,
-            shading_dndu: dndu,
-            shading_dndv: dndv,
+            shading_dpdu,
+            shading_dpdv,
+            shading_dndu,
+            shading_dndv,
+            attribute_id: self.attribute_id,
+            mesh_id: mesh.id,
+        })
+    }
+
+    fn get_pos(self, mesh: &Mesh) -> [Vec3<f64>; 3] {
+        unsafe {
+            [
+                mesh.pos.get_unchecked(self.indices[0] as usize).to_f64(),
+                mesh.pos.get_unchecked(self.indices[1] as usize).to_f64(),
+                mesh.pos.get_unchecked(self.indices[2] as usize).to_f64(),
+            ]
+        }
+    }
+
+    // Unsafe because it's not gauranteed that tangents are present.
+    unsafe fn get_tan(self, attrib: &Attribute) -> [Vec3<f64>; 3] {
+        [
+            attrib.tan.get_unchecked(self.indices[0] as usize).to_f64(),
+            attrib.tan.get_unchecked(self.indices[1] as usize).to_f64(),
+            attrib.tan.get_unchecked(self.indices[2] as usize).to_f64(),
+        ]
+    }
+
+    // Unsafe because it's not gauranteed that normals are present.
+    unsafe fn get_nrm(self, attrib: &Attribute) -> [Vec3<f64>; 3] {
+        // For performance reasons no check is applied here.
+        [
+            attrib.nrm.get_unchecked(self.indices[0] as usize).to_f64(),
+            attrib.nrm.get_unchecked(self.indices[1] as usize).to_f64(),
+            attrib.nrm.get_unchecked(self.indices[2] as usize).to_f64(),
+        ]
+    }
+
+    // Unsafe because it's not gauranteed that UVs are present.
+    unsafe fn get_uvs(self, attrib: &Attribute) -> [Vec2<f64>; 3] {
+        // For performance reasons no check is applied here.
+        [
+            attrib.uvs.get_unchecked(self.indices[0] as usize).to_f64(),
+            attrib.uvs.get_unchecked(self.indices[1] as usize).to_f64(),
+            attrib.uvs.get_unchecked(self.indices[2] as usize).to_f64(),
+        ]
+    }
+}
+
+// Attributes that belong to a collection (such as surface area and whatnot):
+#[derive(Clone, Debug)]
+pub struct Attribute {
+    // The triangles that this attribute is for:
+    triangle_start: usize,
+    num_triangles: usize,
+
+    // The attributes themselves:
+    nrm: Vec<Vec3<f32>>,
+    tan: Vec<Vec3<f32>>,
+    uvs: Vec<Vec2<f32>>,
+
+    id: u32,
+
+    // The surface area of the attribute:
+    surface_area: Cell<Option<f64>>,
+}
+
+impl Attribute {
+    pub fn new(
+        triangle_start: usize,
+        num_triangles: usize,
+        nrm: Vec<Vec3<f32>>,
+        tan: Vec<Vec3<f32>>,
+        uvs: Vec<Vec2<f32>>,
+        id: u32,
+    ) -> Self {
+        Attribute {
+            triangle_start,
+            num_triangles,
+            nrm,
+            tan,
+            uvs,
+            id,
+            surface_area: Cell::new(None),
         }
     }
 }
 
-// Mesh access is done through u32 values to save on storage:
-impl TriMesh {
-    pub fn new(
-        indices: Vec<Triangle>,
-        pos: Vec<Vec3<f32>>,
-        nrm: Vec<Vec3<f32>>,
-        tan: Vec<Vec3<f32>>,
-        uvs: Vec<Vec2<f32>>,
-    ) -> Self {
-        TriMesh {
-            pos,
-            nrm,
-            tan,
-            uvs,
-            indices,
-            surface_area: Cell::new(None),
-        }
-    }
-
-    // Transforms the vectors of the mesh, updating the buffer:
-    pub fn transform(&mut self, transf: Transform) {
-        // Go ahead and transform the tangent, normal, and positions:
-        transf.points(&mut self.pos);
-        transf.normals(&mut self.nrm);
-        transf.vectors(&mut self.tan);
-    }
-
-    pub fn num_vert(&self) -> usize {
-        self.pos.len() - 1
-    }
-
+impl Attribute {
     pub fn has_nrm(&self) -> bool {
         !self.nrm.is_empty()
     }
@@ -282,42 +445,61 @@ impl TriMesh {
     pub fn has_uvs(&self) -> bool {
         !self.uvs.is_empty()
     }
+}
 
-    pub fn get_pos(&self) -> &[Vec3<f32>] {
-        unsafe {
-            let last_index = self.pos.len() - 1;
-            self.pos.get_unchecked(..last_index)
+// A single mesh
+#[derive(Clone)]
+pub struct Mesh {
+    pub pos: Vec<Vec3<f32>>,
+    pub triangles: Vec<Triangle>,
+    attributes: Vec<Attribute>,
+
+    // The transformation associated with mesh:
+    transform: AnimatedTransform,
+
+    id: u32,
+}
+
+// Mesh access is done through u32 values to save on storage:
+impl Mesh {
+    pub fn new(
+        pos: Vec<Vec3<f32>>,
+        triangles: Vec<Triangle>,
+        attributes: Vec<Attribute>,
+        transform: AnimatedTransform,
+        id: u32,
+    ) -> Self {
+        let mut result = Mesh {
+            pos,
+            triangles,
+            attributes,
+            transform,
+            id,
+        };
+
+        // Check if it's animated. If it isn't, we can easily "cache" the transformation
+        // by applying them now:
+        if !transform.is_animated() {
+            let transf = transform.interpolate(0.0);
+            transf.points_f32(&mut result.pos);
+            for attribute in result.attributes.iter_mut() {
+                transf.vectors_f32(&mut attribute.tan);
+                transf.normals_f32(&mut attribute.nrm);
+            }
         }
+
+        result
     }
 
-    pub fn get_pos_mut(&mut self) -> &mut [Vec3<f32>] {
-        unsafe {
-            let last_index = self.pos.len() - 1;
-            self.pos.get_unchecked_mut(..last_index)
-        }
+    pub fn get_transform(&self) -> AnimatedTransform {
+        self.transform
     }
 
-    pub fn get_nrm(&self) -> &[Vec3<f32>] {
-        &self.nrm[..]
+    pub fn get_attribute(&self, attribute_id: u32) -> &Attribute {
+        &self.attributes[attribute_id as usize]
     }
 
-    pub fn get_nrm_mut(&mut self) -> &mut [Vec3<f32>] {
-        &mut self.nrm[..]
-    }
-
-    pub fn get_tan(&self) -> &[Vec3<f32>] {
-        &self.tan[..]
-    }
-
-    pub fn get_tan_mut(&mut self) -> &mut [Vec3<f32>] {
-        &mut self.tan[..]
-    }
-
-    pub fn get_uvs(&self) -> &[Vec2<f32>] {
-        &self.uvs[..]
-    }
-
-    pub fn get_uvs_mut(&mut self) -> &mut [Vec2<f32>] {
-        &mut self.uvs[..]
+    pub fn get_attribute_mut(&mut self, attribute_id: u32) -> &mut Attribute {
+        &mut self.attributes[attribute_id as usize]
     }
 }

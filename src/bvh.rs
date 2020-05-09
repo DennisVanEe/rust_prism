@@ -1,3 +1,4 @@
+use crate::geometry::{Interaction, RayIntInfo};
 use crate::math::bbox::BBox3;
 use crate::math::ray::Ray;
 use crate::math::vector::Vec3;
@@ -7,29 +8,43 @@ use bumpalo::Bump;
 use order_stat::kth_by;
 use partition::partition;
 
-// A trait that must be implemented for any type type that wishes to be a part of
+// A special type that can be intersected by a
 pub trait BVHObject {
-    // Any additional information for calculating the intersection (like if it's a triangular mesh)
-    type IntParam;
-    // Any additional information for calculating the bounds or centroids:
-    type DataParam;
-    // What is returned when intersecting the object:
-    type IntResult;
+    type Param; // Extra parameter information for the object.
+
+    // Moves the value out, leaving the current self in a valid
+    // state.
+    fn move_out(&mut self) -> Self;
 
     // The intersection algorithms need to support potentially moving objects:
     fn intersect_test(
         &self,
         ray: Ray<f64>, // The ray in "BVH Space"
-        int_info: &Self::IntParam,
+        int_info: RayIntInfo,
+        param: &Self::Param,
     ) -> bool;
 
-    fn intersect(&self, ray: Ray<f64>, int_info: &Self::IntParam) -> Option<Self::IntResult>;
+    fn intersect(
+        &self,
+        ray: Ray<f64>,
+        int_info: RayIntInfo,
+        param: &Self::Param,
+    ) -> Option<Interaction>;
 
-    fn get_centroid(&self, data: &Self::DataParam) -> Vec3<f64>;
-    fn get_bound(&self, data: &Self::DataParam) -> BBox3<f64>;
+    // Transforms the ray from the bvh space to the object space, updating the intersection
+    // information as appropriate.
+    fn transf_bvh_to_object(
+        &self,
+        ray: Ray<f64>,
+        int_info: RayIntInfo,
+        param: &Self::Param,
+    ) -> (Ray<f64>, RayIntInfo);
+
+    fn get_centroid(&self, param: &Self::Param) -> Vec3<f64>;
+    fn get_bound(&self, param: &Self::Param) -> BBox3<f64>;
 }
 
-// How many buckets we use for the SAH splitting algorithm:
+// How many buckets we use fokr the SAH splitting algorithm:
 const BUCKET_COUNT: usize = 12;
 
 pub struct BVH<O: BVHObject> {
@@ -39,16 +54,14 @@ pub struct BVH<O: BVHObject> {
 }
 
 impl<O: BVHObject> BVH<O> {
-    // Constructs a BVH given a mesh and the max number of triangles per leaf node.
-    // The BVH will become the owner of the mesh when doing this.
-    pub fn new(objects: Vec<O>, max_obj_per_node: usize, data: &O::DataParam) -> Self {
+    pub fn new(objects: Vec<O>, max_obj_per_node: usize, param: &O::Param) -> Self {
         // First we record any object information we may need:
         let mut object_infos = Vec::with_capacity(objects.len());
         for (i, obj) in objects.iter().enumerate() {
             object_infos.push(ObjectInfo {
                 obj_index: i as u32,
-                centroid: obj.get_centroid(data),
-                bound: obj.get_bound(data),
+                centroid: obj.get_centroid(param),
+                bound: obj.get_bound(param),
             });
         }
 
@@ -68,8 +81,9 @@ impl<O: BVHObject> BVH<O> {
     pub fn intersect(
         &self,
         mut ray: Ray<f64>,
-        int_info: &O::IntParam,
-    ) -> Option<(O::IntResult, &O)> {
+        int_info: RayIntInfo,
+        param: &O::Param,
+    ) -> Option<Interaction> {
         let inv_dir = ray.dir.inv_scale(1.);
         let is_dir_neg = ray.dir.comp_wise_is_neg();
 
@@ -90,11 +104,15 @@ impl<O: BVHObject> BVH<O> {
                         let obj_start = obj_start_index as usize;
                         let obj_end = obj_end_index as usize;
                         for obj in self.objects[obj_start..obj_end].iter() {
-                            if let Some(intersection) = obj.intersect(ray, int_info) {
+                            // Transform the ray to the object's space:
+                            let (obj_ray, obj_int_info) =
+                                obj.transf_bvh_to_object(ray, int_info, param);
+                            if let Some(intersection) = obj.intersect(obj_ray, obj_int_info, param)
+                            {
                                 // Update the max time for more efficient culling:
                                 ray.max_t = intersection.t;
                                 // Can't return immediately, have to make sure this is the closest intersection
-                                result = Some((intersection, obj));
+                                result = Some(intersection);
                             }
                         }
 
@@ -132,7 +150,7 @@ impl<O: BVHObject> BVH<O> {
         result
     }
 
-    pub fn intersect_test(&self, ray: Ray<f64>, int_info: &O::IntParam) -> bool {
+    pub fn intersect_test(&self, ray: Ray<f64>, int_info: RayIntInfo, param: &O::Param) -> bool {
         let inv_dir = ray.dir.inv_scale(1.);
         let is_dir_neg = ray.dir.comp_wise_is_neg();
 
@@ -150,7 +168,10 @@ impl<O: BVHObject> BVH<O> {
                         let obj_start = obj_start_index as usize;
                         let obj_end = obj_end_index as usize;
                         for obj in self.objects[obj_start..obj_end].iter() {
-                            if obj.intersect_test(ray, int_info) {
+                            // Transform the ray to object space:
+                            let (obj_ray, obj_int_info) =
+                                obj.transf_bvh_to_object(ray, int_info, param);
+                            if obj.intersect_test(obj_ray, obj_int_info, param) {
                                 return true;
                             }
                         }
@@ -203,7 +224,7 @@ impl<O: BVHObject> BVH<O> {
         // Construct the regular tree first (that isn't flat):
         let (root_node, bound, alloc_count) = Self::recursive_construct_tree(
             max_obj_per_node,
-            &objects,
+            &mut objects,
             &mut object_infos,
             &mut new_objects,
             &mut allocator,
@@ -224,11 +245,11 @@ impl<O: BVHObject> BVH<O> {
     // Returns a reference to the root node of the tree and the bound of the entire tree that was created:
     fn recursive_construct_tree<'a>(
         max_obj_per_node: usize,         // The maximum number of triangles per node.
-        objects: &Vec<O>,                // The mesh we are currently constructing a BVH for.
+        objects: &mut Vec<O>,            // The mesh we are currently constructing a BVH for.
         object_infos: &mut [ObjectInfo], // The current slice of triangles we are working on.
         new_objects: &mut Vec<O>,        // The correct order for the new triangles we care about.
-        allocator: &'a mut Bump, // Allocator used to allocate the nodes. The lifetime of the nodes is that of the allocator
-        alloc_count: usize,      // This is used so we can efficiently allocate linear nodes.
+        allocator: &'a Bump, // Allocator used to allocate the nodes. The lifetime of the nodes is that of the allocator
+        alloc_count: usize,  // This is used so we can efficiently allocate linear nodes.
     ) -> (&'a TreeNode<'a>, BBox3<f64>, usize) {
         // A bound over all of the triangles we are currently working with:
         let all_bound = object_infos
@@ -239,7 +260,7 @@ impl<O: BVHObject> BVH<O> {
 
         // If we only have one triangle, make a leaf:
         if object_infos.len() == 1 {
-            new_objects.push(objects[object_infos[0].obj_index as usize]);
+            new_objects.push(objects[object_infos[0].obj_index as usize].move_out());
             return (
                 allocator.alloc(TreeNode::Leaf {
                     bound: all_bound,
@@ -268,7 +289,7 @@ impl<O: BVHObject> BVH<O> {
             // Need to keep track of where we will be putting these triangles.
             let curr_obj_index = new_objects.len() as u32;
             for obj_info in object_infos.iter() {
-                new_objects.push(objects[obj_info.obj_index as usize]);
+                new_objects.push(objects[obj_info.obj_index as usize].move_out());
             }
             // Allocate the a new leaf node and push it:
             return (
@@ -371,7 +392,7 @@ impl<O: BVHObject> BVH<O> {
                 // create a leaf here:
                 let curr_obj_index = new_objects.len() as u32;
                 for obj_info in object_infos.iter() {
-                    new_objects.push(objects[obj_info.obj_index as usize]);
+                    new_objects.push(objects[obj_info.obj_index as usize].move_out());
                 }
                 return (
                     allocator.alloc(TreeNode::Leaf {
@@ -462,7 +483,7 @@ impl<O: BVHObject> BVH<O> {
 
         // First create a vector with the correct number of nodes:
         let mut linear_nodes = Vec::with_capacity(num_nodes);
-        let cnt = generate_linear_nodes(&mut linear_nodes, root_node);
+        generate_linear_nodes(&mut linear_nodes, root_node);
         linear_nodes
     }
 }
@@ -500,7 +521,7 @@ enum TreeNode<'a> {
     },
 }
 
-// #[repr(align(32))] <- experimental, TODO: add once not experimental
+#[repr(align(32))]
 #[derive(Clone, Copy)]
 enum LinearNodeKind {
     Leaf {

@@ -1,12 +1,13 @@
 // Clean this stuff up in the future...
 // This is here just for now.
 
-mod file_io;
+#![allow(dead_code)]
+
+mod bvh;
 mod geometry;
 mod math;
 mod memory;
 mod transform;
-//mod bvh;
 //mod camera;
 //mod film;
 //mod filter;
@@ -23,14 +24,12 @@ mod transform;
 //mod threading;
 //mod transform;
 
-use geometry::mesh::TriMesh;
-
 fn main() {
-    let result = file_io::ply::load_tri_mesh("E:\\apple.ply");
-    let mesh = match result {
-        Ok(m) => m,
-        Err(msg) => panic!(msg),
-    };
+    // let result = file_io::ply::load_tri_mesh("E:\\apple.ply");
+    // let mesh = match result {
+    //     Ok(m) => m,
+    //     Err(msg) => panic!(msg),
+    // };
 
-    println!("{}", mesh.has_nrm());
+    // println!("{}", mesh.has_nrm());
 }
