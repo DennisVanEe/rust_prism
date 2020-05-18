@@ -4,63 +4,41 @@ This document is needed to specify the scene file format used by PRISM.
 
 Scene file formats are written in TOML.
 
-## Geometry ##
+## Mesh and Instancing ##
 
-Geometry refers to the mathematical description of a 3D object (like a collection of vertices representing a mesh or a point and radius representing a sphere). At most one material definition can be applied to a single geometry. Thus, one must either produce a complex material or break the geometry into smaller parts to replicate a multi-material geometry.
-
-### Basic Shapes ###
-
-- **Sphere**: This represents a simple sphere.
+Mesh are a collection of attributes. Each attribute is seperated into a PLY file. Each attribute has a name unique to that specific mesh. In order to place the mesh in the world, one needs a mesh instance.
 
 ```json
-"sphere_geometry": {
-    "id": "sphere_a",          // id of geometry used by scene model
-    "rev_orientation": true,   // if true, normals point inward
-    "radius": 1.0,             // radius of the sphere
-}
-```
-
-### Mesh ###
-
-This represents a geometric mesh. Right now, PRISM only supports .ply files, so if you set the file type to anything else it won't process it.
-
-```json
-"mesh_geometry": {
-    "id": "mesh_a",              // id of geometry used by scene model
-    "file_type": "ply",          // the file type
-    "face_type": "triangle",     // the face type, can be a triangle or a quad
-    "dir": "/models/sphere.ply", // the location of the file representing it
-}
-```
-
-## Groups and Instancing ##
-
-A group refers to a collection of geometries. There are two types of groups: a `"master_group"` and a `"sub_group"`. Every scene has exactely one `"master_group"`. And if there is no instancing, then this is probably the only group required.
-
-For one-level instancing (multi-level instanting not yet supported), one must store the geometry in a `"sub_group"` and instance that in the `"master_group"`.
-
-Below is an example of a `"sub_group"`.
-
-It's important to note that, every geometry in a group is a copy of said geometry. If you don't want to copy geometries, put them into a `sub_group` and instance them.
-
-```json
-"sub_group": {
-    "id": "group_a",
-    "members": [
+"mesh": {
+    "name": "collection_a", // Name of the mesh. Not referenced by materials, only by mesh instances
+    "attributes": [
         {
-            "geometry_id": "mesh_a",   // A COPY of mesh_a exists in this group
-            "transform": //...         
-        },      
-        {
-            "geometry_id": "sphere_b",
-            "transform": //...         
+            "name": "a",
+            "path": "/path/to/file/a.ply",
+            "transform": {
+                // See section on transformations
+            },
         },
         {
-            "group_id": "group_b",     // An INSTANCE of this group exists (not a copy)
-            "transform": //..
-        }
+            "name": "b",
+            "path": "/path/to/file/b.ply",
+            "transform": {
+                // See section on transformations
+            },
+        },
         //...
-    ]
+    ],
+    // Transforms all of the values:
+    "transform": {
+        // See section on transformations
+    },
+}
+```
+
+```json
+"mesh_instance": {
+    "mesh": "collection_a",
+    
 }
 ```
 
@@ -146,6 +124,13 @@ Transformations are an important part of any scene. They describe how objects ar
 
 Every transform has a type specified with it. Let's go over the different types that are currently available:
 
+- **Identity**: If you want to specify a "noop" transformation in a place where one is expected, then simply place an identity transformation. Applying this will have no effect.
+    ```json
+    "transform": {
+        "identity": true
+    }
+    ```
+
 - **Translation**: Just a translation by a specified vector:
     ```json
     "transform": {
@@ -165,13 +150,13 @@ Every transform has a type specified with it. Let's go over the different types 
         "scale": [34.3, 89.1, 90.8],
     }
     ```
-- **Matrix**: If you want to specify the matrix itself, you can do so. Be mindful that if it isn't affine and invertible, you might get problems. PRISM performs a check to make sure that this is the case and tells you if it's a problem. Matrices are represented in row-major order (an array of arrays, each of which is a row):
+- **Matrix**: If you want to specify the matrix itself, you can do so as a 3x4 matrix. Matrices are represented in row-major order (an array of arrays, each of which is a row):
     ```json
     "transform": {
         "matrix": [1.0, 0.0, 0.0, 34.0,
                 0.0, 1.0, 0.0, 29.0,
-                0.0, 0.0, 1.0, 09.0,
-                0.0, 0.0, 0.0, 01.0],
+                0.0, 0.0, 1.0, 09.0],
+                //0.0, 0.0, 0.0, 01.0], <- last row is implied
     }
     ```
 - **Composite**: A single transformation defined as a number of transformations. This is essentially represented as an array of transformations. The order of the transformations defines the order in which they are applied (not necessarily the order in which the transformation's matrix representation is multiplied). So, the bottom example would first scale the object, then translate it. It is also important to note that you can't have a composite of animated transforms:

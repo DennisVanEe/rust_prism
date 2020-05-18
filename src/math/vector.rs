@@ -4,9 +4,9 @@ use crate::math::util::{max, min};
 use num_traits::{One, Signed, Zero};
 
 use std::cmp::{PartialEq, PartialOrd};
-use std::convert::From;
 use std::ops::{Add, Div, Index, IndexMut, Mul, Neg, Sub};
 
+#[repr(C)]
 #[derive(Copy, Clone, Debug)]
 pub struct Vec2<T: Copy> {
     pub x: T,
@@ -104,24 +104,6 @@ impl<T: PartialOrd + Copy> Vec2<T> {
     }
 }
 
-impl<T: Copy + Into<f64>> Vec2<T> {
-    pub fn to_f64(self) -> Vec2<f64> {
-        Vec2 {
-            x: self.x.into(),
-            y: self.y.into(),
-        }
-    }
-}
-
-impl<T: Copy + Into<f32>> Vec2<T> {
-    pub fn to_f32(self) -> Vec2<f32> {
-        Vec2 {
-            x: self.x.into(),
-            y: self.y.into(),
-        }
-    }
-}
-
 // This is for operations that require a float (like a length function):
 impl<T: Float> Vec2<T> {
     pub fn length(self) -> T {
@@ -138,6 +120,20 @@ impl<T: Float> Vec2<T> {
     pub fn normalize(self) -> Self {
         let scale = T::one() / self.length();
         self.scale(scale)
+    }
+
+    pub fn to_f32(self) -> Vec2<f32> {
+        Vec2 {
+            x: self.x.to_f32(),
+            y: self.y.to_f32(),
+        }
+    }
+
+    pub fn to_f64(self) -> Vec2<f64> {
+        Vec2 {
+            x: self.x.to_f64(),
+            y: self.y.to_f64(),
+        }
     }
 }
 
@@ -207,6 +203,7 @@ impl<T: Neg<Output = T> + Copy> Neg for Vec2<T> {
     }
 }
 
+#[repr(C)]
 #[derive(Copy, Clone, Debug)]
 pub struct Vec3<T: Copy> {
     pub x: T,
@@ -373,26 +370,6 @@ impl<T: Mul<Output = T> + Sub<Output = T> + Copy> Vec3<T> {
     }
 }
 
-impl<T: Copy + Into<f64>> Vec3<T> {
-    pub fn to_f64(self) -> Vec3<f64> {
-        Vec3 {
-            x: self.x.into(),
-            y: self.y.into(),
-            z: self.z.into(),
-        }
-    }
-}
-
-impl<T: Copy + Into<f32>> Vec3<T> {
-    pub fn to_f32(self) -> Vec3<f32> {
-        Vec3 {
-            x: self.x.into(),
-            y: self.y.into(),
-            z: self.z.into(),
-        }
-    }
-}
-
 impl<T: Float> Vec3<T> {
     pub fn length(self) -> T {
         self.length2().sqrt()
@@ -405,6 +382,22 @@ impl<T: Float> Vec3<T> {
 
     pub fn lerp(self, v1: Self, time: T) -> Self {
         self.scale(T::one() - time) + v1.scale(time)
+    }
+
+    pub fn to_f64(self) -> Vec3<f64> {
+        Vec3 {
+            x: self.x.to_f64(),
+            y: self.y.to_f64(),
+            z: self.z.to_f64(),
+        }
+    }
+
+    pub fn to_f32(self) -> Vec3<f32> {
+        Vec3 {
+            x: self.x.to_f32(),
+            y: self.y.to_f32(),
+            z: self.z.to_f32(),
+        }
     }
 }
 
@@ -525,6 +518,7 @@ impl<T: Neg<Output = T> + Copy> Neg for Vec3<T> {
     }
 }
 
+#[repr(C)]
 #[derive(Copy, Clone, Debug)]
 pub struct Vec4<T: Copy> {
     pub x: T,
@@ -619,6 +613,24 @@ impl<T: Float> Vec4<T> {
 
     pub fn lerp(self, v1: Self, time: T) -> Self {
         self.scale(T::one() - time) + v1.scale(time)
+    }
+
+    pub fn to_f32(self) -> Vec4<f32> {
+        Vec4 {
+            x: self.x.to_f32(),
+            y: self.y.to_f32(),
+            z: self.z.to_f32(),
+            w: self.w.to_f32(),
+        }
+    }
+
+    pub fn to_f64(self) -> Vec4<f64> {
+        Vec4 {
+            x: self.x.to_f64(),
+            y: self.y.to_f64(),
+            z: self.z.to_f64(),
+            w: self.w.to_f64(),
+        }
     }
 }
 

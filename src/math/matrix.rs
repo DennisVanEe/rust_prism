@@ -3,9 +3,10 @@ use crate::math::vector::{Vec3, Vec4};
 
 use std::ops::{Add, Index, Mul, Neg, Sub};
 
+#[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct Mat3x4<T: Float> {
-    m: [Vec4<T>; 3],
+    m: [Vec4<T>; 3], //row-major
 }
 
 impl<T: Float> Mat3x4<T> {
@@ -172,18 +173,18 @@ impl<T: Float> Mat3x4<T> {
         let a0323 = self.m[2][0]; // * self.m[3][3] - self.m[2][3] * self.m[3][0];
         let a0223 = T::zero(); // self.m[2][0] * self.m[3][2] - self.m[2][2] * self.m[3][0];
         let a0123 = T::zero(); // self.m[2][0] * self.m[3][1] - self.m[2][1] * self.m[3][0];
-        let a2313 = self.m[1][2]; // * self.m[3][3] - self.m[1][3] * self.m[3][2];
-        let a1313 = self.m[1][1]; // * self.m[3][3] - self.m[1][3] * self.m[3][1];
-        let a1213 = T::zero(); // self.m[1][1] * self.m[3][2] - self.m[1][2] * self.m[3][1];
-        let a2312 = self.m[1][2] * self.m[2][3] - self.m[1][3] * self.m[2][2];
-        let a1312 = self.m[1][1] * self.m[2][3] - self.m[1][3] * self.m[2][1];
-        let a1212 = self.m[1][1] * self.m[2][2] - self.m[1][2] * self.m[2][1];
-        let a0313 = self.m[1][0]; // * self.m[3][3] - self.m[1][3] * self.m[3][0];
-        let a0213 = T::zero(); // self.m[1][0] * self.m[3][2] - self.m[1][2] * self.m[3][0];
-        let a0312 = self.m[1][0] * self.m[2][3] - self.m[1][3] * self.m[2][0];
-        let a0212 = self.m[1][0] * self.m[2][2] - self.m[1][2] * self.m[2][0];
-        let a0113 = T::zero(); // self.m[1][0] * self.m[3][1] - self.m[1][1] * self.m[3][0];
-        let a0112 = self.m[1][0] * self.m[2][1] - self.m[1][1] * self.m[2][0];
+                               // let a2313 = self.m[1][2]; // * self.m[3][3] - self.m[1][3] * self.m[3][2];
+                               // let a1313 = self.m[1][1]; // * self.m[3][3] - self.m[1][3] * self.m[3][1];
+                               // let a1213 = T::zero(); // self.m[1][1] * self.m[3][2] - self.m[1][2] * self.m[3][1];
+                               // let a2312 = self.m[1][2] * self.m[2][3] - self.m[1][3] * self.m[2][2];
+                               // let a1312 = self.m[1][1] * self.m[2][3] - self.m[1][3] * self.m[2][1];
+                               // let a1212 = self.m[1][1] * self.m[2][2] - self.m[1][2] * self.m[2][1];
+                               // let a0313 = self.m[1][0]; // * self.m[3][3] - self.m[1][3] * self.m[3][0];
+                               // let a0213 = T::zero(); // self.m[1][0] * self.m[3][2] - self.m[1][2] * self.m[3][0];
+                               // let a0312 = self.m[1][0] * self.m[2][3] - self.m[1][3] * self.m[2][0];
+                               // let a0212 = self.m[1][0] * self.m[2][2] - self.m[1][2] * self.m[2][0];
+                               // let a0113 = T::zero(); // self.m[1][0] * self.m[3][1] - self.m[1][1] * self.m[3][0];
+                               // let a0112 = self.m[1][0] * self.m[2][1] - self.m[1][1] * self.m[2][0];
 
         let inv_det = self.m[0][0]
             * (self.m[1][1] * a2323 - self.m[1][2] * a1323 + self.m[1][3] * a1223)
@@ -288,6 +289,18 @@ impl<T: Float> Mat3x4<T> {
             ],
         }
     }
+
+    pub fn to_f32(self) -> Mat3x4<f32> {
+        Mat3x4 {
+            m: [self.m[0].to_f32(), self.m[1].to_f32(), self.m[2].to_f32()],
+        }
+    }
+
+    pub fn to_f64(self) -> Mat3x4<f64> {
+        Mat3x4 {
+            m: [self.m[0].to_f64(), self.m[1].to_f64(), self.m[2].to_f64()],
+        }
+    }
 }
 
 impl<T: Float> Index<usize> for Mat3x4<T> {
@@ -359,6 +372,7 @@ impl<T: Float> Mul for Mat3x4<T> {
     }
 }
 
+#[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct Mat4<T: Float> {
     m: [Vec4<T>; 4],
@@ -812,6 +826,7 @@ impl<T: Float> Mul for Mat4<T> {
     }
 }
 
+#[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct Mat3<T: Float> {
     // Array of rows

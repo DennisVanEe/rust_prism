@@ -1,4 +1,3 @@
-pub mod bbox;
 pub mod matrix;
 pub mod numbers;
 pub mod quaternion;

@@ -24,6 +24,9 @@ pub trait Float: num_traits::Float + num_traits::Bounded {
     // we'll make them functions:
     fn two() -> Self;
     fn half() -> Self;
+
+    fn to_f32(self) -> f32;
+    fn to_f64(self) -> f64;
 }
 
 impl Float for f32 {
@@ -44,6 +47,14 @@ impl Float for f32 {
     fn half() -> f32 {
         0.5f32
     }
+
+    fn to_f32(self) -> f32 {
+        self
+    }
+
+    fn to_f64(self) -> f64 {
+        self as f64
+    }
 }
 
 impl Float for f64 {
@@ -63,5 +74,13 @@ impl Float for f64 {
 
     fn half() -> f64 {
         0.5
+    }
+
+    fn to_f32(self) -> f32 {
+        self as f32
+    }
+
+    fn to_f64(self) -> f64 {
+        self
     }
 }

@@ -12,7 +12,8 @@ pub struct Ray<T: Float> {
     pub time: T,
     /// The parametric extent of the ray. Usually only modified by intersection routines
     /// to allow for earlier termination.
-    pub max_t: T,
+    pub t_far: T,
+    pub t_near: T,
 
     // The ray differential if present for this specific ray:
     pub ray_diff: Option<RayDiff<T>>,
@@ -26,7 +27,8 @@ impl<T: Float> Ray<T> {
             org,
             dir,
             time,
-            max_t: T::infinity(),
+            t_far: T::infinity(),
+            t_near: T::zero(),
             ray_diff: None,
         }
     }
@@ -36,7 +38,8 @@ impl<T: Float> Ray<T> {
             org,
             dir,
             time,
-            max_t: T::infinity(),
+            t_far: T::infinity(),
+            t_near: T::zero(),
             ray_diff: Some(ray_diff),
         }
     }

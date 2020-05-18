@@ -5,21 +5,13 @@ authors = ["Dennis van Ee <dennis@vanee.us>"]
 edition = "2018"
 
 [dependencies]
-# Used to interface with embree:
-embree = { git = "https://github.com/DennisVanEe/embree-prism.git" }
-# Couldn't find a rust ply crate that did what I wanted, so I just wrapped it
-# around RPLY:
+# Couldn't find a rust ply crate that did what I wanted, so I just wrapped it around RPLY:
 rply = { git = "https://github.com/DennisVanEe/rply-prism.git" }
+# For the main ray-intersection stuff:
+embree = { git = "https://github.com/DennisVanEe/embree-prism.git" }
 
 # Used all over the place for math and whatnot:
 num-traits = "0.2.11"
-# Used to load PLY files:
-ply-rs = "0.1.2"
-# Used for parsing JSON scene description files:
-serde = { version = "1.0.105", features = ["derive"] }
-serde_json = "1.0.50"
-# Used as prism's logging system:
-log = "0.4.8"
 
 # Other stuff that is useful:
 simple-error = "0.2.1"

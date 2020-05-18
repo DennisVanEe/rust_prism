@@ -1,9 +1,8 @@
-use crate::geometry::Interaction;
-use crate::math::bbox::BBox3;
-use crate::math::matrix::{Mat3, Mat3x4};
+use crate::math::matrix::Mat3x4;
 use crate::math::quaternion::Quat;
 use crate::math::ray::{Ray, RayDiff};
 use crate::math::vector::{Vec3, Vec4};
+use crate::mesh::Interaction;
 
 use std::ops::Mul;
 
@@ -140,31 +139,6 @@ impl AnimatedTransform {
             Transform::from_matrix(transf_mat)
         }
     }
-
-    pub fn bound_motion(self, b: BBox3<f64>) -> BBox3<f64> {
-        const NUM_BOUND_SAMPLES: usize = 32;
-
-        // If there is no rotation, we can just combine the transformations
-        // of the two bounding boxes:
-        if !self.animated {
-            self.start_transf.bbox3(b)
-        } else if !self.has_rot {
-            self.start_transf
-                .bbox3(b)
-                .combine_bnd(self.end_transf.bbox3(b))
-        } else {
-            // I could do what pbrt does, but I'm too lazy. This bound transform should
-            // only get called once in the preprocess step anyways, so it would only get called once.
-            // This should be robust enough to handle most everything:
-            let mut final_bbox = b;
-            for i in 1..=NUM_BOUND_SAMPLES {
-                let t = (i as f64) / (NUM_BOUND_SAMPLES as f64);
-                let dt = (1. - t) * self.start_time + t * self.end_time;
-                final_bbox = self.interpolate(dt).bbox3(b).combine_bnd(final_bbox);
-            }
-            final_bbox
-        }
-    }
 }
 
 #[derive(Clone, Copy)]
@@ -183,28 +157,28 @@ impl Transform {
 
     // Create a StaticTransform from a bunch of common ones:
 
-    pub fn identity() -> Self {
+    pub fn new_identity() -> Self {
         Transform {
             mat: Mat3x4::new_identity(),
             inv: Mat3x4::new_identity(),
         }
     }
 
-    pub fn translate(trans: Vec3<f64>) -> Self {
+    pub fn new_translate(trans: Vec3<f64>) -> Self {
         Transform {
             mat: Mat3x4::new_translate(trans),
             inv: Mat3x4::new_translate(-trans),
         }
     }
 
-    pub fn scale(scale: Vec3<f64>) -> Self {
+    pub fn new_scale(scale: Vec3<f64>) -> Self {
         Transform {
             mat: Mat3x4::new_scale(scale),
             inv: Mat3x4::new_scale(scale.inv_scale(1.)),
         }
     }
 
-    pub fn rotate(deg: f64, axis: Vec3<f64>) -> Self {
+    pub fn new_rotate(deg: f64, axis: Vec3<f64>) -> Self {
         let mat = Mat3x4::new_rotate(deg, axis);
         // inverse of rotation matrix is transpose
         let inv = mat.transpose();
@@ -308,32 +282,6 @@ impl Transform {
         }
     }
 
-    pub fn bbox3(&self, b: BBox3<f64>) -> BBox3<f64> {
-        // From Arvo 1990 Graphics Gems 1
-
-        let pmin = Vec3::from_vec4(self.mat.get_column(3));
-        let pmax = pmin;
-
-        let rot = Mat3::from_mat3x4(self.mat);
-
-        let a0 = rot.get_column(0) * b.pmin;
-        let a1 = rot.get_column(0) * b.pmax;
-        let pmin = pmin + a0.min(a1);
-        let pmax = pmax + a0.max(a1);
-
-        let a0 = rot.get_column(1) * b.pmin;
-        let a1 = rot.get_column(1) * b.pmax;
-        let pmin = pmin + a0.min(a1);
-        let pmax = pmax + a0.max(a1);
-
-        let a0 = rot.get_column(2) * b.pmin;
-        let a1 = rot.get_column(2) * b.pmax;
-        let pmin = pmin + a0.min(a1);
-        let pmax = pmax + a0.max(a1);
-
-        BBox3 { pmin, pmax }
-    }
-
     pub fn interaction(self, i: Interaction) -> Interaction {
         Interaction {
             p: self.point(i.p),
@@ -352,8 +300,7 @@ impl Transform {
             shading_dndu: self.normal(i.shading_dndu),
             shading_dndv: self.normal(i.shading_dndv),
 
-            attribute_id: i.attribute_id,
-            mesh_id: i.mesh_id,
+            material_id: i.material_id,
         }
     }
 
@@ -362,7 +309,8 @@ impl Transform {
             org: self.point(r.dir),
             dir: self.vector(r.dir),
             time: r.time,
-            max_t: r.max_t,
+            t_far: r.t_far,
+            t_near: r.t_near,
             ray_diff: match r.ray_diff {
                 Some(diff) => Some(self.ray_diff(diff)),
                 _ => None,

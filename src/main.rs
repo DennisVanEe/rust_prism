@@ -3,10 +3,12 @@
 
 #![allow(dead_code)]
 
-mod bvh;
-mod geometry;
+mod device;
+mod loading;
 mod math;
 mod memory;
+mod mesh;
+mod scene;
 mod transform;
 //mod camera;
 //mod film;
@@ -18,13 +20,15 @@ mod transform;
 //mod memory;
 //mod sampler;
 //mod scene;
-//mod scene_loading;
 //mod shading;
 //mod spectrum;
 //mod threading;
 //mod transform;
 
+const PATH: &'static str = "E:/Dev/rust_prism/test_files/sphere.ply";
+
 fn main() {
+
     // let result = file_io::ply::load_tri_mesh("E:\\apple.ply");
     // let mesh = match result {
     //     Ok(m) => m,
