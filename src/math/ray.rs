@@ -10,46 +10,57 @@ pub struct Ray<T: Float> {
     pub dir: Vec3<T>,
     /// The current time in the scene of the ray.
     pub time: T,
-    /// The parametric extent of the ray. Usually only modified by intersection routines
-    /// to allow for earlier termination.
+    /// The max extent of the ray to consider when tracing against geometry.
     pub t_far: T,
+    /// Where along the ray to start checking for intersections.
     pub t_near: T,
-
-    // The ray differential if present for this specific ray:
-    pub ray_diff: Option<RayDiff<T>>,
 }
 
 impl<T: Float> Ray<T> {
-    /// Constructs a new Ray for intersecting a scene, that is, without
-    /// a parametric restriction.
+    /// Constructs a new Ray for intersecting a scene, that is, without a parametric restriction.
     pub fn new(org: Vec3<T>, dir: Vec3<T>, time: T) -> Self {
         Ray {
             org,
             dir,
             time,
             t_far: T::infinity(),
-            t_near: T::zero(),
-            ray_diff: None,
-        }
-    }
-
-    pub fn new_diff(org: Vec3<T>, dir: Vec3<T>, time: T, ray_diff: RayDiff<T>) -> Self {
-        Ray {
-            org,
-            dir,
-            time,
-            t_far: T::infinity(),
-            t_near: T::zero(),
-            ray_diff: Some(ray_diff),
+            t_near: T::SELF_INT_COMP,
         }
     }
 
     /// Calculates a point along the ray given a parametric parameter.
-    ///
-    /// # Arguments
-    /// * `t` - The parametric parameter.
     pub fn point_at(self, t: T) -> Vec3<T> {
         self.org + self.dir.scale(t)
+    }
+}
+
+/// This ray represents a ray and ray_diff used by
+/// the camera to genarate primary rays.
+#[derive(Clone, Copy, Debug)]
+pub struct PrimaryRay<T: Float> {
+    pub ray: Ray<T>,
+    pub ray_diff: RayDiff<T>,
+}
+
+impl<T: Float> PrimaryRay<T> {
+    pub fn get_ray_dx(self) -> Ray<T> {
+        Ray {
+            org: self.ray_diff.rx_org,
+            dir: self.ray_diff.rx_dir,
+            time: self.ray.time,
+            t_far: self.ray.t_far,
+            t_near: self.ray.t_near,
+        }
+    }
+
+    pub fn get_ray_dy(self) -> Ray<T> {
+        Ray {
+            org: self.ray_diff.ry_org,
+            dir: self.ray_diff.ry_dir,
+            time: self.ray.time,
+            t_far: self.ray.t_far,
+            t_near: self.ray.t_near,
+        }
     }
 }
 

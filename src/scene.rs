@@ -1,175 +1,176 @@
-use crate::device::Device;
+use crate::embree::{
+    BuildQuality, Format, GeometryPtr, GeometryType, SceneFlags, ScenePtr, DEVICE,
+};
 use crate::math::matrix::Mat3x4;
 use crate::math::ray::Ray;
-use crate::mesh::{Interaction, Mesh};
-use crate::transform::Transform;
+use crate::mesh::{Interaction, Mesh, MeshRef};
+use crate::transform::Transf;
 use bumpalo::Bump;
-use embree;
-use simple_error::SimpleResult;
-use std::mem::MaybeUninit;
+use lazy_static::lazy_static;
+use std::mem::{self, MaybeUninit};
 use std::os::raw;
+use std::sync::Mutex;
 
-struct SceneMesh<'a> {
-    mesh: &'a Mesh,
-    material_id: u32,
+//
+// Mesh Pool
+//
+
+struct MeshPool {
+    bump: Bump,
+}
+// We have to implement this otherwise lazy_static doesn't work.
+unsafe impl Sync for MeshPool {}
+
+const NUM_MESH_PER_CHUNK: usize = 16;
+
+lazy_static! {
+    // The actual mesh pool (not to be accessed directly)
+    static ref MESH_POOL: MeshPool = {
+        MeshPool {
+            bump: Bump::with_capacity(NUM_MESH_PER_CHUNK * mem::size_of::<Mesh>()),
+        }
+    };
+    // This is what actually gets accessed (and we need it to be locked)
+    static ref LOCKED_MESH_POOL: Mutex<&'static MeshPool> = {
+        Mutex::new(&MESH_POOL)
+    };
 }
 
-pub struct Instance<'a> {
-    meshes: Vec<SceneMesh<'a>>,
-    transform: Transform,             // instance-to-world transformation
-    embree_geom: embree::RTCGeometry, // The geometry the scene belongs to (as part of the top-level)
+/// Given a mesh, allocates it onto the heap. This is thread safe and will allow multiple
+/// threads to perform this.
+pub fn allocate_mesh(mesh: Mesh) -> MeshRef<'static> {
+    let mesh_pool = LOCKED_MESH_POOL.lock().unwrap();
+    mesh_pool.bump.alloc_with(|| mesh).get_ref()
 }
 
-// A group is a collection of mesh that can be instanced:
-pub struct Group<'a> {
-    meshes: Vec<&'a Mesh>,
-    embree_scene: embree::RTCScene, // The scene the instance belongs to
+//
+// Scene
+//
+
+/// A group is a collection of mesh that can be instanced.
+pub struct Group {
+    meshes: Vec<MeshRef<'static>>,
+    /// The scene that this mesh belongs to.
+    embree_scene: ScenePtr,
 }
 
-impl<'a> Group<'a> {
-    pub fn new(device: &Device) -> SimpleResult<Self> {
-        Ok(Group {
+impl Group {
+    /// Creates a new group.
+    pub fn new() -> Self {
+        Group {
             meshes: Vec::new(),
-            embree_scene: device.new_scene()?,
-        })
+            embree_scene: DEVICE.new_scene(),
+        }
+    }
+
+    /// Adds a mesh to the group. Returns the geometry id (local to the group).
+    pub fn add_mesh(&mut self, mesh: MeshRef<'static>) -> u32 {
+        let geom_ptr = mesh.get_embree_geometry();
+        let geom_id = self.meshes.len() as u32;
+        DEVICE.attach_geometry_by_id(self.embree_scene, geom_ptr, geom_id);
+        DEVICE.commit_geometry(geom_ptr);
+        self.meshes.push(mesh);
+        geom_id
     }
 }
 
-pub struct Scene<'a> {
-    // All of the mesh reside in here:
-    mesh_pool: Bump,
-    instances: Vec<Instance<'a>>,
-    meshes: Vec<SceneMesh<'a>>,
-
-    embree_scene: embree::RTCScene,
+pub struct Scene {
+    /// A collection of the different instances.
+    instances: Vec<Instance>,
+    /// A collection of top-level meshes in the scene.
+    meshes: Vec<SceneMesh>,
+    /// A pointer to the embree scene.
+    embree_scene: ScenePtr,
 }
 
-impl<'a> Scene<'a> {
-    const NUM_MESH_PER_CHUNK: usize = 16; // Make bigger later with bigger scenes
-
-    pub fn new(device: &Device) -> SimpleResult<Self> {
-        let embree_scene = device.new_scene()?;
-
-        Ok(Scene {
-            mesh_pool: Bump::with_capacity(Self::NUM_MESH_PER_CHUNK),
+impl Scene {
+    pub fn new() -> Self {
+        Scene {
             instances: Vec::new(),
             meshes: Vec::new(),
-            embree_scene,
-        })
+            embree_scene: DEVICE.new_scene(),
+        }
     }
 
-    // Adds a toplevel mesh and returns the geomID of that mesh:
-    pub fn add_toplevel_mesh(
-        &mut self,
-        device: &Device,
-        mesh: &'a Mesh,
-        material_id: u32,
-    ) -> SimpleResult<u32> {
+    pub fn set_build_quality(&self, quality: BuildQuality) {
+        DEVICE.set_scene_build_quality(self.embree_scene, quality);
+    }
+
+    pub fn set_flags(&self, flags: SceneFlags) {
+        DEVICE.set_scene_flags(self.embree_scene, flags);
+    }
+
+    /// After adding everything, this will build the top-level BVH:
+    pub fn build_scene(&self) {
+        DEVICE.commit_scene(self.embree_scene);
+    }
+
+    /// Adds a toplevel mesh and returns the geomID of that mesh.
+    ///
+    /// Adds a toplevel mesh with the given device and material id. Returning a geomID that is used
+    /// to determine how reference it in the future. Note that these mesh should already have been
+    /// transformed and CANNOT be animated.
+    pub fn add_toplevel_mesh(&mut self, mesh: MeshRef<'static>, material_id: u32) -> u32 {
         // First create an rtc geometry of the mesh:
-        let rtcgeom = mesh.create_rtcgeom(device)?;
+        let geom_ptr = mesh.get_embree_geometry();
         let geom_id = self.meshes.len() as u32;
-        unsafe {
-            embree::rtcAttachGeometryByID(self.embree_scene, rtcgeom, geom_id);
-        }
-        device.error()?;
-        unsafe {
-            // TODO: figure out if this commit is needed here
-            embree::rtcCommitGeometry(rtcgeom);
-        }
-        device.error()?;
-
+        DEVICE.attach_geometry_by_id(self.embree_scene, geom_ptr, geom_id);
+        DEVICE.commit_geometry(geom_ptr);
         self.meshes.push(SceneMesh { mesh, material_id });
-
-        Ok(geom_id)
+        geom_id
     }
 
-    // Adds a bottomlevel mesh to the provided group and returns the geometry id specific to that mesh:
-    pub fn add_group_mesh(
-        &mut self,
-        group: &mut Group<'a>,
-        mesh: &'a Mesh,
-        device: &Device,
-    ) -> SimpleResult<u32> {
-        let rtcgeom = mesh.create_rtcgeom(device)?;
-        let geom_id = group.meshes.len() as u32;
-        unsafe {
-            embree::rtcAttachGeometryByID(group.embree_scene, rtcgeom, geom_id);
-        }
-        device.error()?;
-        group.meshes.push(mesh);
-        Ok(geom_id)
-    }
-
-    // Adds an instance to the toplevel scene. Returns the instID (geomID in the top-level scene).
-    // Pass in the material_id for each of the group mesh in the group. Must be the same length as
-    // the number of mesh in the group. Ordering is based on geom_id returned by add_group_mesh.
+    /// Given a group, adds an instance of it in the scene.
+    ///
+    /// Adds an instance to the toplevel scene. Returns the instID (geomID in the top-level scene).
+    /// Pass in the material_id for each of the group mesh in the group. Must be the same length as
+    /// the number of mesh in the group. Ordering is based on geom_id returned by add_group_mesh.
     pub fn add_group_instance(
         &mut self,
-        group: &Group<'a>,
+        group: &Group,
         material_ids: &[u32],
-        transform: Transform,
-        device: &Device,
-    ) -> SimpleResult<u32> {
+        transform: Transf,
+    ) -> u32 {
         let geom_id = (self.meshes.len() + self.instances.len()) as u32;
 
-        // We have to do this first:
-        unsafe {
-            embree::rtcCommitScene(group.embree_scene);
-        }
-        device.error()?;
+        // First we commit the scene:
+        DEVICE.commit_scene(group.embree_scene);
 
-        let rtcgeom = device.new_geometry(embree::RTCGeometryType_RTC_GEOMETRY_TYPE_INSTANCE)?;
-        unsafe {
-            embree::rtcSetGeometryInstancedScene(rtcgeom, self.embree_scene);
-        }
-        device.error()?;
-        unsafe {
-            embree::rtcSetGeometryTimeStepCount(rtcgeom, 1); // No motion-blurr support yet
-        }
-        device.error()?;
-        // Apply the transformation:
-        let xmf = transform.get_mat().to_f32();
-        unsafe {
-            embree::rtcSetGeometryTransform(
-                rtcgeom,
-                0,
-                embree::RTCFormat_RTC_FORMAT_FLOAT3X4_ROW_MAJOR,
-                (&xmf as *const Mat3x4<f32>) as *const raw::c_void,
-            );
-        }
-        device.error()?;
-        unsafe {
-            embree::rtcCommitGeometry(rtcgeom);
-        }
-        device.error()?;
-        unsafe {
-            embree::rtcAttachGeometryByID(self.embree_scene, rtcgeom, geom_id);
-        }
-        device.error()?;
+        let geom_ptr = DEVICE.new_geometry(GeometryType::Instance);
+        DEVICE.set_geometry_instance_scene(geom_ptr, group.embree_scene);
+        DEVICE.set_geometry_timestep_count(geom_ptr, 1);
 
-        // Now we create the instance information ourselves:
+        DEVICE.attach_geometry_by_id(self.embree_scene, geom_ptr, geom_id);
+
+        let mat = transform.get_frd().to_f32();
+        DEVICE.set_geometry_transform(
+            geom_ptr,
+            0,
+            Format::Float3x4RowMajor,
+            (&mat as *const Mat3x4<f32>) as *const raw::c_void,
+        );
+
+        DEVICE.commit_geometry(geom_ptr);
+
+        // Set the material id's for each mesh in the instance
         let mut meshes = Vec::with_capacity(group.meshes.len());
-        for (mesh, &material_id) in group.meshes.iter().zip(material_ids.iter()) {
+        for (&mesh, &material_id) in group.meshes.iter().zip(material_ids.iter()) {
             meshes.push(SceneMesh { mesh, material_id })
         }
 
         self.instances.push(Instance {
             meshes,
             transform,
-            embree_geom: rtcgeom,
+            embree_geom: geom_ptr,
         });
 
-        Ok(geom_id)
+        geom_id
     }
 
-    // Adds a mesh to the pool and returns a reference. Use this reference in the future
-    // everytime you want to write stuff and whatnot.
-    pub fn add_mesh(&mut self, mesh: Mesh) -> &Mesh {
-        self.mesh_pool.alloc(mesh)
-    }
-
-    // Given a ray, intersects the geometry and returns an interaction in the
-    // top-level scene space (aka world space).
+    /// Peforms an intersection, returning the interaction in world space.
+    ///
+    /// Given a ray, intersects the geometry and returns an interaction in the
+    /// top-level scene space (aka world space).
     pub fn intersect(&self, ray: Ray<f64>) -> Option<Interaction> {
         let mut context = unsafe { MaybeUninit::uninit().assume_init() };
         embree::rtcInitIntersectContext(&mut context);
@@ -194,7 +195,7 @@ impl<'a> Scene<'a> {
         rayhit.hit.geomID = embree::RTC_INVALID_GEOMETRY_ID;
         unsafe {
             embree::rtcIntersect1(
-                self.embree_scene,
+                self.embree_scene.get_raw(),
                 &mut context as *mut embree::RTCIntersectContext,
                 &mut rayhit as *mut embree::RTCRayHit,
             );
@@ -206,8 +207,10 @@ impl<'a> Scene<'a> {
         Some(self.calc_interaction(rayhit))
     }
 
-    // Performs an intersection test. Returns true if intersection worked and false
-    // if it did not work.
+    /// Performs an intersection test.
+    ///
+    /// Performs an intersection test. Returns true if intersection worked and false
+    /// if it did not work.
     pub fn intersect_test(&self, ray: Ray<f64>) -> bool {
         let mut context = unsafe { MaybeUninit::uninit().assume_init() };
         embree::rtcInitIntersectContext(&mut context);
@@ -228,7 +231,7 @@ impl<'a> Scene<'a> {
         };
         unsafe {
             embree::rtcOccluded1(
-                self.embree_scene,
+                self.embree_scene.get_raw(),
                 &mut context as *mut embree::RTCIntersectContext,
                 &mut rayhit as *mut embree::RTCRay,
             );
@@ -237,6 +240,7 @@ impl<'a> Scene<'a> {
         return rayhit.tfar == f32::NEG_INFINITY;
     }
 
+    /// Calculates the interaction given an RTCRayHit.
     fn calc_interaction(&self, rayhit: embree::RTCRayHit) -> Interaction {
         // Check if it hit a top-level mesh or a bottom-level mesh:
         let inst_id = rayhit.hit.instID[0];
@@ -267,7 +271,31 @@ impl<'a> Scene<'a> {
             };
             let interaction =
                 triangle.calc_interaction(rayhit, scene_mesh.mesh, scene_mesh.material_id);
+            // Don't forget to transform the interaction to world-space from the instance.
             instance.transform.interaction(interaction)
         }
+    }
+}
+
+/// A reference to a single mesh in the scene. It is
+/// paired with a material id for that specific mesh.
+struct SceneMesh {
+    mesh: MeshRef<'static>,
+    material_id: u32,
+}
+
+/// An instance of a mesh in the scene.
+struct Instance {
+    /// The collection of different meshes in the scene.
+    meshes: Vec<SceneMesh>,
+    /// Instance-to-world transformation.
+    transform: Transf,
+    /// The geometry the scene belongs to (as part of the top-level)
+    embree_geom: GeometryPtr,
+}
+
+impl Drop for Instance {
+    fn drop(&mut self) {
+        DEVICE.release_geometry(self.embree_geom);
     }
 }

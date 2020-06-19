@@ -2,6 +2,7 @@
 // supports.
 
 use crate::math::vector::Vec2;
+use std::hint;
 
 pub trait Filter {
     fn eval(&self, p: Vec2<f64>) -> f64;
@@ -24,7 +25,7 @@ impl BoxFilter {
 }
 
 impl Filter for BoxFilter {
-    fn eval(&self, p: Vec2<f64>) -> f64 {
+    fn eval(&self, _: Vec2<f64>) -> f64 {
         1.
     }
 
@@ -99,6 +100,7 @@ const FILTER_TABLE_WIDTH: usize = 64;
 /// The pixel filter uses the technique described here:
 /// "Filter Importance Sampling" - Manfred Ernst, Marc Stamminger, Gunther Greiner
 /// Essentially we use a filter distribution to sample points on a pixel.
+#[derive(Clone, Copy)]
 pub struct PixelFilter {
     // A CDF Py(x) that allows us to sample the x value:
     cdf_x: [f64; FILTER_TABLE_WIDTH],
@@ -187,9 +189,16 @@ impl PixelFilter {
 
     pub fn sample_pos(self, r: Vec2<f64>) -> Vec2<f64> {
         // First, we sample the x-value:
-        let x = self.cdf_x.iter().position(|&cdf| cdf > r.x).unwrap();
+        let x = match self.cdf_x.iter().position(|&cdf| cdf > r.x) {
+            Some(x) => x,
+            _ => unsafe { hint::unreachable_unchecked() },
+        };
+
         // Using this x-value, we can now find the y-value:
-        let y = self.cdf_y[x].iter().position(|&cdf| cdf >= r.y).unwrap();
+        let y = match self.cdf_y[x].iter().position(|&cdf| cdf >= r.y) {
+            Some(y) => y,
+            _ => unsafe { hint::unreachable_unchecked() },
+        };
 
         // Convert these indices to x and y coordinates:
         let x = x as f64;

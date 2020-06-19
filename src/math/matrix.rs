@@ -3,6 +3,10 @@ use crate::math::vector::{Vec3, Vec4};
 
 use std::ops::{Add, Index, Mul, Neg, Sub};
 
+/// A more memory and operation efficient way to perform affine transformations.
+///
+/// Mathematical operations are performed assuming it's a regular 4x4 matrix with the
+/// last row being [0, 0, 0, 1].
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct Mat3x4<T: Float> {
@@ -10,6 +14,28 @@ pub struct Mat3x4<T: Float> {
 }
 
 impl<T: Float> Mat3x4<T> {
+    /// Constructs a new Mat3x4 given the rows.
+    pub fn from_rows(m: [Vec4<T>; 3]) -> Self {
+        Mat3x4 { m }
+    }
+
+    pub fn from_mat4(m: Mat4<T>) -> Self {
+        Mat3x4 {
+            m: [m[0], m[1], m[2]],
+        }
+    }
+
+    pub fn from_mat3(m: Mat3<T>) -> Self {
+        Mat3x4 {
+            m: [
+                Vec4::from_vec3(m[0], T::zero()),
+                Vec4::from_vec3(m[1], T::zero()),
+                Vec4::from_vec3(m[2], T::zero()),
+            ],
+        }
+    }
+
+    /// Constructs a new Mat3x4 given a row-major array of the data.
     pub fn from_arr(m: [T; 12]) -> Self {
         let r0 = Vec4 {
             x: m[0],
@@ -32,11 +58,7 @@ impl<T: Float> Mat3x4<T> {
         Mat3x4 { m: [r0, r1, r2] }
     }
 
-    pub fn new(m: [Vec4<T>; 3]) -> Self {
-        Mat3x4 { m }
-    }
-
-    // Creates translation matrix:
+    /// Creates translation matrix.
     pub fn new_translate(trans: Vec3<T>) -> Self {
         let r0 = Vec4 {
             x: T::one(),
@@ -59,7 +81,7 @@ impl<T: Float> Mat3x4<T> {
         Mat3x4 { m: [r0, r1, r2] }
     }
 
-    // Creates a scale matrix:
+    /// Creates a scale matrix.
     pub fn new_scale(scale: Vec3<T>) -> Self {
         let r0 = Vec4 {
             x: scale.x,
@@ -82,7 +104,7 @@ impl<T: Float> Mat3x4<T> {
         Mat3x4 { m: [r0, r1, r2] }
     }
 
-    // Creates a rotation matrix:
+    /// Creates a rotation matrix.
     pub fn new_rotate(deg: T, axis: Vec3<T>) -> Self {
         let axis = axis.normalize();
         let rad = deg.to_radians();
@@ -109,7 +131,7 @@ impl<T: Float> Mat3x4<T> {
         Mat3x4 { m: [r0, r1, r2] }
     }
 
-    // Creates an identity matrix:
+    /// Creates a new identity matrix.
     pub fn new_identity() -> Self {
         let r0 = Vec4 {
             x: T::one(),
@@ -132,59 +154,52 @@ impl<T: Float> Mat3x4<T> {
         Mat3x4 { m: [r0, r1, r2] }
     }
 
-    // Not a true transpose as the result isn't
-    // a 4x3 martix. Can be used for rotations and stuff.
+    /// Performs a "transpose".
+    ///
+    /// Performs a transpose as if the matrix were a Mat4 with the last row being
+    /// [0,0,0,1]. **The 4th column will dissapeare**.
     pub fn transpose(self) -> Self {
         let r0 = Vec4 {
             x: self.m[0].x,
             y: self.m[1].x,
             z: self.m[2].x,
-            w: T::zero(), //self.m[3].x,
+            w: T::zero(),
         };
         let r1 = Vec4 {
             x: self.m[0].y,
             y: self.m[1].y,
             z: self.m[2].y,
-            w: T::zero(), //self.m[3].y,
+            w: T::zero(),
         };
         let r2 = Vec4 {
             x: self.m[0].z,
             y: self.m[1].z,
             z: self.m[2].z,
-            w: T::zero(), //self.m[3].z,
+            w: T::zero(),
         };
         Mat3x4 { m: [r0, r1, r2] }
     }
 
-    // returns a column in the matrix:
-    pub fn get_column(self, i: usize) -> Vec4<T> {
-        Vec4 {
-            x: self[0][i],
-            y: self[1][i],
-            z: self[2][i],
-            w: self[3][i],
+    /// Returns a column from the Mat3x4 matrix.
+    pub fn get_column(self, i: usize) -> Vec3<T> {
+        Vec3 {
+            x: self.m[0][i],
+            y: self.m[1][i],
+            z: self.m[2][i],
         }
     }
 
+    /// Calculates the determinant.
+    ///
+    /// Calculates the determinant assuming it's a Mat4 with the bottom row
+    /// being [0,0,0,1].
     pub fn determinant(self) -> T {
-        let a2323 = self.m[2][2]; // * self.m[3][3] - self.m[2][3] * self.m[3][2];
-        let a1323 = self.m[2][1]; // * self.m[3][3] - self.m[2][3] * self.m[3][1];
-        let a1223 = T::zero(); // self.m[2][1] * self.m[3][2] - self.m[2][2] * self.m[3][1];
-        let a0323 = self.m[2][0]; // * self.m[3][3] - self.m[2][3] * self.m[3][0];
-        let a0223 = T::zero(); // self.m[2][0] * self.m[3][2] - self.m[2][2] * self.m[3][0];
-        let a0123 = T::zero(); // self.m[2][0] * self.m[3][1] - self.m[2][1] * self.m[3][0];
-                               // let a2313 = self.m[1][2]; // * self.m[3][3] - self.m[1][3] * self.m[3][2];
-                               // let a1313 = self.m[1][1]; // * self.m[3][3] - self.m[1][3] * self.m[3][1];
-                               // let a1213 = T::zero(); // self.m[1][1] * self.m[3][2] - self.m[1][2] * self.m[3][1];
-                               // let a2312 = self.m[1][2] * self.m[2][3] - self.m[1][3] * self.m[2][2];
-                               // let a1312 = self.m[1][1] * self.m[2][3] - self.m[1][3] * self.m[2][1];
-                               // let a1212 = self.m[1][1] * self.m[2][2] - self.m[1][2] * self.m[2][1];
-                               // let a0313 = self.m[1][0]; // * self.m[3][3] - self.m[1][3] * self.m[3][0];
-                               // let a0213 = T::zero(); // self.m[1][0] * self.m[3][2] - self.m[1][2] * self.m[3][0];
-                               // let a0312 = self.m[1][0] * self.m[2][3] - self.m[1][3] * self.m[2][0];
-                               // let a0212 = self.m[1][0] * self.m[2][2] - self.m[1][2] * self.m[2][0];
-                               // let a0113 = T::zero(); // self.m[1][0] * self.m[3][1] - self.m[1][1] * self.m[3][0];
-                               // let a0112 = self.m[1][0] * self.m[2][1] - self.m[1][1] * self.m[2][0];
+        let a2323 = self.m[2][2];
+        let a1323 = self.m[2][1];
+        let a1223 = T::zero();
+        let a0323 = self.m[2][0];
+        let a0223 = T::zero();
+        let a0123 = T::zero();
 
         let inv_det = self.m[0][0]
             * (self.m[1][1] * a2323 - self.m[1][2] * a1323 + self.m[1][3] * a1223)
@@ -198,26 +213,27 @@ impl<T: Float> Mat3x4<T> {
         self.determinant() != T::zero()
     }
 
-    // Calculates the inverse of a matrix. It doesn't return a true
-    // inverse. It just assumes that the lasat row is (0, 0, 0, 1)
+    /// Calculates the inverse.
+    ///
+    /// Calculates the inverse assuming it's a Mat4 with the bottom row [0,0,0,1]
     pub fn inverse(self) -> Self {
-        let a2323 = self.m[2][2]; // * self.m[3][3] - self.m[2][3] * self.m[3][2];
-        let a1323 = self.m[2][1]; // * self.m[3][3] - self.m[2][3] * self.m[3][1];
-        let a1223 = T::zero(); // self.m[2][1] * self.m[3][2] - self.m[2][2] * self.m[3][1];
-        let a0323 = self.m[2][0]; // * self.m[3][3] - self.m[2][3] * self.m[3][0];
-        let a0223 = T::zero(); // self.m[2][0] * self.m[3][2] - self.m[2][2] * self.m[3][0];
-        let a0123 = T::zero(); // self.m[2][0] * self.m[3][1] - self.m[2][1] * self.m[3][0];
-        let a2313 = self.m[1][2]; // * self.m[3][3] - self.m[1][3] * self.m[3][2];
-        let a1313 = self.m[1][1]; // * self.m[3][3] - self.m[1][3] * self.m[3][1];
-        let a1213 = T::zero(); // self.m[1][1] * self.m[3][2] - self.m[1][2] * self.m[3][1];
+        let a2323 = self.m[2][2];
+        let a1323 = self.m[2][1];
+        let a1223 = T::zero();
+        let a0323 = self.m[2][0];
+        let a0223 = T::zero();
+        let a0123 = T::zero();
+        let a2313 = self.m[1][2];
+        let a1313 = self.m[1][1];
+        let a1213 = T::zero();
         let a2312 = self.m[1][2] * self.m[2][3] - self.m[1][3] * self.m[2][2];
         let a1312 = self.m[1][1] * self.m[2][3] - self.m[1][3] * self.m[2][1];
         let a1212 = self.m[1][1] * self.m[2][2] - self.m[1][2] * self.m[2][1];
-        let a0313 = self.m[1][0]; // * self.m[3][3] - self.m[1][3] * self.m[3][0];
-        let a0213 = T::zero(); // self.m[1][0] * self.m[3][2] - self.m[1][2] * self.m[3][0];
+        let a0313 = self.m[1][0];
+        let a0213 = T::zero();
         let a0312 = self.m[1][0] * self.m[2][3] - self.m[1][3] * self.m[2][0];
         let a0212 = self.m[1][0] * self.m[2][2] - self.m[1][2] * self.m[2][0];
-        let a0113 = T::zero(); // self.m[1][0] * self.m[3][1] - self.m[1][1] * self.m[3][0];
+        let a0113 = T::zero();
         let a0112 = self.m[1][0] * self.m[2][1] - self.m[1][1] * self.m[2][0];
 
         let inv_det = self.m[0][0]
@@ -248,17 +264,10 @@ impl<T: Float> Mat3x4<T> {
             w: det * -(self.m[0][0] * a1312 - self.m[0][1] * a0312 + self.m[0][3] * a0112),
         };
 
-        // let r3 = Vec4 {
-        //     x: det * -(self.m[1][0] * a1223 - self.m[1][1] * a0223 + self.m[1][2] * a0123),
-        //     y: det * (self.m[0][0] * a1223 - self.m[0][1] * a0223 + self.m[0][2] * a0123),
-        //     z: det * -(self.m[0][0] * a1213 - self.m[0][1] * a0213 + self.m[0][2] * a0113),
-        //     w: det * (self.m[0][0] * a1212 - self.m[0][1] * a0212 + self.m[0][2] * a0112),
-        // };
-
         Mat3x4 { m: [r0, r1, r2] }
     }
 
-    // Multiplies the vector as if it's w component was one
+    /// Multiplies the vector as if it's w component was one.
     pub fn mul_vec_one(self, vec: Vec3<T>) -> Vec3<T> {
         let x = self.m[0].dot_one(vec);
         let y = self.m[1].dot_one(vec);
@@ -266,7 +275,7 @@ impl<T: Float> Mat3x4<T> {
         Vec3 { x, y, z }
     }
 
-    // Multiplies the vector as if it's w component was a zero
+    /// Multiplies the vector as if it's w component was a zero.
     pub fn mul_vec_zero(self, vec: Vec3<T>) -> Vec3<T> {
         let x = self.m[0].dot_zero(vec);
         let y = self.m[1].dot_zero(vec);
@@ -274,28 +283,32 @@ impl<T: Float> Mat3x4<T> {
         Vec3 { x, y, z }
     }
 
+    /// Scales all of the components of the matrix by `s`.
     pub fn scale(self, s: T) -> Self {
         Mat3x4 {
             m: [self.m[0].scale(s), self.m[1].scale(s), self.m[2].scale(s)],
         }
     }
 
-    pub fn lerp(self, m1: Self, time: T) -> Self {
+    /// Performs a linear interpolation of each component by the given `t`.
+    pub fn lerp(self, m1: Self, t: T) -> Self {
         Mat3x4 {
             m: [
-                self[0].lerp(m1[0], time),
-                self[1].lerp(m1[1], time),
-                self[2].lerp(m1[2], time),
+                self[0].lerp(m1[0], t),
+                self[1].lerp(m1[1], t),
+                self[2].lerp(m1[2], t),
             ],
         }
     }
 
+    /// Casts each component of the matrix to a f32.
     pub fn to_f32(self) -> Mat3x4<f32> {
         Mat3x4 {
             m: [self.m[0].to_f32(), self.m[1].to_f32(), self.m[2].to_f32()],
         }
     }
 
+    /// Casts each component of the matrix to a f64.
     pub fn to_f64(self) -> Mat3x4<f64> {
         Mat3x4 {
             m: [self.m[0].to_f64(), self.m[1].to_f64(), self.m[2].to_f64()],
@@ -350,22 +363,22 @@ impl<T: Float> Mul for Mat3x4<T> {
     // Not a true mulitplication.
     fn mul(self, o: Mat3x4<T>) -> Mat3x4<T> {
         let r0 = Vec4 {
-            x: self.m[0].dot(o.m[0]),
-            y: self.m[0].dot(o.m[1]),
-            z: self.m[0].dot(o.m[2]),
-            w: self.m[0].w, //dot(o.m[3]),
+            x: self.m[0].dot_zero(o.get_column(0)),
+            y: self.m[0].dot_zero(o.get_column(1)),
+            z: self.m[0].dot_zero(o.get_column(2)),
+            w: self.m[0].dot_one(o.get_column(3)),
         };
         let r1 = Vec4 {
-            x: self.m[1].dot(o.m[0]),
-            y: self.m[1].dot(o.m[1]),
-            z: self.m[1].dot(o.m[2]),
-            w: self.m[1].w, //.dot(o.m[3]),
+            x: self.m[1].dot_zero(o.get_column(0)),
+            y: self.m[1].dot_zero(o.get_column(1)),
+            z: self.m[1].dot_zero(o.get_column(2)),
+            w: self.m[1].dot_one(o.get_column(3)),
         };
         let r2 = Vec4 {
-            x: self.m[2].dot(o.m[0]),
-            y: self.m[2].dot(o.m[1]),
-            z: self.m[2].dot(o.m[2]),
-            w: self.m[2].w, //.dot(o.m[3]),
+            x: self.m[2].dot_zero(o.get_column(0)),
+            y: self.m[2].dot_zero(o.get_column(1)),
+            z: self.m[2].dot_zero(o.get_column(2)),
+            w: self.m[2].dot_one(o.get_column(3)),
         };
 
         Mat3x4 { m: [r0, r1, r2] }
@@ -379,6 +392,12 @@ pub struct Mat4<T: Float> {
 }
 
 impl<T: Float> Mat4<T> {
+    /// Creates a matrix given a set of rows.
+    pub fn from_rows(m: [Vec4<T>; 4]) -> Self {
+        Mat4 { m }
+    }
+
+    /// Creates a matrix given a Mat3. Sets last row to [0,0,0,1].
     pub fn from_mat3x4(m: Mat3x4<T>) -> Self {
         Mat4 {
             m: [
@@ -395,6 +414,25 @@ impl<T: Float> Mat4<T> {
         }
     }
 
+    /// Creates a matrix given a Mat3. Fills last column with zeroes and
+    /// sets last row to [0,0,0,1].
+    pub fn from_mat3(m: Mat3<T>) -> Self {
+        Mat4 {
+            m: [
+                Vec4::from_vec3(m[0], T::zero()),
+                Vec4::from_vec3(m[1], T::zero()),
+                Vec4::from_vec3(m[2], T::zero()),
+                Vec4 {
+                    x: T::zero(),
+                    y: T::zero(),
+                    z: T::zero(),
+                    w: T::one(),
+                },
+            ],
+        }
+    }
+
+    /// Creates a new matrix given a row-major matrix.
     pub fn from_arr(m: [T; 16]) -> Self {
         let r0 = Vec4 {
             x: m[0],
@@ -425,11 +463,7 @@ impl<T: Float> Mat4<T> {
         }
     }
 
-    pub fn new(m: [Vec4<T>; 4]) -> Self {
-        Mat4 { m }
-    }
-
-    // Creates translation matrix:
+    /// Creates translation matrix.
     pub fn new_translate(trans: Vec3<T>) -> Self {
         let r0 = Vec4 {
             x: T::one(),
@@ -460,7 +494,7 @@ impl<T: Float> Mat4<T> {
         }
     }
 
-    // Creates a scale matrix:
+    /// Creates a scale matrix.
     pub fn new_scale(scale: Vec3<T>) -> Self {
         let r0 = Vec4 {
             x: scale.x,
@@ -491,8 +525,9 @@ impl<T: Float> Mat4<T> {
         }
     }
 
+    /// Creates a perspectiev projection matrix.
     pub fn new_perspective(fov: T, near: T, far: T) -> Self {
-        let perspective = Mat4::new([
+        let perspective = Mat4::from_rows([
             Vec4 {
                 x: T::one(),
                 y: T::zero(),
@@ -519,7 +554,7 @@ impl<T: Float> Mat4<T> {
             },
         ]);
         // Calculate the FOV information:
-        let inv_tan_angle = T::one() / (fov.to_radians() / (T::one() + T::one())).tan();
+        let inv_tan_angle = T::one() / (fov.to_radians() * T::half()).tan();
         // Calculate the scale used:
         let scale_mat = Self::new_scale(Vec3 {
             x: inv_tan_angle,
@@ -530,7 +565,7 @@ impl<T: Float> Mat4<T> {
         scale_mat * perspective
     }
 
-    // Creates a rotation matrix:
+    /// Creates a rotation matrix. Angles in degrees.
     pub fn new_rotate(deg: T, axis: Vec3<T>) -> Self {
         let axis = axis.normalize();
         let rad = deg.to_radians();
@@ -565,7 +600,7 @@ impl<T: Float> Mat4<T> {
         }
     }
 
-    // Creates an identity matrix:
+    /// Creates an identity matrix.
     pub fn new_identity() -> Self {
         let r0 = Vec4 {
             x: T::one(),
@@ -596,6 +631,7 @@ impl<T: Float> Mat4<T> {
         }
     }
 
+    /// Transposes the matrix.
     pub fn transpose(self) -> Self {
         let r0 = Vec4 {
             x: self.m[0].x,
@@ -626,18 +662,33 @@ impl<T: Float> Mat4<T> {
         }
     }
 
-    // returns a column in the matrix:
+    /// Returns a column from the vector.
     pub fn get_column(self, i: usize) -> Vec4<T> {
         Vec4 {
-            x: self[0][i],
-            y: self[1][i],
-            z: self[2][i],
-            w: self[3][i],
+            x: self.m[0][i],
+            y: self.m[1][i],
+            z: self.m[2][i],
+            w: self.m[3][i],
         }
     }
 
-    // Calculates the inverse of a matrix. Note that, because
-    // the inverse can be undefined, it retuns an option.
+    pub fn determinant(self) -> T {
+        let a2323 = self.m[2][2] * self.m[3][3] - self.m[2][3] * self.m[3][2];
+        let a1323 = self.m[2][1] * self.m[3][3] - self.m[2][3] * self.m[3][1];
+        let a1223 = self.m[2][1] * self.m[3][2] - self.m[2][2] * self.m[3][1];
+        let a0323 = self.m[2][0] * self.m[3][3] - self.m[2][3] * self.m[3][0];
+        let a0223 = self.m[2][0] * self.m[3][2] - self.m[2][2] * self.m[3][0];
+        let a0123 = self.m[2][0] * self.m[3][1] - self.m[2][1] * self.m[3][0];
+
+        let inv_det = self.m[0][0]
+            * (self.m[1][1] * a2323 - self.m[1][2] * a1323 + self.m[1][3] * a1223)
+            - self.m[0][1] * (self.m[1][0] * a2323 - self.m[1][2] * a0323 + self.m[1][3] * a0223)
+            + self.m[0][2] * (self.m[1][0] * a1323 - self.m[1][1] * a0323 + self.m[1][3] * a0123)
+            - self.m[0][3] * (self.m[1][0] * a1223 - self.m[1][1] * a0223 + self.m[1][2] * a0123);
+        T::one() / inv_det
+    }
+
+    /// Calculates the inverse. If it's not invertible, undefined what will happen.
     pub fn inverse(self) -> Self {
         let a2323 = self.m[2][2] * self.m[3][3] - self.m[2][3] * self.m[3][2];
         let a1323 = self.m[2][1] * self.m[3][3] - self.m[2][3] * self.m[3][1];
@@ -698,7 +749,7 @@ impl<T: Float> Mat4<T> {
         }
     }
 
-    /// Performs a matrix multiplication with a vector in a generic manner:
+    /// Performs a matrix multiplication with a vector.
     pub fn mul_vec(self, vec: Vec4<T>) -> Vec4<T> {
         let x = vec.dot(self.m[0]);
         let y = vec.dot(self.m[1]);
@@ -707,6 +758,13 @@ impl<T: Float> Mat4<T> {
         Vec4 { x, y, z, w }
     }
 
+    /// Multiples a vector and divides by the w component, assuming vec has `w = 1.0`
+    pub fn mul_vec_proj(self, vec: Vec3<T>) -> Vec3<T> {
+        let v = self.mul_vec(Vec4::from_vec3(vec, T::one()));
+        Vec3::from_vec4(v).scale(T::one() / v.w)
+    }
+
+    /// Performs a matrix multiplication with a vector as if it were a Vec4 with `w = 1`.
     pub fn mul_vec_one(self, vec: Vec3<T>) -> Vec3<T> {
         let x = self.m[0].dot_one(vec);
         let y = self.m[1].dot_one(vec);
@@ -714,6 +772,7 @@ impl<T: Float> Mat4<T> {
         Vec3 { x, y, z }
     }
 
+    /// Performs a matrix multiplication with a vector as if it were a Vec4 with `w = 0`.
     pub fn mul_vec_zero(self, vec: Vec3<T>) -> Vec3<T> {
         let x = self.m[0].dot_zero(vec);
         let y = self.m[1].dot_zero(vec);
@@ -796,28 +855,28 @@ impl<T: Float> Mul for Mat4<T> {
 
     fn mul(self, o: Mat4<T>) -> Mat4<T> {
         let r0 = Vec4 {
-            x: self.m[0].dot(o.m[0]),
-            y: self.m[0].dot(o.m[1]),
-            z: self.m[0].dot(o.m[2]),
-            w: self.m[0].dot(o.m[3]),
+            x: self.m[0].dot(o.get_column(0)),
+            y: self.m[0].dot(o.get_column(1)),
+            z: self.m[0].dot(o.get_column(2)),
+            w: self.m[0].dot(o.get_column(3)),
         };
         let r1 = Vec4 {
-            x: self.m[1].dot(o.m[0]),
-            y: self.m[1].dot(o.m[1]),
-            z: self.m[1].dot(o.m[2]),
-            w: self.m[1].dot(o.m[3]),
+            x: self.m[1].dot(o.get_column(0)),
+            y: self.m[1].dot(o.get_column(1)),
+            z: self.m[1].dot(o.get_column(2)),
+            w: self.m[1].dot(o.get_column(3)),
         };
         let r2 = Vec4 {
-            x: self.m[2].dot(o.m[0]),
-            y: self.m[2].dot(o.m[1]),
-            z: self.m[2].dot(o.m[2]),
-            w: self.m[2].dot(o.m[3]),
+            x: self.m[2].dot(o.get_column(0)),
+            y: self.m[2].dot(o.get_column(1)),
+            z: self.m[2].dot(o.get_column(2)),
+            w: self.m[2].dot(o.get_column(3)),
         };
         let r3 = Vec4 {
-            x: self.m[3].dot(o.m[0]),
-            y: self.m[3].dot(o.m[1]),
-            z: self.m[3].dot(o.m[2]),
-            w: self.m[3].dot(o.m[3]),
+            x: self.m[3].dot(o.get_column(0)),
+            y: self.m[3].dot(o.get_column(1)),
+            z: self.m[3].dot(o.get_column(2)),
+            w: self.m[3].dot(o.get_column(3)),
         };
 
         Mat4 {

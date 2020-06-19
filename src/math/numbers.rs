@@ -5,7 +5,7 @@ use num_traits;
 
 // This is my own float trait versus the num_traits' one:
 
-pub trait Float: num_traits::Float + num_traits::Bounded {
+pub trait Float: num_traits::Float + num_traits::Bounded + num_traits::sign::Signed {
     const PI: Self;
     const INV_PI: Self;
     const INV_2PI: Self;
@@ -27,6 +27,9 @@ pub trait Float: num_traits::Float + num_traits::Bounded {
 
     fn to_f32(self) -> f32;
     fn to_f64(self) -> f64;
+
+    fn from_f32(v: f32) -> Self;
+    fn from_f64(v: f64) -> Self;
 }
 
 impl Float for f32 {
@@ -41,11 +44,11 @@ impl Float for f32 {
     const SELF_INT_COMP: f32 = 0.00001;
 
     fn two() -> f32 {
-        2f32
+        2.0
     }
 
     fn half() -> f32 {
-        0.5f32
+        0.5
     }
 
     fn to_f32(self) -> f32 {
@@ -54,6 +57,14 @@ impl Float for f32 {
 
     fn to_f64(self) -> f64 {
         self as f64
+    }
+
+    fn from_f32(v: f32) -> f32 {
+        v
+    }
+
+    fn from_f64(v: f64) -> f32 {
+        v as f32
     }
 }
 
@@ -82,5 +93,13 @@ impl Float for f64 {
 
     fn to_f64(self) -> f64 {
         self
+    }
+
+    fn from_f32(v: f32) -> f64 {
+        v as f64
+    }
+
+    fn from_f64(v: f64) -> f64 {
+        v
     }
 }

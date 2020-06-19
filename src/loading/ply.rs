@@ -1,9 +1,7 @@
 use crate::math::vector::{Vec2, Vec3};
 use crate::mesh::{Mesh, Triangle};
-
 use rply;
 use simple_error::{bail, SimpleResult};
-
 use std::ffi::{CStr, CString};
 use std::mem::MaybeUninit;
 use std::os::raw;
@@ -130,6 +128,7 @@ extern "C" fn index_cb(argument: rply::p_ply_argument) -> raw::c_int {
     1
 }
 
+/// Loads the mesh at the designated path:
 pub fn load_mesh(path: &str) -> SimpleResult<Mesh> {
     let file = if let Ok(cstr_path) = CString::new(path) {
         unsafe { rply::ply_open(cstr_path.as_ptr(), Some(error_cb), 0, ptr::null_mut()) }
@@ -216,7 +215,9 @@ pub fn load_mesh(path: &str) -> SimpleResult<Mesh> {
     if has_x == 0 || has_y == 0 || has_z == 0 {
         bail!("No position information in the PLY file at: {}", path);
     }
-    // Make sure to reserve space for one more:
+
+    // Make sure to reserve space for one more. This is needed because
+    // embree needs to access vertex data is groups of 4.
     poss.reserve_exact(num_vertices + 1);
     unsafe {
         poss.set_len(num_vertices + 1);
@@ -422,7 +423,7 @@ pub fn load_mesh(path: &str) -> SimpleResult<Mesh> {
     let result = unsafe { rply::ply_read(file) };
 
     // First check if there were any issues we can deduce:
-    if indices.all_triangles {
+    if !indices.all_triangles {
         bail!("Non triangular face detected in PLY file at: {}", path)
     }
 

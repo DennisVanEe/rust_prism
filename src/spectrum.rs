@@ -32,6 +32,14 @@ impl RGBSpectrum {
         }
     }
 
+    pub fn white() -> Self {
+        RGBSpectrum {
+            r: 1.,
+            g: 1.,
+            b: 1.,
+        }
+    }
+
     pub fn from_scalar(s: f64) -> Self {
         RGBSpectrum { r: s, g: s, b: s }
     }

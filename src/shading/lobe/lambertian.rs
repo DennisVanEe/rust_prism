@@ -1,5 +1,5 @@
 use crate::math::numbers::Float;
-use crate::math::vector::{Vec2, Vec3};
+use crate::math::vector::Vec3;
 use crate::shading::lobe::{Lobe, LobeType};
 use crate::spectrum::RGBSpectrum;
 
@@ -21,7 +21,8 @@ impl LambertianReflection {
 }
 
 impl Lobe for LambertianReflection {
-    fn matches_type(&self, lobe_type: LobeType) -> bool {
+    // Checks if the types are contained
+    fn contains_type(&self, lobe_type: LobeType) -> bool {
         Self::LOBE_TYPE.contains(lobe_type)
     }
 
@@ -33,13 +34,13 @@ impl Lobe for LambertianReflection {
         self.r_scale.scale(f64::INV_PI)
     }
 
-    fn rho_hd(&self, wo: Vec3<f64>, samples: &[Vec2<f64>]) -> RGBSpectrum {
-        self.r_scale
-    }
+    // fn rho_hd(&self, wo: Vec3<f64>, samples: &[Vec2<f64>]) -> RGBSpectrum {
+    //     self.r_scale
+    // }
 
-    fn rho_hh(&self, samples0: &[Vec2<f64>], samples1: &[Vec2<f64>]) -> RGBSpectrum {
-        self.r_scale
-    }
+    // fn rho_hh(&self, samples0: &[Vec2<f64>], samples1: &[Vec2<f64>]) -> RGBSpectrum {
+    //     self.r_scale
+    // }
 }
 
 //
@@ -59,7 +60,7 @@ impl LambertianTransmission {
 }
 
 impl Lobe for LambertianTransmission {
-    fn matches_type(&self, lobe_type: LobeType) -> bool {
+    fn contains_type(&self, lobe_type: LobeType) -> bool {
         Self::LOBE_TYPE.contains(lobe_type)
     }
 
@@ -71,11 +72,11 @@ impl Lobe for LambertianTransmission {
         self.t_scale.scale(f64::INV_PI)
     }
 
-    fn rho_hd(&self, wo: Vec3<f64>, samples: &[Vec2<f64>]) -> RGBSpectrum {
-        self.t_scale
-    }
+    // fn rho_hd(&self, wo: Vec3<f64>, samples: &[Vec2<f64>]) -> RGBSpectrum {
+    //     self.t_scale
+    // }
 
-    fn rho_hh(&self, samples0: &[Vec2<f64>], samples1: &[Vec2<f64>]) -> RGBSpectrum {
-        self.t_scale
-    }
+    // fn rho_hh(&self, samples0: &[Vec2<f64>], samples1: &[Vec2<f64>]) -> RGBSpectrum {
+    //     self.t_scale
+    // }
 }

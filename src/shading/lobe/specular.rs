@@ -181,7 +181,7 @@ impl<F: Fresnel> SpecularReflection<F> {
 }
 
 impl<F: Fresnel> Lobe for SpecularReflection<F> {
-    fn matches_type(&self, lobe_type: LobeType) -> bool {
+    fn contains_type(&self, lobe_type: LobeType) -> bool {
         Self::LOBE_TYPE.contains(lobe_type)
     }
 
@@ -249,7 +249,7 @@ impl SpecularTransmission {
 }
 
 impl Lobe for SpecularTransmission {
-    fn matches_type(&self, lobe_type: LobeType) -> bool {
+    fn contains_type(&self, lobe_type: LobeType) -> bool {
         Self::LOBE_TYPE.contains(lobe_type)
     }
 
@@ -339,7 +339,7 @@ impl SpecularFresnal {
 }
 
 impl Lobe for SpecularFresnal {
-    fn matches_type(&self, fl: LobeType) -> bool {
+    fn contains_type(&self, fl: LobeType) -> bool {
         Self::LOBE_TYPE.contains(fl)
     }
 

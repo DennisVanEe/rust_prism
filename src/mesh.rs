@@ -1,15 +1,11 @@
-use crate::device::Device;
+use crate::embree::{BufferType, Format, GeometryPtr, GeometryType, DEVICE};
 use crate::math::util;
 use crate::math::vector::{Vec2, Vec3};
-use crate::transform::Transform;
-use embree;
-use simple_error::SimpleResult;
-use std::cell::Cell;
+use crate::transform::Transf;
 use std::mem;
 use std::os::raw;
-use std::ptr;
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct Interaction {
     pub p: Vec3<f64>,  // intersection point
     pub n: Vec3<f64>,  // geometric normal (of triangle)
@@ -30,7 +26,7 @@ pub struct Interaction {
     pub material_id: u32, // An index to the material specified with this interaction
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct Triangle {
     pub indices: [u32; 3],
 }
@@ -39,7 +35,7 @@ impl Triangle {
     pub fn calc_interaction(
         self,
         rayhit: embree::RTCRayHit,
-        mesh: &Mesh,
+        mesh: MeshRef,
         material_id: u32,
     ) -> Interaction {
         // Calculate the barycentric coordinate:
@@ -54,7 +50,8 @@ impl Triangle {
             x: rayhit.hit.Ng_x as f64,
             y: rayhit.hit.Ng_y as f64,
             z: rayhit.hit.Ng_z as f64,
-        };
+        }
+        .normalize();
 
         let t = rayhit.ray.tfar as f64;
 
@@ -135,14 +132,14 @@ impl Triangle {
         }
     }
 
-    pub fn area(self, mesh: &Mesh) -> f64 {
+    pub fn area(self, mesh: MeshRef) -> f64 {
         let pos = self.pos(mesh);
         let a = pos[1] - pos[0];
         let b = pos[2] - pos[0];
         a.cross(b).length() * 0.5
     }
 
-    pub fn pos(self, mesh: &Mesh) -> [Vec3<f64>; 3] {
+    pub fn pos(self, mesh: MeshRef) -> [Vec3<f64>; 3] {
         unsafe {
             [
                 mesh.pos.get_unchecked(self.indices[0] as usize).to_f64(),
@@ -152,7 +149,7 @@ impl Triangle {
         }
     }
 
-    pub unsafe fn nrm(self, mesh: &Mesh) -> [Vec3<f64>; 3] {
+    pub unsafe fn nrm(self, mesh: MeshRef) -> [Vec3<f64>; 3] {
         [
             mesh.nrm.get_unchecked(self.indices[0] as usize).to_f64(),
             mesh.nrm.get_unchecked(self.indices[1] as usize).to_f64(),
@@ -160,7 +157,7 @@ impl Triangle {
         ]
     }
 
-    pub unsafe fn tan(self, mesh: &Mesh) -> [Vec3<f64>; 3] {
+    pub unsafe fn tan(self, mesh: MeshRef) -> [Vec3<f64>; 3] {
         [
             mesh.tan.get_unchecked(self.indices[0] as usize).to_f64(),
             mesh.tan.get_unchecked(self.indices[1] as usize).to_f64(),
@@ -168,7 +165,7 @@ impl Triangle {
         ]
     }
 
-    pub unsafe fn uvs(self, mesh: &Mesh) -> [Vec2<f64>; 3] {
+    pub unsafe fn uvs(self, mesh: MeshRef) -> [Vec2<f64>; 3] {
         [
             mesh.uvs.get_unchecked(self.indices[0] as usize).to_f64(),
             mesh.uvs.get_unchecked(self.indices[1] as usize).to_f64(),
@@ -177,7 +174,32 @@ impl Triangle {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Copy, Debug)]
+pub struct MeshRef<'a> {
+    pub triangles: &'a [Triangle],
+
+    pub pos: &'a [Vec3<f32>],
+    pub nrm: &'a [Vec3<f32>],
+    pub tan: &'a [Vec3<f32>],
+    pub uvs: &'a [Vec2<f32>],
+
+    // The surface area of the mesh.
+    surface_area: f64,
+
+    // A pointer to the geometry in embree.
+    embree_geometry: GeometryPtr,
+}
+
+impl<'a> MeshRef<'a> {
+    pub fn get_surface_area(self) -> f64 {
+        self.surface_area
+    }
+
+    pub fn get_embree_geometry(self) -> GeometryPtr {
+        self.embree_geometry
+    }
+}
+
 pub struct Mesh {
     pub triangles: Vec<Triangle>,
 
@@ -186,9 +208,11 @@ pub struct Mesh {
     pub tan: Vec<Vec3<f32>>,
     pub uvs: Vec<Vec2<f32>>,
 
-    surface_area: Cell<Option<f64>>,
+    // The surface area of the mesh.
+    surface_area: f64,
 
-    rtcgeom: Cell<Option<embree::RTCGeometry>>,
+    // A pointer to the geometry in embree.
+    embree_geometry: GeometryPtr,
 }
 
 impl Mesh {
@@ -205,111 +229,92 @@ impl Mesh {
             nrm,
             tan,
             uvs,
-            surface_area: Cell::new(None),
-            rtcgeom: Cell::new(None),
+            surface_area: -1.0,
+            embree_geometry: GeometryPtr::new_null(),
         }
     }
 
-    // Changes the underlying data by applying the provided transformation
-    // to transform the points, tangents and normals.
-    pub fn transform(&mut self, transform: Transform) {
-        transform.points_f32(&mut self.pos);
-        transform.vectors_f32(&mut self.tan);
-        transform.normals_f32(&mut self.nrm);
+    /// Permanently applies the transformation to the data of the mesh.
+    pub fn transform(&mut self, transf: Transf) {
+        transf.points_f32(&mut self.pos);
+        transf.vectors_f32(&mut self.tan);
+        transf.normals_f32(&mut self.nrm);
     }
 
-    pub fn surface_area(&self) -> f64 {
-        if let Some(sa) = self.surface_area.get() {
-            return sa;
+    /// Returns the current RTCGeometry.
+    pub fn get_embree_geometry(&self) -> GeometryPtr {
+        self.embree_geometry
+    }
+
+    /// Creates the embree geometry for this specific mesh.
+    ///
+    /// Creates the embree geometry. Can be called multiple times, will only create
+    /// the geometry once.
+    pub fn create_embree_geometry(&mut self) -> GeometryPtr {
+        self.delete_embree_geometry();
+
+        let embree_geometry = DEVICE.new_geometry(GeometryType::Triangle);
+        DEVICE.set_shared_geometry_buffer(
+            embree_geometry,
+            BufferType::Vertex,
+            0,
+            Format::Float3,
+            self.pos.as_ptr() as *const raw::c_void,
+            0,
+            mem::size_of::<Vec3<f32>>(),
+            self.pos.len() - 1, // See why we allocate one extra pos at the end
+        );
+        DEVICE.set_shared_geometry_buffer(
+            embree_geometry,
+            BufferType::Index,
+            0,
+            Format::Uint3,
+            self.triangles.as_ptr() as *const raw::c_void,
+            0,
+            mem::size_of::<Triangle>(),
+            self.triangles.len(),
+        );
+
+        self.embree_geometry = embree_geometry;
+        embree_geometry
+    }
+
+    pub fn delete_embree_geometry(&mut self) {
+        if self.embree_geometry.is_null() {
+            return;
         }
 
-        let sa = self
+        DEVICE.release_geometry(self.embree_geometry);
+        self.embree_geometry = GeometryPtr::new_null();
+    }
+
+    pub fn get_surface_area(&self) -> f64 {
+        self.surface_area
+    }
+
+    /// Calculates the surface area of the specific mesh.
+    pub fn calc_surface_area(&mut self) -> f64 {
+        if self.surface_area >= 0.0 {
+            return self.surface_area;
+        }
+
+        let mesh_ref = self.get_ref();
+        self.surface_area = self
             .triangles
             .iter()
-            .fold(0.0, |sa, triangle| sa + triangle.area(self));
-
-        self.surface_area.set(Some(sa));
-        sa
+            .fold(0.0, |sa, triangle| sa + triangle.area(mesh_ref));
+        self.surface_area
     }
 
-    // Disables the mesh (it won't be rendered). Is a noop if it was never committed to an rtcgeom
-    pub fn disable_mesh(&self) {
-        if let Some(rtcgeom) = self.rtcgeom.get() {
-            unsafe {
-                embree::rtcDisableGeometry(rtcgeom);
-            }
-        }
-    }
-
-    // Enables the mesh (it'll be rendered)
-    pub fn enable_mesh(&self) {
-        if let Some(rtcgeom) = self.rtcgeom.get() {
-            unsafe {
-                embree::rtcEnableGeometry(rtcgeom);
-            }
-        }
-    }
-
-    pub fn get_rtcgeom(&self) -> embree::RTCGeometry {
-        if let Some(rtcgeom) = self.rtcgeom.get() {
-            rtcgeom
-        } else {
-            ptr::null_mut()
-        }
-    }
-
-    // Retrieve the geometry information for a specific mesh:
-    pub fn create_rtcgeom(&self, device: &Device) -> SimpleResult<embree::RTCGeometry> {
-        // Check if it was already created for this specific mesh:
-        if let Some(rtcgeom) = self.rtcgeom.get() {
-            return Ok(rtcgeom);
-        }
-
-        let rtcgeom = device.new_geometry(embree::RTCGeometryType_RTC_GEOMETRY_TYPE_TRIANGLE)?;
-
-        // Set the buffers:
-        unsafe {
-            embree::rtcSetSharedGeometryBuffer(
-                rtcgeom,
-                embree::RTCBufferType_RTC_BUFFER_TYPE_INDEX,
-                0,
-                embree::RTCFormat_RTC_FORMAT_UINT3,
-                self.triangles.as_ptr() as *const raw::c_void,
-                0,                                            // offset
-                mem::size_of::<Triangle>() as embree::size_t, // stride
-                self.triangles.len() as embree::size_t,       // number of elements
-            );
-        }
-        device.error()?;
-
-        unsafe {
-            embree::rtcSetSharedGeometryBuffer(
-                rtcgeom,
-                embree::RTCBufferType_RTC_BUFFER_TYPE_VERTEX,
-                0,
-                embree::RTCFormat_RTC_FORMAT_FLOAT3,
-                self.pos.as_ptr() as *const raw::c_void,
-                0,                                             // offset
-                mem::size_of::<Vec3<f32>>() as embree::size_t, // stride
-                // We subtract 1 because we need extra floats at the end for embree to
-                // access the data with simd registers.
-                (self.pos.len() - 1) as embree::size_t,
-            );
-        }
-        device.error()?;
-
-        self.rtcgeom.set(Some(rtcgeom));
-        Ok(rtcgeom)
-    }
-}
-
-impl Drop for Mesh {
-    fn drop(&mut self) {
-        if let Some(rtcgeom) = self.rtcgeom.get() {
-            unsafe {
-                embree::rtcReleaseGeometry(rtcgeom);
-            }
-            self.rtcgeom.set(None);
+    pub fn get_ref(&self) -> MeshRef {
+        MeshRef {
+            triangles: &self.triangles,
+            pos: &self.pos,
+            nrm: &self.nrm,
+            tan: &self.tan,
+            uvs: &self.uvs,
+            surface_area: self.surface_area,
+            embree_geometry: self.embree_geometry,
         }
     }
 }

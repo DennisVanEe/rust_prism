@@ -28,7 +28,7 @@ impl OrenNayar {
 }
 
 impl Lobe for OrenNayar {
-    fn matches_type(&self, fl: LobeType) -> bool {
+    fn contains_type(&self, fl: LobeType) -> bool {
         Self::LOBE_TYPE.contains(fl)
     }
 

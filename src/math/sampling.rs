@@ -53,7 +53,7 @@ pub fn concentric_sample_disk<T: Float>(u: Vec2<T>) -> Vec2<T> {
     }
 }
 
-pub fn cos_sample_sphere<T: Float>(u: Vec2<T>) -> Vec3<T> {
+pub fn cos_sample_hemisphere<T: Float>(u: Vec2<T>) -> Vec3<T> {
     let d = concentric_sample_disk(u);
     let z = T::zero().max(T::one() - d.x * d.x - d.y * d.y).sqrt();
     Vec3 { x: d.x, y: d.y, z }

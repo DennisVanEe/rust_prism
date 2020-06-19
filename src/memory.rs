@@ -34,9 +34,7 @@ pub unsafe fn uninit_vec<T>(size: usize) -> Vec<T> {
 
 // Allows different types to have their pointers compared:
 pub fn is_ptr_same<T0: ?Sized, T1: ?Sized>(a: &T0, b: &T1) -> bool {
-    unsafe {
-        let bptr = b as *const T1;
-        let bptr: *const T0 = mem::transmute_copy(&bptr);
-        ptr::eq(a, bptr)
-    }
+    let ap = a as *const T0 as usize;
+    let bp = b as *const T1 as usize;
+    ap == bp
 }

@@ -105,9 +105,7 @@ impl<T: Float> Quat<T> {
         let wy = self.xyz.y * self.w;
         let wz = self.xyz.z * self.w;
 
-        // I know this is dumb, I'll figure something out for
-        // this later:
-        let two = T::from::<f64>(2.0).unwrap();
+        let two = T::from_f64(2.0);
 
         let r0 = Vec4 {
             x: T::one() - two * (y2 + z2),
@@ -137,7 +135,7 @@ impl<T: Float> Quat<T> {
             w: T::one(),
         };
 
-        Mat4::new([r0, r1, r2, r3])
+        Mat4::from_rows([r0, r1, r2, r3])
     }
 
     pub fn to_mat3x4(self) -> Mat3x4<T> {
@@ -153,9 +151,7 @@ impl<T: Float> Quat<T> {
         let wy = self.xyz.y * self.w;
         let wz = self.xyz.z * self.w;
 
-        // I know this is dumb, I'll figure something out for
-        // this later:
-        let two = T::from::<f64>(2.0).unwrap();
+        let two = T::from_f64(2.0);
 
         let r0 = Vec4 {
             x: T::one() - two * (y2 + z2),
@@ -178,13 +174,13 @@ impl<T: Float> Quat<T> {
             w: T::zero(),
         };
 
-        Mat3x4::new([r0, r1, r2])
+        Mat3x4::from_rows([r0, r1, r2])
     }
 
     pub fn slerp(self, q2: Self, t: T) -> Self {
         let cos_theta = self.dot(q2);
         // This constant is used in pbrt. So I'll just use it here:
-        if cos_theta > T::from::<f32>(0.9995f32).unwrap() {
+        if cos_theta > T::from_f64(0.9995) {
             (self.scale(T::one() - t) + q2.scale(t)).normalize()
         } else {
             let theta = clamp(cos_theta, -T::one(), T::one()).acos();
