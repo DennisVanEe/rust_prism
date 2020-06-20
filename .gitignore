@@ -11,3 +11,6 @@ Cargo.lock
 
 # This is all of the vscode stuff we don't want:
 /.vscode/
+
+# This is all the clion stuff we don't want:
+/.idea/
