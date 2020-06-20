@@ -28,7 +28,6 @@ lodepng = "2.6.0"
 crossbeam = "0.7.3"
 once_cell = "1.4.0"
 core_affinity = "0.5.10"
-pprof = "0.3.16"
 
 # These are needed because rust doesn't have an implace partition
 # function or nth_element (in stable) function that I am aware of:
@@ -44,4 +43,4 @@ debug = true
 opt-level = 3
 target-cpu = "native"
 incremental = false
-debug = false
+debug = true # THis is for profiling
