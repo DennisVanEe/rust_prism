@@ -37,16 +37,17 @@ impl Sampler {
         }
     }
 
-    // Use this to start a new tile:
-    pub fn start_tile(&mut self, tile_id: u32) {
+    /// Given a seed, generates a new set of samples if required. If not, (we already have enough samples), then
+    /// doesn't do anything. Returns the next seed to use when asking for a tile.
+    pub fn start_tile(&mut self, seed: u64) -> u64 {
         // Check if we still have a 85% of samples left to calculate this tile:
         let remaining_samples = (self.num_total_samples - self.curr_sample) as f64;
         if remaining_samples >= 0.85 * (self.num_tile_samples as f64) {
-            return;
+            return seed;
         }
 
         // Otherwise, go ahead and generate more samples:
-        let mut rand = Pcg32::seed_from_u64(tile_id as u64);
+        let mut rand = Pcg32::seed_from_u64(seed as u64);
         unsafe {
             // The capactiy should remain the same. This will allow us
             // to regenerate samples without constantly allocating memory:
@@ -58,12 +59,8 @@ impl Sampler {
             &mut rand,
             &mut self.samples,
         );
-    }
 
-    // Increments to the next path:
-    pub fn next_path(&mut self) {
-        // self.curr_path_sample = 0;
-        // self.path_count += 1;
+        seed + 1
     }
 
     // Retrieves a sample value:

@@ -31,7 +31,7 @@ pub fn render(camera: &dyn Camera, filter: PixelFilter, scene: &Scene, param: Re
     // Check if we will go ahead and bind threads:
     let (bind_threads, core_ids) = match core_affinity::get_core_ids() {
         Some(ids) => {
-            // If there are fewer cores than threads, than don't bother binding threads:
+            // If there are fewer cores than threads demanded, than don't bother binding threads:
             if ids.len() < param.num_threads as usize {
                 (false, Vec::new())
             } else {
@@ -40,16 +40,26 @@ pub fn render(camera: &dyn Camera, filter: PixelFilter, scene: &Scene, param: Re
         }
         _ => (false, Vec::new()),
     };
+    let core_ids_ref = &core_ids;
+
+    // Split the u64 space for each thread:
+    let seed_space_size = if param.num_threads <= 1 {
+        u64::max_value()
+    } else {
+        u64::max_value() / (param.num_threads as u64)
+    };
 
     // If we're only rendering one thing.
     if param.num_threads <= 1 {
+        // Bind the main thread:
         if bind_threads {
-            let curr_core_id = core_ids[0];
+            let curr_core_id = core_ids_ref[0];
             core_affinity::set_for_current(curr_core_id);
         }
 
         let sampler = Sampler::new(param.num_pixel_samples);
         thread_render(
+            0,
             0,
             camera,
             filter,
@@ -62,22 +72,31 @@ pub fn render(camera: &dyn Camera, filter: PixelFilter, scene: &Scene, param: Re
         return film;
     }
 
+    // We subtract one because don't want to include the main thread:
     let num_threads = param.num_threads - 1;
 
     // Launch a bunch of scoped threads:
     //let film_ref = &film;
     thread::scope(move |s| {
-        for id in 1..=num_threads {
-            // Bind the threads as appropriate:
-            if bind_threads {
-                let curr_core_id = core_ids[id as usize];
-                core_affinity::set_for_current(curr_core_id);
-            }
+        // Bind the main thread:
+        if bind_threads {
+            let curr_core_id = core_ids_ref[0];
+            core_affinity::set_for_current(curr_core_id);
+        }
 
-            let sampler = Sampler::new(param.num_pixel_samples);
+        for id in 1..=num_threads {
             s.spawn(move |_| {
+
+                // Bind the threads as appropriate:
+                if bind_threads {
+                    let curr_core_id = core_ids_ref[id as usize];
+                    core_affinity::set_for_current(curr_core_id);
+                }
+
+                let sampler = Sampler::new(param.num_pixel_samples);
                 thread_render(
                     id,
+                    (id as u64) * seed_space_size,
                     camera,
                     filter,
                     sampler,
@@ -88,9 +107,11 @@ pub fn render(camera: &dyn Camera, filter: PixelFilter, scene: &Scene, param: Re
                 );
             });
         }
+
         // The "main" thread always had id 0:
         let sampler = Sampler::new(param.num_pixel_samples);
         thread_render(
+            0,
             0,
             camera,
             filter,
@@ -119,7 +140,8 @@ pub fn render(camera: &dyn Camera, filter: PixelFilter, scene: &Scene, param: Re
 /// * `num_pixel_samples` - The number of samples to perform per pixel
 /// * `max_depth` - The maximum depthwhen performing path tracing
 fn thread_render(
-    _: u32,
+    id: u32,
+    mut start_seed: u64,
     camera: &dyn Camera,
     filter: PixelFilter,
     mut sampler: Sampler,
@@ -135,7 +157,7 @@ fn thread_render(
             _ => break,
         };
 
-        sampler.start_tile(film_tile.seed);
+        start_seed = sampler.start_tile(start_seed);
 
         for (i, pixel) in film_tile.data.iter_mut().enumerate() {
             // Make sure we are able to retrieve the next pixel position:
@@ -156,9 +178,6 @@ fn thread_render(
 
                 // Now go ahead and integrate for this ray:
                 integrator::integrate(prim_ray, scene, &mut sampler, max_depth, pixel);
-
-                // Update the sampler for the next path.
-                sampler.next_path();
             }
         }
 

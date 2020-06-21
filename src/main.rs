@@ -77,7 +77,7 @@ fn main() {
     let param = threading::RenderParam {
         max_depth: 1,
         num_pixel_samples: 10,
-        num_threads: 1,
+        num_threads: 12,
         res: Vec2 { x: 400, y: 400 },
     };
     let now = Instant::now();
