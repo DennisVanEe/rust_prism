@@ -21,7 +21,9 @@ use camera::perspective::PerspectiveCamera;
 use math::vector::{Vec2, Vec3};
 use transform::Transf;
 
-const MODEL: &'static str = "C:\\Users\\Dennis van Ee\\Downloads\\sphere.ply";
+use std::time::Instant;
+
+const MODEL: &'static str = "/home/dennis/Dev/rust_prism/test_files/sphere.ply";
 
 fn main() {
     embree::DEVICE.create_device("");
@@ -78,7 +80,9 @@ fn main() {
         num_threads: 1,
         res: Vec2 { x: 400, y: 400 },
     };
+    let now = Instant::now();
     let film = threading::render(&cam, pixel_filter, &scene, param);
+    println!("Render time: {}", now.elapsed().as_nanos());
 
     let image_buffer = film.to_image_buffer(|color| film::ImagePixel {
         r: color.r,
