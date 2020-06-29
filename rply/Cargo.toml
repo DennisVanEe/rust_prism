@@ -1,0 +1,11 @@
+[package]
+name = "rply"
+version = "0.1.0"
+authors = ["Dennis van Ee <dennis@vanee.us>"]
+edition = "2018"
+
+[dependencies]
+
+[build-dependencies]
+cc = { version = "1.0.55", features = ["parallel"] }
+bindgen = "0.54.0"

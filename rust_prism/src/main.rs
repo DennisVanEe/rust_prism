@@ -21,9 +21,14 @@ use camera::perspective::PerspectiveCamera;
 use math::vector::{Vec2, Vec3};
 use transform::Transf;
 
+use pmj;
+
+use rand::{Rng, SeedableRng};
+use rand_pcg::Pcg32;
+
 use std::time::Instant;
 
-const MODEL: &'static str = "/home/dennis/Dev/rust_prism/test_files/sphere.ply";
+const MODEL: &'static str = "D:\\rust_prism\\test_files\\sphere.ply";
 
 fn main() {
     embree::DEVICE.create_device("");
@@ -76,7 +81,7 @@ fn main() {
     let pixel_filter = filter::PixelFilter::new(&filter);
     let param = threading::RenderParam {
         max_depth: 1,
-        num_pixel_samples: 10,
+        num_pixel_samples: 5,
         num_threads: 12,
         res: Vec2 { x: 400, y: 400 },
     };

@@ -1,0 +1,10 @@
+[package]
+name = "embree"
+version = "0.1.0"
+authors = ["Dennis van Ee <dennis@vanee.us>"]
+edition = "2018"
+
+[dependencies]
+
+[build-dependencies]
+bindgen = "0.54.0"

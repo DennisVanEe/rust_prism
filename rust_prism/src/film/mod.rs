@@ -49,7 +49,7 @@ impl Pixel {
     }
 }
 
-pub const TILE_DIM: usize = 8;
+pub const TILE_DIM: usize = 16;
 pub const TILE_SIZE: usize = TILE_DIM * TILE_DIM;
 
 /// Given an index, uniquely maps it to a 2d position.
@@ -70,9 +70,9 @@ pub struct FilmTile {
     pub pos: Vec2<usize>,
     // A unique seed for use with the samplers. Even if it's technically the same
     // tile, the seed will always be unique.
-    pub seed: u32,
+    pub seed: u64,
     // The index of the tile in the buffer.
-    index: usize,
+    pub index: usize,
 }
 
 // Manages the pixel buffer and the tile scheduler. For simple cases, the tile scheduler just moves
@@ -158,7 +158,7 @@ impl Film {
             }
             .scale(TILE_DIM),
             // We aren't doing anything fancy yet, so each tile gets hit once.
-            seed: old_tile as u32,
+            seed: old_tile as u64,
             index: old_tile,
         });
     }

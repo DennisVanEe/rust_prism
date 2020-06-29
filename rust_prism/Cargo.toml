@@ -1,0 +1,43 @@
+[package]
+name = "prism"
+version = "0.1.0"
+authors = ["Dennis van Ee <dennis@vanee.us>"]
+edition = "2018"
+
+[dependencies]
+rply = { path = "../rply" }
+pmj = { path = "../pmj" }
+embree = { path = "../embree" }
+
+# Used all over the place for math and whatnot:
+num-traits = "0.2.12"
+
+# Other stuff that is useful:
+simple-error = "0.2.1"
+arrayvec = "0.5.1"
+bitflags = "1.2.1"
+bumpalo = "3.4.0"
+rand = "0.7.3"
+rand_pcg = "0.2.1"
+lazy_static = "1.4.0"
+lodepng = "2.6.0"
+crossbeam = "0.7.3"
+once_cell = "1.4.0"
+core_affinity = "0.5.10"
+array-init = "0.1.1"
+
+# These are needed because rust doesn't have an implace partition
+# function or nth_element (in stable) function that I am aware of:
+order-stat = "0.1.3"
+partition = "0.1.1"
+
+[profile.dev]
+opt-level = 0
+incremental = true
+debug = true
+
+[profile.release]
+opt-level = 3
+target-cpu = "native"
+incremental = false
+debug = true # THis is for profiling
