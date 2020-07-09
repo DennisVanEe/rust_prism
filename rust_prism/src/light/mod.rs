@@ -20,18 +20,15 @@ bitflags! {
 
 // The light interface:
 pub trait Light {
-    // Samples the light at a given interaction point (in light space):
-    // u is a random uniform point (useful for things like area lights).
-    // The time value is not for handling moving lights (that's already handled elsewhere).
-    // No, it's for lights that have some special time-dependent effect.
-    //
-    // Returns values in this order:
-    // pdf: the probability density for the light sample
-    // RGBSpectrum: potential (if no occlusion occurs) energy the light contributes
-    // Vec3<f64>: light space location of where the light will get hit (so one can calculate the wi value themselves)
+    /// Samples the light from a specific position. Assumes mutual visisbility.
+    ///
+    /// Returns values in this order:
+    /// *Spectrum: potential (if no occlusion occurs) energy the light contributes
+    /// *Vec3<f64>: light space location of where the light will get hit (so one can calculate the wi value themselves)
+    /// *f64: the probability density for the light sample
     fn sample(
         &self,
-        surface_point: Vec3<f64>,
+        point: Vec3<f64>,
         time: f64,
         u: Vec2<f64>,
     ) -> (Spectrum, Vec3<f64>, f64);

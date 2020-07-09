@@ -41,8 +41,6 @@ impl PerspectiveCamera {
     pub fn new(
         camera_to_world: Transf,
         fov: f64,
-        shutter_open: f64,
-        shutter_close: f64,
         lens_radius: f64,
         focal_dist: f64,
         screen_window: BBox2<f64>,

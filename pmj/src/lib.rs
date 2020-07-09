@@ -429,11 +429,9 @@ pub fn generate<R: RngCore + ?Sized>(
     sample_count: usize,
     blue_noise_retry_count: u32,
     rng: &mut R,
-    samples: &mut Vec<Sample>,
-) {
+) -> Vec<Sample> {
     // first sample is anywhere
-    //let mut samples = Vec::with_capacity(sample_count);
-    samples.clear();
+    let mut samples = Vec::with_capacity(sample_count);
     {
         let x_bits = generate_sample_bits(0, 0, rng);
         let y_bits = generate_sample_bits(0, 0, rng);
@@ -548,6 +546,9 @@ pub fn generate<R: RngCore + ?Sized>(
         }
         debug_assert!(strat_accel.is_all_set());
     }
+
+    samples.truncate(sample_count);
+    samples
 }
 
 #[cfg(test)]

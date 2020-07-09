@@ -28,7 +28,7 @@ use rand_pcg::Pcg32;
 
 use std::time::Instant;
 
-const MODEL: &'static str = "D:\\rust_prism\\test_files\\sphere.ply";
+const MODEL: &'static str = "E:\\rust_prism\\test_files\\sphere.ply";
 
 fn main() {
     embree::DEVICE.create_device("");
@@ -37,9 +37,10 @@ fn main() {
     //let mesh_pos = Transf::new_translate(Vec3 { x: 0.0, y: 0.0, z: 0.0 });
     //mesh.transform(mesh_pos);
 
-    let mesh_ref = scene::allocate_mesh(mesh);
+    //let mesh_ref = scene::allocate_mesh(mesh);
 
     let mut scene = scene::Scene::new();
+    let mesh_ref = scene.add_mesh(mesh);
     scene.add_toplevel_mesh(mesh_ref, 0);
     scene.build_scene();
 
@@ -66,23 +67,16 @@ fn main() {
     );
 
     let bbox = math::bbox::BBox2::from_pnts(Vec2 { x: -1.0, y: -1.0 }, Vec2 { x: 1.0, y: 1.0 });
-    let cam = PerspectiveCamera::new(
-        camera_pos,
-        90.0,
-        0.0,
-        1.0,
-        0.0,
-        1.0,
-        bbox,
-        Vec2 { x: 400, y: 400 },
-    );
+    let cam = PerspectiveCamera::new(camera_pos, 90.0, 0.0, 1.0, bbox, Vec2 { x: 400, y: 400 });
 
     let filter = filter::GaussianFilter::new(Vec2 { x: 1.0, y: 1.0 }, 0.5);
     let pixel_filter = filter::PixelFilter::new(&filter);
     let param = threading::RenderParam {
         max_depth: 1,
         num_pixel_samples: 5,
-        num_threads: 12,
+        num_threads: 64,
+        sample_seed: 13,
+        blue_noise_count: 3,
         res: Vec2 { x: 400, y: 400 },
     };
     let now = Instant::now();
@@ -95,5 +89,5 @@ fn main() {
         b: color.b,
     });
 
-    film::png::write_png(&image_buffer, "test.png", film::png::BitDepth::EIGHT).unwrap();
+    film::png::write_png(&image_buffer, "test_new.png", film::png::BitDepth::EIGHT).unwrap();
 }

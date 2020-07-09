@@ -157,7 +157,7 @@ impl Device {
     fn get_device(&self, msg: &str) -> embree::RTCDevice {
         match self.device.get() {
             Some(device) => device.get_raw(),
-            _ => panic!("{}: Device was not yet created"),
+            _ => panic!("{}: Device was not yet created", msg),
         }
     }
 }

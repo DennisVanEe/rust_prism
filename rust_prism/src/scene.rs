@@ -3,53 +3,26 @@ use crate::embree::{
 };
 use crate::math::matrix::Mat3x4;
 use crate::math::ray::Ray;
-use crate::mesh::{Interaction, Mesh, MeshRef};
+use crate::mesh::{Interaction, Mesh};
 use crate::transform::Transf;
-use bumpalo::Bump;
-use lazy_static::lazy_static;
-use std::mem::{self, MaybeUninit};
+use std::mem::MaybeUninit;
 use std::os::raw;
-use std::sync::Mutex;
-
-//
-// Mesh Pool
-//
-
-struct MeshPool {
-    bump: Bump,
-}
-// We have to implement this otherwise lazy_static doesn't work.
-unsafe impl Sync for MeshPool {}
-
-const NUM_MESH_PER_CHUNK: usize = 16;
-
-lazy_static! {
-    // The actual mesh pool (not to be accessed directly)
-    static ref MESH_POOL: MeshPool = {
-        MeshPool {
-            bump: Bump::with_capacity(NUM_MESH_PER_CHUNK * mem::size_of::<Mesh>()),
-        }
-    };
-    // This is what actually gets accessed (and we need it to be locked)
-    static ref LOCKED_MESH_POOL: Mutex<&'static MeshPool> = {
-        Mutex::new(&MESH_POOL)
-    };
-}
-
-/// Given a mesh, allocates it onto the heap. This is thread safe and will allow multiple
-/// threads to perform this.
-pub fn allocate_mesh(mesh: Mesh) -> MeshRef<'static> {
-    let mesh_pool = LOCKED_MESH_POOL.lock().unwrap();
-    mesh_pool.bump.alloc_with(|| mesh).get_ref()
-}
 
 //
 // Scene
 //
 
+/// A simple structure that is used to refer to a mesh once it has been added
+/// to the Scene's mesh pool.
+#[derive(Clone, Copy, Debug)]
+pub struct MeshRef {
+    index: u32,
+    embree_geom: GeometryPtr,
+}
+
 /// A group is a collection of mesh that can be instanced.
 pub struct Group {
-    meshes: Vec<MeshRef<'static>>,
+    meshes: Vec<u32>,
     /// The scene that this mesh belongs to.
     embree_scene: ScenePtr,
 }
@@ -63,18 +36,20 @@ impl Group {
         }
     }
 
-    /// Adds a mesh to the group. Returns the geometry id (local to the group).
-    pub fn add_mesh(&mut self, mesh: MeshRef<'static>) -> u32 {
-        let geom_ptr = mesh.get_embree_geometry();
+    /// Adds a mesh to the group (as a MeshID). Returns the geometry id (local to the group).
+    pub fn add_mesh(&mut self, mesh: MeshRef) -> u32 {
+        let geom_ptr = mesh.embree_geom;
         let geom_id = self.meshes.len() as u32;
         DEVICE.attach_geometry_by_id(self.embree_scene, geom_ptr, geom_id);
         DEVICE.commit_geometry(geom_ptr);
-        self.meshes.push(mesh);
+        self.meshes.push(mesh.index);
         geom_id
     }
 }
 
 pub struct Scene {
+    /// The mesh pool, which contains all of the mesh in a Scene.
+    mesh_pool: Vec<Mesh>,
     /// A collection of the different instances.
     instances: Vec<Instance>,
     /// A collection of top-level meshes in the scene.
@@ -86,10 +61,19 @@ pub struct Scene {
 impl Scene {
     pub fn new() -> Self {
         Scene {
+            mesh_pool: Vec::new(),
             instances: Vec::new(),
             meshes: Vec::new(),
             embree_scene: DEVICE.new_scene(),
         }
+    }
+
+    /// Adds a mesh to the mesh pool.
+    pub fn add_mesh(&mut self, mesh: Mesh) -> MeshRef {
+        let index = self.mesh_pool.len() as u32;
+        let embree_geom = mesh.get_embree_geom();
+        self.mesh_pool.push(mesh);
+        MeshRef { index, embree_geom }
     }
 
     pub fn set_build_quality(&self, quality: BuildQuality) {
@@ -110,13 +94,16 @@ impl Scene {
     /// Adds a toplevel mesh with the given device and material id. Returning a geomID that is used
     /// to determine how reference it in the future. Note that these mesh should already have been
     /// transformed and CANNOT be animated.
-    pub fn add_toplevel_mesh(&mut self, mesh: MeshRef<'static>, material_id: u32) -> u32 {
+    pub fn add_toplevel_mesh(&mut self, mesh: MeshRef, material_id: u32) -> u32 {
         // First create an rtc geometry of the mesh:
-        let geom_ptr = mesh.get_embree_geometry();
+        let geom_ptr = mesh.embree_geom;
         let geom_id = self.meshes.len() as u32;
         DEVICE.attach_geometry_by_id(self.embree_scene, geom_ptr, geom_id);
         DEVICE.commit_geometry(geom_ptr);
-        self.meshes.push(SceneMesh { mesh, material_id });
+        self.meshes.push(SceneMesh {
+            index: mesh.index,
+            material_id,
+        });
         geom_id
     }
 
@@ -154,8 +141,8 @@ impl Scene {
 
         // Set the material id's for each mesh in the instance
         let mut meshes = Vec::with_capacity(group.meshes.len());
-        for (&mesh, &material_id) in group.meshes.iter().zip(material_ids.iter()) {
-            meshes.push(SceneMesh { mesh, material_id })
+        for (&index, &material_id) in group.meshes.iter().zip(material_ids.iter()) {
+            meshes.push(SceneMesh { index, material_id })
         }
 
         self.instances.push(Instance {
@@ -246,31 +233,22 @@ impl Scene {
         let inst_id = rayhit.hit.instID[0];
         if inst_id == embree::RTC_INVALID_GEOMETRY_ID {
             // Get the top-level mesh associated with the intersection:
-            let scene_mesh = unsafe { self.meshes.get_unchecked(rayhit.hit.geomID as usize) };
+            let scene_mesh = &self.meshes[rayhit.hit.geomID as usize];
             // Get the specific primitive that we hit (the triangle):
-            let triangle = unsafe {
-                scene_mesh
-                    .mesh
-                    .triangles
-                    .get_unchecked(rayhit.hit.primID as usize)
-            };
-            triangle.calc_interaction(rayhit, scene_mesh.mesh, scene_mesh.material_id)
+            let mesh = &self.mesh_pool[scene_mesh.index as usize];
+            let triangle = mesh.triangles[rayhit.hit.primID as usize];
+            triangle.calc_interaction(rayhit, mesh, scene_mesh.material_id)
         } else {
             // Get an instance index. Because all instance geometry comes after the top-level meshes,
             // we have to subtract the number of meshes to get a local instance index into the vector:
             let inst_index = (inst_id as usize) - self.meshes.len();
-            let instance = unsafe { self.instances.get_unchecked(inst_index) };
+            let instance = &self.instances[inst_index];
             // Get the mesh this instance was instancing:
-            let scene_mesh = unsafe { instance.meshes.get_unchecked(rayhit.hit.geomID as usize) };
+            let scene_mesh = &instance.meshes[rayhit.hit.geomID as usize];
             // Get the specific primitive that we hit (the triangle):
-            let triangle = unsafe {
-                scene_mesh
-                    .mesh
-                    .triangles
-                    .get_unchecked(rayhit.hit.primID as usize)
-            };
-            let interaction =
-                triangle.calc_interaction(rayhit, scene_mesh.mesh, scene_mesh.material_id);
+            let mesh = &self.mesh_pool[scene_mesh.index as usize];
+            let triangle = mesh.triangles[rayhit.hit.primID as usize];
+            let interaction = triangle.calc_interaction(rayhit, mesh, scene_mesh.material_id);
             // Don't forget to transform the interaction to world-space from the instance.
             instance.transform.interaction(interaction)
         }
@@ -280,7 +258,7 @@ impl Scene {
 /// A reference to a single mesh in the scene. It is
 /// paired with a material id for that specific mesh.
 struct SceneMesh {
-    mesh: MeshRef<'static>,
+    index: u32,
     material_id: u32,
 }
 

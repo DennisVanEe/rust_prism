@@ -35,7 +35,7 @@ impl Triangle {
     pub fn calc_interaction(
         self,
         rayhit: embree::RTCRayHit,
-        mesh: MeshRef,
+        mesh: &Mesh,
         material_id: u32,
     ) -> Interaction {
         // Calculate the barycentric coordinate:
@@ -74,7 +74,7 @@ impl Triangle {
             ]
         } else {
             // Because we are gauranteed that nrm isn't empty:
-            unsafe { self.uvs(mesh) }
+            self.uvs(mesh)
         };
 
         let uv = uvs[0].scale(b[0]) + uvs[1].scale(b[1]) + uvs[2].scale(b[2]);
@@ -94,7 +94,7 @@ impl Triangle {
         let (n, shading_n, shading_dndu, shading_dndv) = if mesh.nrm.is_empty() {
             (n, n, Vec3::zero(), Vec3::zero())
         } else {
-            let nrms = unsafe { self.nrm(mesh) };
+            let nrms = self.nrm(mesh);
             let shading_n = nrms[0].scale(b[0]) + nrms[1].scale(b[1]) + nrms[2].scale(b[2]);
             let dn02 = nrms[0] - nrms[2];
             let dn12 = nrms[1] - nrms[2];
@@ -108,7 +108,7 @@ impl Triangle {
         let shading_dpdu = if mesh.tan.is_empty() {
             dpdu.normalize()
         } else {
-            let tans = unsafe { self.tan(mesh) };
+            let tans = self.tan(mesh);
             tans[0].scale(b[0]) + tans[1].scale(b[1]) + tans[2].scale(b[2])
         };
 
@@ -132,74 +132,45 @@ impl Triangle {
         }
     }
 
-    pub fn area(self, mesh: MeshRef) -> f64 {
+    pub fn area(self, mesh: &Mesh) -> f64 {
         let pos = self.pos(mesh);
         let a = pos[1] - pos[0];
         let b = pos[2] - pos[0];
         a.cross(b).length() * 0.5
     }
 
-    pub fn pos(self, mesh: MeshRef) -> [Vec3<f64>; 3] {
-        unsafe {
-            [
-                mesh.pos.get_unchecked(self.indices[0] as usize).to_f64(),
-                mesh.pos.get_unchecked(self.indices[1] as usize).to_f64(),
-                mesh.pos.get_unchecked(self.indices[2] as usize).to_f64(),
-            ]
-        }
-    }
-
-    pub unsafe fn nrm(self, mesh: MeshRef) -> [Vec3<f64>; 3] {
+    pub fn pos(self, mesh: &Mesh) -> [Vec3<f64>; 3] {
         [
-            mesh.nrm.get_unchecked(self.indices[0] as usize).to_f64(),
-            mesh.nrm.get_unchecked(self.indices[1] as usize).to_f64(),
-            mesh.nrm.get_unchecked(self.indices[2] as usize).to_f64(),
+            mesh.pos[self.indices[0] as usize].to_f64(),
+            mesh.pos[self.indices[1] as usize].to_f64(),
+            mesh.pos[self.indices[2] as usize].to_f64(),
         ]
     }
 
-    pub unsafe fn tan(self, mesh: MeshRef) -> [Vec3<f64>; 3] {
+    pub fn nrm(self, mesh: &Mesh) -> [Vec3<f64>; 3] {
         [
-            mesh.tan.get_unchecked(self.indices[0] as usize).to_f64(),
-            mesh.tan.get_unchecked(self.indices[1] as usize).to_f64(),
-            mesh.tan.get_unchecked(self.indices[2] as usize).to_f64(),
+            mesh.nrm[self.indices[0] as usize].to_f64(),
+            mesh.nrm[self.indices[1] as usize].to_f64(),
+            mesh.nrm[self.indices[2] as usize].to_f64(),
         ]
     }
 
-    pub unsafe fn uvs(self, mesh: MeshRef) -> [Vec2<f64>; 3] {
+    pub fn tan(self, mesh: &Mesh) -> [Vec3<f64>; 3] {
         [
-            mesh.uvs.get_unchecked(self.indices[0] as usize).to_f64(),
-            mesh.uvs.get_unchecked(self.indices[1] as usize).to_f64(),
-            mesh.uvs.get_unchecked(self.indices[2] as usize).to_f64(),
+            mesh.tan[self.indices[0] as usize].to_f64(),
+            mesh.tan[self.indices[1] as usize].to_f64(),
+            mesh.tan[self.indices[2] as usize].to_f64(),
+        ]
+    }
+
+    pub fn uvs(self, mesh: &Mesh) -> [Vec2<f64>; 3] {
+        [
+            mesh.uvs[self.indices[0] as usize].to_f64(),
+            mesh.uvs[self.indices[1] as usize].to_f64(),
+            mesh.uvs[self.indices[2] as usize].to_f64(),
         ]
     }
 }
-
-#[derive(Clone, Copy, Debug)]
-pub struct MeshRef<'a> {
-    pub triangles: &'a [Triangle],
-
-    pub pos: &'a [Vec3<f32>],
-    pub nrm: &'a [Vec3<f32>],
-    pub tan: &'a [Vec3<f32>],
-    pub uvs: &'a [Vec2<f32>],
-
-    // The surface area of the mesh.
-    surface_area: f64,
-
-    // A pointer to the geometry in embree.
-    embree_geometry: GeometryPtr,
-}
-
-impl<'a> MeshRef<'a> {
-    pub fn get_surface_area(self) -> f64 {
-        self.surface_area
-    }
-
-    pub fn get_embree_geometry(self) -> GeometryPtr {
-        self.embree_geometry
-    }
-}
-
 pub struct Mesh {
     pub triangles: Vec<Triangle>,
 
@@ -212,7 +183,7 @@ pub struct Mesh {
     surface_area: f64,
 
     // A pointer to the geometry in embree.
-    embree_geometry: GeometryPtr,
+    embree_geom: GeometryPtr,
 }
 
 impl Mesh {
@@ -230,7 +201,7 @@ impl Mesh {
             tan,
             uvs,
             surface_area: -1.0,
-            embree_geometry: GeometryPtr::new_null(),
+            embree_geom: GeometryPtr::new_null(),
         }
     }
 
@@ -242,8 +213,8 @@ impl Mesh {
     }
 
     /// Returns the current RTCGeometry.
-    pub fn get_embree_geometry(&self) -> GeometryPtr {
-        self.embree_geometry
+    pub fn get_embree_geom(&self) -> GeometryPtr {
+        self.embree_geom
     }
 
     /// Creates the embree geometry for this specific mesh.
@@ -253,9 +224,9 @@ impl Mesh {
     pub fn create_embree_geometry(&mut self) -> GeometryPtr {
         self.delete_embree_geometry();
 
-        let embree_geometry = DEVICE.new_geometry(GeometryType::Triangle);
+        let embree_geom = DEVICE.new_geometry(GeometryType::Triangle);
         DEVICE.set_shared_geometry_buffer(
-            embree_geometry,
+            embree_geom,
             BufferType::Vertex,
             0,
             Format::Float3,
@@ -265,7 +236,7 @@ impl Mesh {
             self.pos.len() - 1, // See why we allocate one extra pos at the end
         );
         DEVICE.set_shared_geometry_buffer(
-            embree_geometry,
+            embree_geom,
             BufferType::Index,
             0,
             Format::Uint3,
@@ -275,17 +246,17 @@ impl Mesh {
             self.triangles.len(),
         );
 
-        self.embree_geometry = embree_geometry;
-        embree_geometry
+        self.embree_geom = embree_geom;
+        embree_geom
     }
 
     pub fn delete_embree_geometry(&mut self) {
-        if self.embree_geometry.is_null() {
+        if self.embree_geom.is_null() {
             return;
         }
 
-        DEVICE.release_geometry(self.embree_geometry);
-        self.embree_geometry = GeometryPtr::new_null();
+        DEVICE.release_geometry(self.embree_geom);
+        self.embree_geom = GeometryPtr::new_null();
     }
 
     pub fn get_surface_area(&self) -> f64 {
@@ -298,23 +269,11 @@ impl Mesh {
             return self.surface_area;
         }
 
-        let mesh_ref = self.get_ref();
+        //let mesh_ref = self.get_ref();
         self.surface_area = self
             .triangles
             .iter()
-            .fold(0.0, |sa, triangle| sa + triangle.area(mesh_ref));
+            .fold(0.0, |sa, triangle| sa + triangle.area(self));
         self.surface_area
-    }
-
-    pub fn get_ref(&self) -> MeshRef {
-        MeshRef {
-            triangles: &self.triangles,
-            pos: &self.pos,
-            nrm: &self.nrm,
-            tan: &self.tan,
-            uvs: &self.uvs,
-            surface_area: self.surface_area,
-            embree_geometry: self.embree_geometry,
-        }
     }
 }

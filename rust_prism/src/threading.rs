@@ -3,7 +3,7 @@ use crate::film::{Film, TILE_DIM};
 use crate::filter::PixelFilter;
 use crate::integrator;
 use crate::math::vector::Vec2;
-use crate::sampler::Sampler;
+use crate::sampler::{SampleTables, Sampler};
 use crate::scene::Scene;
 use core_affinity;
 use crossbeam::thread;
@@ -16,17 +16,32 @@ pub struct RenderParam {
     pub num_pixel_samples: u32,
     /// The number of threads to render with
     pub num_threads: u32,
+    /// The seed to use when generating sample tables
+    pub sample_seed: u64,
+    /// The number of attempts when ensuring blue noise in the sampler
+    pub blue_noise_count: u32,
     /// Resolution:
     pub res: Vec2<usize>,
 }
 
 pub fn render(camera: &dyn Camera, filter: PixelFilter, scene: &Scene, param: RenderParam) -> Film {
+    //
+    // Generate the film:
+    //
+
     let res = Vec2 {
         x: param.res.x / TILE_DIM,
         y: param.res.y / TILE_DIM,
     };
     let film = Film::new_zero(res);
     let film_ref = &film;
+
+    //
+    // Generate the SampleTables:
+    //
+
+    let sample_tables = SampleTables::new(param.sample_seed, param.blue_noise_count);
+    let sample_tables_ref = &sample_tables;
 
     // Check if we will go ahead and bind threads (that is, if we can or not):
     let (bind_threads, core_ids) = match core_affinity::get_core_ids() {
@@ -50,7 +65,7 @@ pub fn render(camera: &dyn Camera, filter: PixelFilter, scene: &Scene, param: Re
             core_affinity::set_for_current(curr_core_id);
         }
 
-        let sampler = Sampler::new(param.num_pixel_samples, 32);
+        let sampler = Sampler::new(sample_tables_ref);
         thread_render(
             0,
             camera,
@@ -84,7 +99,7 @@ pub fn render(camera: &dyn Camera, filter: PixelFilter, scene: &Scene, param: Re
                     core_affinity::set_for_current(curr_core_id);
                 }
 
-                let sampler = Sampler::new(param.num_pixel_samples, 32);
+                let sampler = Sampler::new(sample_tables_ref);
                 thread_render(
                     id,
                     camera,
@@ -99,7 +114,7 @@ pub fn render(camera: &dyn Camera, filter: PixelFilter, scene: &Scene, param: Re
         }
 
         // The "main" thread always had id 0:
-        let sampler = Sampler::new(param.num_pixel_samples, 32);
+        let sampler = Sampler::new(sample_tables_ref);
         thread_render(
             0,
             camera,
@@ -145,7 +160,7 @@ fn thread_render(
             _ => break,
         };
 
-        sampler.start_tile(film_tile.seed);
+        sampler.start_tile(film_tile.index as u32);
 
         for (i, pixel) in film_tile.data.iter_mut().enumerate() {
             // Make sure we are able to retrieve the next pixel position:
