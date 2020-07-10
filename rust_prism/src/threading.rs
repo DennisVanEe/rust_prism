@@ -1,17 +1,17 @@
 use crate::camera::{Camera, CameraSample};
 use crate::film::{Film, TILE_DIM};
 use crate::filter::PixelFilter;
-use crate::integrator;
+use crate::integrator::{Integrator, IntegratorManager};
 use crate::math::vector::Vec2;
 use crate::sampler::{SampleTables, Sampler};
 use crate::scene::Scene;
 use core_affinity;
 use crossbeam::thread;
+use simple_error::{bail, SimpleResult};
 
+/// Basic parameters used independent of the integrator used.
 #[derive(Clone, Copy, Debug)]
 pub struct RenderParam {
-    /// The max depth a single path can take
-    pub max_depth: u32,
     /// The number of samples to perform for each pixel
     pub num_pixel_samples: u32,
     /// The number of threads to render with
@@ -24,7 +24,13 @@ pub struct RenderParam {
     pub res: Vec2<usize>,
 }
 
-pub fn render(camera: &dyn Camera, filter: PixelFilter, scene: &Scene, param: RenderParam) -> Film {
+pub fn render<I: Integrator, M: IntegratorManager<I>>(
+    camera: &dyn Camera,
+    filter: PixelFilter,
+    scene: &Scene,
+    param: RenderParam,
+    int_param: M::InitParam,
+) -> SimpleResult<Film> {
     //
     // Generate the film:
     //
@@ -43,6 +49,10 @@ pub fn render(camera: &dyn Camera, filter: PixelFilter, scene: &Scene, param: Re
     let sample_tables = SampleTables::new(param.sample_seed, param.blue_noise_count);
     let sample_tables_ref = &sample_tables;
 
+    //
+    // Get available hardware threads:
+    //
+
     // Check if we will go ahead and bind threads (that is, if we can or not):
     let (bind_threads, core_ids) = match core_affinity::get_core_ids() {
         Some(ids) => {
@@ -57,6 +67,13 @@ pub fn render(camera: &dyn Camera, filter: PixelFilter, scene: &Scene, param: Re
     };
     let core_ids_ref = &core_ids;
 
+    //
+    // Create the IntegratorManager:
+    //
+
+    let integrator_manager = M::new(int_param);
+    let integrator_manager_ref = &integrator_manager;
+
     // If we're only rendering one thing.
     if param.num_threads <= 1 {
         // Bind the main thread:
@@ -65,6 +82,7 @@ pub fn render(camera: &dyn Camera, filter: PixelFilter, scene: &Scene, param: Re
             core_affinity::set_for_current(curr_core_id);
         }
 
+        let integrator = integrator_manager_ref.spawn_integrator(0);
         let sampler = Sampler::new(sample_tables_ref);
         thread_render(
             0,
@@ -74,17 +92,16 @@ pub fn render(camera: &dyn Camera, filter: PixelFilter, scene: &Scene, param: Re
             film_ref,
             scene,
             param.num_pixel_samples,
-            param.max_depth,
+            integrator,
         );
-        return film;
+        return Ok(film);
     }
 
     // We subtract one because don't want to include the main thread:
     let num_threads = param.num_threads - 1;
 
     // Launch a bunch of scoped threads:
-    //let film_ref = &film;
-    thread::scope(move |s| {
+    let render_result = thread::scope(move |s| {
         // Bind the main thread:
         if bind_threads {
             let curr_core_id = core_ids_ref[0];
@@ -99,6 +116,7 @@ pub fn render(camera: &dyn Camera, filter: PixelFilter, scene: &Scene, param: Re
                     core_affinity::set_for_current(curr_core_id);
                 }
 
+                let integrator = integrator_manager_ref.spawn_integrator(id);
                 let sampler = Sampler::new(sample_tables_ref);
                 thread_render(
                     id,
@@ -108,12 +126,13 @@ pub fn render(camera: &dyn Camera, filter: PixelFilter, scene: &Scene, param: Re
                     film_ref,
                     scene,
                     param.num_pixel_samples,
-                    param.max_depth,
+                    integrator,
                 );
             });
         }
 
         // The "main" thread always had id 0:
+        let integrator = integrator_manager_ref.spawn_integrator(0);
         let sampler = Sampler::new(sample_tables_ref);
         thread_render(
             0,
@@ -123,12 +142,14 @@ pub fn render(camera: &dyn Camera, filter: PixelFilter, scene: &Scene, param: Re
             film_ref,
             scene,
             param.num_pixel_samples,
-            param.max_depth,
+            integrator,
         );
-    })
-    .unwrap();
+    });
 
-    film
+    match render_result {
+        Ok(_) => Ok(film),
+        _ => bail!("Error when executing render threads"),
+    }
 }
 
 /// The render function is the function that loops over specified tiles until the film
@@ -142,8 +163,8 @@ pub fn render(camera: &dyn Camera, filter: PixelFilter, scene: &Scene, param: Re
 /// * `film` - The film being rendered to.
 /// * `scene` - The scene being rendered.
 /// * `num_pixel_samples` - The number of samples to perform per pixel
-/// * `max_depth` - The maximum depthwhen performing path tracing
-fn thread_render(
+/// * `integrator` - The integrator to be used by this specific thread
+fn thread_render<I: Integrator>(
     _id: u32,
     camera: &dyn Camera,
     filter: PixelFilter,
@@ -151,7 +172,7 @@ fn thread_render(
     film: &Film,
     scene: &Scene,
     num_pixel_samples: u32,
-    max_depth: u32,
+    integrator: I,
 ) {
     loop {
         // When getting the next tile, we also check if any tiles are left in this pass.
@@ -180,7 +201,7 @@ fn thread_render(
                 let prim_ray = camera.gen_primary_ray(camera_sample);
 
                 // Now go ahead and integrate for this ray:
-                integrator::integrate(prim_ray, scene, &mut sampler, max_depth, pixel);
+                *pixel = integrator.integrate(prim_ray, scene, &mut sampler, *pixel);
             }
 
             // Tell the samapler we're moving onto the next pixel:

@@ -5,9 +5,9 @@ use rand::SeedableRng;
 use rand_pcg::Pcg32;
 
 pub struct Sampler<'a> {
-    pattern: u32,
-    sample: u32,
-    tables: &'a SampleTables,
+    pattern: u32, // The "pattern" is basically the pixel that the sample is being drawn for
+    sample: u32,  // The sample is the index of the current sample for a specific pixel
+    tables: &'a SampleTables, // All of the samples belong to this
 }
 
 impl<'a> Sampler<'a> {

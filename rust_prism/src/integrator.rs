@@ -1,48 +1,31 @@
 use crate::film::Pixel;
-use crate::math::ray::{PrimaryRay, Ray, RayDiff};
+use crate::math::ray::PrimaryRay;
 use crate::sampler::Sampler;
 use crate::scene::Scene;
-use crate::spectrum::Spectrum;
 
-/// Basic test integrator.
-pub fn integrate(
-    prim_ray: PrimaryRay<f64>,
-    scene: &Scene,
-    _: &mut Sampler,
-    _: u32,
-    pixel: &mut Pixel,
-) {
-    //println!("{:#?}", prim_ray.ray);
-    if let None = scene.intersect(prim_ray.ray) {
-        pixel.add_sample(Spectrum::black());
-    } else {
-        pixel.add_sample(Spectrum::white());
-    }
+/// An `IntegratorManager` is used to spawn integrators for each thread and maintain any
+/// information that integrators across different threads may want to use. It is gauranteed
+/// that the IntegratorManager instance will exist until all threads have finished rendering.
+pub trait IntegratorManager<I: Integrator>: Sync {
+    /// Any parameters to pass to the integrator when integrating the scene
+    type InitParam;
+
+    /// Creates a new IntegratorManager with the given parameters.
+    fn new(param: Self::InitParam) -> Self;
+    /// Spawns an integrator for a specific thread with the provided id.
+    fn spawn_integrator(&self, thread_id: u32) -> I;
 }
 
-// pub fn integrate(
-//     prim_ray: PrimaryRay<f64>,
-//     scene: &Scene,
-//     sampler: &mut Sampler,
-//     max_depth: u32,
-//     pixel: &mut Pixel,
-// ) {
-//     let mut spectrum = Spectrum::black();
-//     let mut specular_bounce = false;
-//     let mut ray = prim_ray.ray;
-
-//     for bounce in 0..max_depth {
-//         // Intersect the scene and see what we hit.
-//         let interaction = match scene.intersect(ray) {
-//             Some(int) => int,
-//             _ => break,
-//         };
-
-//         // Need to perform this check in case the ray hits an emissive object.
-//         // That is, account for light if it's a primary ray or the last operation
-//         // was a specular bounce.
-//         if bounce == 0 || specular_bounce {}
-//     }
-
-//     todo!();
-// }
+/// Defines different integrators for use with PRISM. Each thread gets its own `Integrator` instance.
+pub trait Integrator {
+    /// Given the primary ray (as a result of the camera), the scene, the sampler, and the
+    /// pixel value already present at the point, integrates the specific pixel and returns
+    /// the pixel value at the specified location.
+    fn integrate(
+        &self,
+        prim_ray: PrimaryRay<f64>,
+        scene: &Scene,
+        sampler: &mut Sampler,
+        pixel: Pixel,
+    ) -> Pixel;
+}
