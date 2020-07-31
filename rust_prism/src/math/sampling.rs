@@ -1,6 +1,22 @@
 use crate::math::numbers::Float;
 use crate::math::vector::{Vec2, Vec3};
 
+/// Used for multiple-importance sampling. Produces a weight for the "f" part of the distrubtion.
+pub fn balance_heuristic<T: Float>(num_f: u32, pdf_f: T, num_g: u32, pdf_g: T) -> T {
+    let num_f = T::from(num_f).unwrap();
+    let num_g = T::from(num_g).unwrap();
+    (num_f * pdf_f) / (num_f * pdf_f + num_g * pdf_g)
+}
+
+/// Used for multiple-importance sampling. Produces a weight for the "f" part of the distrubtion.
+pub fn power_heuristic<T: Float>(num_f: u32, pdf_f: T, num_g: u32, pdf_g: T) -> T {
+    let num_f = T::from(num_f).unwrap();
+    let num_g = T::from(num_g).unwrap();
+    let f = num_f * pdf_f;
+    let g = num_g * pdf_g;
+    (f * f) / (f * f + g * g)
+}
+
 pub fn uniform_sample_hemisphere<T: Float>(u: Vec2<T>) -> Vec3<T> {
     let z = u.x;
     let r = T::zero().max(T::one() - z * z).sqrt();

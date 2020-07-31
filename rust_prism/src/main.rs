@@ -9,6 +9,7 @@ mod fileio;
 mod film;
 mod filter;
 mod integrator;
+mod light;
 mod math;
 mod mesh;
 mod sampler;
@@ -16,6 +17,7 @@ mod scene;
 mod spectrum;
 mod threading;
 mod transform;
+mod geometry;
 
 use camera::perspective::PerspectiveCamera;
 use math::vector::{Vec2, Vec3};

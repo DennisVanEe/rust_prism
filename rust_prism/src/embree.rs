@@ -268,6 +268,12 @@ impl ScenePtr {
 }
 
 //
+// Ray Types
+//
+
+pub struct 
+
+//
 // Enum Types
 //
 

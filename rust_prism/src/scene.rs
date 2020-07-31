@@ -1,6 +1,7 @@
 use crate::embree::{
     BuildQuality, Format, GeometryPtr, GeometryType, SceneFlags, ScenePtr, DEVICE,
 };
+use crate::light::Light;
 use crate::math::matrix::Mat3x4;
 use crate::math::ray::Ray;
 use crate::mesh::{Interaction, Mesh};
@@ -12,18 +13,22 @@ use std::os::raw;
 // Scene
 //
 
-/// A simple structure that is used to refer to a mesh once it has been added
-/// to the Scene's mesh pool.
+/// A simple structure that is used to refer to a mesh once it has been added to the Scene's mesh pool.
 #[derive(Clone, Copy, Debug)]
 pub struct MeshRef {
     index: u32,
     embree_geom: GeometryPtr,
 }
 
+/// A simple structure that is used to refer to a light once it has been added to the Light's mesh pool.
+#[derive(Clone, Copy, Debug)]
+pub struct LightRef {
+    index: u32,
+}
+
 /// A group is a collection of mesh that can be instanced.
 pub struct Group {
     meshes: Vec<u32>,
-    /// The scene that this mesh belongs to.
     embree_scene: ScenePtr,
 }
 
@@ -50,11 +55,15 @@ impl Group {
 pub struct Scene {
     /// The mesh pool, which contains all of the mesh in a Scene.
     mesh_pool: Vec<Mesh>,
-    /// A collection of the different instances.
+    /// The light pool, which contains all of the lights in a Scene.
+    light_pool: Vec<Box<dyn Light>>,
+
+    /// Contains all of the instances in a scene.
     instances: Vec<Instance>,
-    /// A collection of top-level meshes in the scene.
+    /// Contains all of the top-level meshes in a scene.
     meshes: Vec<SceneMesh>,
-    /// A pointer to the embree scene.
+
+    /// The embree pointer for the specific scene.
     embree_scene: ScenePtr,
 }
 
@@ -62,24 +71,36 @@ impl Scene {
     pub fn new() -> Self {
         Scene {
             mesh_pool: Vec::new(),
+            light_pool: Vec::new(),
             instances: Vec::new(),
             meshes: Vec::new(),
             embree_scene: DEVICE.new_scene(),
         }
     }
 
-    /// Adds a mesh to the mesh pool.
-    pub fn add_mesh(&mut self, mesh: Mesh) -> MeshRef {
+    /// Adds a mesh to the mesh pool of the scene.
+    pub fn add_to_mesh_pool(&mut self, mesh: Mesh) -> MeshRef {
         let index = self.mesh_pool.len() as u32;
         let embree_geom = mesh.get_embree_geom();
         self.mesh_pool.push(mesh);
         MeshRef { index, embree_geom }
     }
 
+    /// Adds a light to the light pool of the scene.
+    pub fn add_to_light_pool<T: Light>(&mut self, light: T) -> LightRef {
+        // Create a Box of the light:
+        let light_box = Box::new(light);
+        let index = self.light_pool.len();
+        self.light_pool.push(light_box);
+        LightRef { index }
+    }
+
+    /// Sets the build quality to build the scene with.
     pub fn set_build_quality(&self, quality: BuildQuality) {
         DEVICE.set_scene_build_quality(self.embree_scene, quality);
     }
 
+    /// Sets any flags to the scene (see `SceneFlags` enum).
     pub fn set_flags(&self, flags: SceneFlags) {
         DEVICE.set_scene_flags(self.embree_scene, flags);
     }
@@ -105,6 +126,10 @@ impl Scene {
             material_id,
         });
         geom_id
+    }
+
+    pub fn add_toplevel_light(&mut self, ) -> u32 {
+        
     }
 
     /// Given a group, adds an instance of it in the scene.

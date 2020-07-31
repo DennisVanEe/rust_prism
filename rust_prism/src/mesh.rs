@@ -1,4 +1,6 @@
 use crate::embree::{BufferType, Format, GeometryPtr, GeometryType, DEVICE};
+use crate::math::numbers::Float;
+use crate::math::ray::Ray;
 use crate::math::util;
 use crate::math::vector::{Vec2, Vec3};
 use crate::transform::Transf;
