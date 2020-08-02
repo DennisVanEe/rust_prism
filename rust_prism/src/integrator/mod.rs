@@ -1,12 +1,12 @@
 use crate::film::Pixel;
 use crate::light::Light;
-use crate::math::numbers::Float;
-use crate::math::ray::PrimaryRay;
-use crate::math::ray::Ray;
-use crate::math::vector::{Vec2, Vec3};
 use crate::sampler::Sampler;
 use crate::scene::Scene;
 use crate::spectrum::Spectrum;
+use math::numbers::Float;
+use math::ray::PrimaryRay;
+use math::ray::Ray;
+use math::vector::{Vec2, Vec3};
 
 /// An `IntegratorManager` is used to spawn integrators for each thread and maintain any
 /// information that integrators across different threads may want to use. It is gauranteed
@@ -60,9 +60,8 @@ pub fn estimate_direct_light(
             t_far: 1.0 - f64::SELF_INT_COMP, // This means we don't self intersect
             t_near: f64::SELF_INT_COMP,
         };
-        
         // Now sample the bsdf using the sample from the light:
-        let bsdf_f = 
+        // let bsdf_f =
     }
 
     todo!();

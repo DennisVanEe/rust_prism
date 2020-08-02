@@ -1,5 +1,5 @@
-use crate::math::vector::Vec2;
 use crate::spectrum::Spectrum;
+use math::vector::Vec2;
 use std::cell::Cell;
 use std::sync::atomic::{AtomicUsize, Ordering};
 

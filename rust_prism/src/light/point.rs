@@ -1,7 +1,7 @@
 use crate::light::{Light, LightType};
-use crate::math::numbers::Float;
-use crate::math::vector::{Vec2, Vec3};
 use crate::spectrum::Spectrum;
+use math::numbers::Float;
+use math::vector::{Vec2, Vec3};
 
 /// A point light source.
 pub struct Point {

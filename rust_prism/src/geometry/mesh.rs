@@ -1,32 +1,13 @@
-use crate::math;
-use crate::math::numbers::Float;
-use crate::math::ray::Ray;
-use crate::math::vector::{Vec2, Vec3};
+use crate::geometry::{GeomInteraction, Geometry};
 use crate::transform::Transf;
+use embree;
+use math;
+use math::ray::Ray;
+use math::vector::{Vec2, Vec3};
+use simple_error::SimpleResult;
 use std::mem;
-use std::os::raw;
 
-#[derive(Clone, Copy, Debug)]
-pub struct Interaction {
-    pub p: Vec3<f64>,  // intersection point
-    pub n: Vec3<f64>,  // geometric normal (of triangle)
-    pub wo: Vec3<f64>, // direction of intersection leaving the point
-
-    pub t: f64, // the t value of the intersection of the ray
-
-    pub uv: Vec2<f64>,   // uv coordinate at the intersection
-    pub dpdu: Vec3<f64>, // vectors parallel to the triangle
-    pub dpdv: Vec3<f64>,
-
-    pub shading_n: Vec3<f64>,    // the shading normal at this point
-    pub shading_dpdu: Vec3<f64>, // the shading dpdu, dpdv at this point
-    pub shading_dpdv: Vec3<f64>,
-    pub shading_dndu: Vec3<f64>, // the shading dndu, dndv at this point
-    pub shading_dndv: Vec3<f64>,
-
-    pub material_id: u32, // An index to the material specified with this interaction
-}
-
+#[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct Triangle {
     pub indices: [u32; 3],
@@ -35,33 +16,24 @@ pub struct Triangle {
 impl Triangle {
     pub fn calc_interaction(
         self,
-        ray: Ray,
-        rayhit: embree::RTCRayHit,
-        mesh: &Mesh,
-        material_id: u32,
-    ) -> Interaction {
+        ray: Ray<f64>,         // The ray that led to the intersection
+        hit: embree::Hit<f64>, // Embree's hit information
+        mesh: &Mesh,           // A reference to the mesh being intersected
+        material_id: u32,      // The material id of the intersection
+    ) -> GeomInteraction {
         // Calculate the barycentric coordinate:
         let b = {
-            let u = rayhit.hit.u as f64;
-            let v = rayhit.hit.v as f64;
+            let u = hit.uv.x as f64;
+            let v = hit.uv.y as f64;
             [u, v, 1.0 - u - v]
         };
 
         // Calculate the geometric normal:
-        let n = Vec3 {
-            x: rayhit.hit.Ng_x as f64,
-            y: rayhit.hit.Ng_y as f64,
-            z: rayhit.hit.Ng_z as f64,
-        }
-        .normalize();
+        let n = hit.ng.normalize();
 
-        let t = rayhit.ray.tfar as f64;
+        let t = ray.t_far;
 
-        let wo = Vec3 {
-            x: -(rayhit.ray.dir_x as f64),
-            y: -(rayhit.ray.dir_y as f64),
-            z: -(rayhit.ray.dir_z as f64),
-        };
+        let wo = -ray.dir;
 
         // Get the poss information:
         let poss = self.pos(mesh);
@@ -102,7 +74,7 @@ impl Triangle {
             let dn12 = nrms[1] - nrms[2];
             let dndu = (dn02.scale(duv12[1]) - dn12.scale(duv02[1])).scale(inv_det);
             let dndv = (dn02.scale(-duv12[0]) + dn12.scale(duv02[0])).scale(inv_det);
-            let n = util::align(shading_n, n); // If we have shading normals, let is decide orientation
+            let n = math::align(shading_n, n); // If we have shading normals, let is decide orientation
             (n, shading_n, dndu, dndv)
         };
 
@@ -117,7 +89,7 @@ impl Triangle {
         let shading_dpdv = shading_n.cross(shading_dpdu).normalize();
         let shading_dpdu = shading_dpdv.cross(shading_n);
 
-        Interaction {
+        GeomInteraction {
             p,
             n,
             wo,
@@ -185,7 +157,7 @@ pub struct Mesh {
     surface_area: f64,
 
     // A pointer to the geometry in embree.
-    embree_geom: GeometryPtr,
+    embree_geom: embree::Geometry,
 }
 
 impl Mesh {
@@ -203,70 +175,76 @@ impl Mesh {
             tan,
             uvs,
             surface_area: -1.0,
-            embree_geom: GeometryPtr::new_null(),
+            embree_geom: embree::Geometry::new_null(),
         }
     }
+}
 
+impl Geometry for Mesh {
     /// Permanently applies the transformation to the data of the mesh.
-    pub fn transform(&mut self, transf: Transf) {
+    fn transform(&mut self, transf: Transf) {
         transf.points_f32(&mut self.pos);
         transf.vectors_f32(&mut self.tan);
         transf.normals_f32(&mut self.nrm);
-    }
-
-    /// Returns the current RTCGeometry.
-    pub fn get_embree_geom(&self) -> GeometryPtr {
-        self.embree_geom
     }
 
     /// Creates the embree geometry for this specific mesh.
     ///
     /// Creates the embree geometry. Can be called multiple times, will only create
     /// the geometry once.
-    pub fn create_embree_geometry(&mut self) -> GeometryPtr {
-        self.delete_embree_geometry();
+    fn create_embree_geometry(&mut self, device: embree::Device) -> SimpleResult<embree::Geometry> {
+        // Delete the device first.
+        self.delete_embree_geometry(device)?;
 
-        let embree_geom = DEVICE.new_geometry(GeometryType::Triangle);
-        DEVICE.set_shared_geometry_buffer(
+        let embree_geom = embree::new_geometry(device, embree::GeometryType::Triangle)?;
+        embree::set_shared_geometry_buffer(
+            device,
             embree_geom,
-            BufferType::Vertex,
+            embree::BufferType::Vertex,
             0,
-            Format::Float3,
-            self.pos.as_ptr() as *const raw::c_void,
+            embree::Format::Float3,
+            self.pos.as_ptr(),
             0,
             mem::size_of::<Vec3<f32>>(),
             self.pos.len() - 1, // See why we allocate one extra pos at the end
-        );
-        DEVICE.set_shared_geometry_buffer(
+        )?;
+        embree::set_shared_geometry_buffer(
+            device,
             embree_geom,
-            BufferType::Index,
+            embree::BufferType::Index,
             0,
-            Format::Uint3,
-            self.triangles.as_ptr() as *const raw::c_void,
+            embree::Format::Uint3,
+            self.triangles.as_ptr(),
             0,
             mem::size_of::<Triangle>(),
             self.triangles.len(),
-        );
+        )?;
 
         self.embree_geom = embree_geom;
-        embree_geom
+        Ok(embree_geom)
     }
 
-    pub fn delete_embree_geometry(&mut self) {
+    fn delete_embree_geometry(&mut self, device: embree::Device) -> SimpleResult<()> {
         if self.embree_geom.is_null() {
-            return;
+            return Ok(());
         }
 
-        DEVICE.release_geometry(self.embree_geom);
-        self.embree_geom = GeometryPtr::new_null();
+        let result = embree::release_geometry(device, self.embree_geom);
+        self.embree_geom = embree::Geometry::new_null();
+        result
     }
 
-    pub fn get_surface_area(&self) -> f64 {
+    /// Returns the current RTCGeometry.
+    fn get_embree_geometry(&self) -> embree::Geometry {
+        self.embree_geom
+    }
+
+    fn get_surface_area(&self) -> f64 {
         self.surface_area
     }
 
     /// Calculates the surface area of the specific mesh.
-    pub fn calc_surface_area(&mut self) -> f64 {
+    fn calc_surface_area(&mut self) -> f64 {
         if self.surface_area >= 0.0 {
             return self.surface_area;
         }
@@ -277,5 +255,16 @@ impl Mesh {
             .iter()
             .fold(0.0, |sa, triangle| sa + triangle.area(self));
         self.surface_area
+    }
+
+    fn calc_interaction(
+        &self,
+        ray: Ray<f64>,
+        hit: embree::Hit<f64>,
+        material_id: u32,
+    ) -> GeomInteraction {
+        // Get the primitive:
+        let triangle = self.triangles[hit.prim_id as usize];
+        triangle.calc_interaction(ray, hit, self, material_id)
     }
 }

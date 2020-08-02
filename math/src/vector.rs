@@ -1,8 +1,6 @@
-use crate::math::numbers::Float;
-use crate::math::util::{max, min};
-
+use crate::numbers::Float;
+use crate::{max, min};
 use num_traits::{One, Signed, Zero};
-
 use std::cmp::{PartialEq, PartialOrd};
 use std::ops::{Add, Div, Index, IndexMut, Mul, Neg, Sub};
 
@@ -14,10 +12,12 @@ pub struct Vec2<T: Copy> {
 }
 
 impl<T: Copy> Vec2<T> {
+    /// Constructs a `Vec2` from a `Vec3`, dropping the last element.
     pub fn from_vec3(v: Vec3<T>) -> Self {
         Vec2 { x: v.x, y: v.y }
     }
 
+    /// Constructs a `Vec2` from a `Vec4`, dropping the last two elements.
     pub fn from_vec4(v: Vec4<T>) -> Self {
         Vec2 { x: v.x, y: v.y }
     }
@@ -57,6 +57,7 @@ impl<T: One + Copy> Vec2<T> {
 }
 
 impl<T: Add<Output = T> + Copy> Vec2<T> {
+    /// Adds the vector "horizontally", that is, self.x + self.y.
     pub fn horizontal_add(self) -> T {
         self.x + self.y
     }
@@ -67,6 +68,7 @@ impl<T: Mul<Output = T> + Add<Output = T> + Copy> Vec2<T> {
         self.x * o.x + self.y * o.y
     }
 
+    /// Scales each component of the vector by `s`.
     pub fn scale(self, s: T) -> Self {
         Vec2 {
             x: self.x * s,
@@ -74,12 +76,14 @@ impl<T: Mul<Output = T> + Add<Output = T> + Copy> Vec2<T> {
         }
     }
 
+    /// Returns the "length" or magnitude of the vector squared.
     pub fn length2(self) -> T {
         self.dot(self)
     }
 }
 
 impl<T: PartialOrd + Copy> Vec2<T> {
+    /// Returns the index of the dimension with the greatest magnitude.
     pub fn max_dim(self) -> usize {
         if self.x > self.y {
             0
@@ -88,7 +92,7 @@ impl<T: PartialOrd + Copy> Vec2<T> {
         }
     }
 
-    // Returns the maximum elements of the vector:
+    /// Returns a `Vec2` with the max component between each vector.
     pub fn max(self, o: Vec2<T>) -> Self {
         Vec2 {
             x: max(self.x, o.x),
@@ -96,6 +100,7 @@ impl<T: PartialOrd + Copy> Vec2<T> {
         }
     }
 
+    /// Returns a `Vec2` with the min component between each vector.
     pub fn min(self, o: Vec2<T>) -> Self {
         Vec2 {
             x: min(self.x, o.x),
@@ -106,6 +111,7 @@ impl<T: PartialOrd + Copy> Vec2<T> {
 
 // This is for operations that require a float (like a length function):
 impl<T: Float> Vec2<T> {
+    /// Returns the "length" or magnitude of the vector.
     pub fn length(self) -> T {
         self.length2().sqrt()
     }
@@ -203,14 +209,7 @@ impl<T: Neg<Output = T> + Copy> Neg for Vec2<T> {
     }
 }
 
-#[repr(C)]
-#[derive(Copy, Clone, Debug)]
-pub struct Vec3<T: Copy> {
-    pub x: T,
-    pub y: T,
-    pub z: T,
-}
-
+/// Special structure used for permuting a vector.
 #[derive(Copy, Clone)]
 pub enum Vec3Perm {
     XYZ,
@@ -219,6 +218,31 @@ pub enum Vec3Perm {
     YZX,
     ZXY,
     ZYX,
+}
+
+impl Vec3Perm {
+    /// Given a permutation, convert it to the the enum.
+    pub fn new(x: usize, y: usize, z: usize) -> Vec3Perm {
+        let perm_code = x + 2 * y + 4 * z;
+        match perm_code {
+            8 /*xzy*/ => Vec3Perm::XZY,
+            5 /*yzx*/ => Vec3Perm::YZX,
+            9 /*yxz*/ => Vec3Perm::YXZ,
+            4 /*zyx*/ => Vec3Perm::ZYX,
+            6 /*zxy*/ => Vec3Perm::ZXY,
+            10 /*xyz*/ => Vec3Perm::XYZ,
+            // TODO: support more permutations:
+            _ => panic!("Invalid permutation number for Vec3"),
+        }
+    }
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, Debug)]
+pub struct Vec3<T: Copy> {
+    pub x: T,
+    pub y: T,
+    pub z: T,
 }
 
 impl<T: Copy> Vec3<T> {
@@ -425,23 +449,6 @@ impl<T: PartialOrd + Copy> Vec3<T> {
             x: max(self.x, o.x),
             y: max(self.y, o.y),
             z: max(self.z, o.z),
-        }
-    }
-}
-
-impl Vec3Perm {
-    // Given a permutation, convert it to the proper enum:
-    pub fn new(x: usize, y: usize, z: usize) -> Vec3Perm {
-        let perm_code = x + 2 * y + 4 * z;
-        match perm_code {
-            8 /*xzy*/ => Vec3Perm::XZY,
-            5 /*yzx*/ => Vec3Perm::YZX,
-            9 /*yxz*/ => Vec3Perm::YXZ,
-            4 /*zyx*/ => Vec3Perm::ZYX,
-            6 /*zxy*/ => Vec3Perm::ZXY,
-            10 /*xyz*/ => Vec3Perm::XYZ,
-            // TODO: support more permutations:
-            _ => panic!("Invalid permutation number for Vec3"),
         }
     }
 }

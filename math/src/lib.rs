@@ -12,7 +12,7 @@ use vector::{Vec2, Vec3};
 use std::cmp::PartialOrd;
 use std::f64;
 
-// Morton Encoding for 2D values:
+/// Morton encodes form two u32's to a single u64.
 pub fn morton_from_2d(xy: Vec2<u32>) -> u64 {
     fn pdep(n: u64) -> u64 {
         let n = (n | (n << 16)) & 0x0000ffff0000ffff;
@@ -23,10 +23,11 @@ pub fn morton_from_2d(xy: Vec2<u32>) -> u64 {
         n
     }
 
-    // Then we can finally or the result:
+    // Then we can finally OR the result:
     pdep(xy.x as u64) | pdep((xy.y as u64) << 1)
 }
 
+/// Morton encodes from a u64 to two u32's.
 pub fn morton_to_2d(m: u64) -> Vec2<u32> {
     fn pext(n: u64) -> u64 {
         let n = n & 0x5555555555555555;
@@ -44,7 +45,7 @@ pub fn morton_to_2d(m: u64) -> Vec2<u32> {
     }
 }
 
-// Reverses the bits in a u32 number:
+/// Reverses the bits in a u32 number.
 pub fn reverse_u32(n: u32) -> u32 {
     let n = (n << 16) | (n >> 16);
     let n = ((n & 0x00ff00ff) << 8) | ((n & 0xff00ff00) >> 8);
@@ -54,24 +55,24 @@ pub fn reverse_u32(n: u32) -> u32 {
     n
 }
 
-// Reverses the bits in a u64 number:
+/// Reverses the bits in a u64 number.
 pub fn reverse_u64(n: u64) -> u64 {
     let n0 = reverse_u32(n as u32) as u64;
     let n1 = reverse_u32((n >> 32) as u32) as u64;
     (n0 << 32) | n1
 }
 
-// Computes the grey code value for an unsigned 32 bit value:
+/// Computes the grey code value for an unsigned 32 bit value.
 pub fn greycode_u32(n: u32) -> u32 {
     (n >> 1) ^ n
 }
 
-// Computes the grey code value for an unsigned 64 bit value:
+/// Computes the grey code value for an unsigned 64 bit value.
 pub fn greycode_u64(n: u64) -> u64 {
     (n >> 1) ^ n
 }
 
-// Rounds up to the nearest power of 2 for u32 numbers:
+/// Rounds up to the nearest power of 2 for u32 numbers.
 pub fn next_pow2_u32(n: u32) -> u32 {
     // The idea is to essentially set it so that all bits are set
     // from least significant bit to most significant bit already set.
@@ -87,7 +88,7 @@ pub fn next_pow2_u32(n: u32) -> u32 {
     n + 1
 }
 
-// Rounds up to the nearest power of 2 for u64 numbers:
+/// Rounds up to the nearest power of 2 for u64 numbers.
 pub fn next_pow2_u64(n: u64) -> u64 {
     // The idea is to essentially set it so that all bits are set
     // from least significant bit to most significant bit already set.
@@ -102,7 +103,7 @@ pub fn next_pow2_u64(n: u64) -> u64 {
     n + 1
 }
 
-// This creates a coordinate system given only a single vector.
+/// This creates a coordinate system given only a single vector.
 pub fn coord_system<T: Float>(v1: Vec3<T>) -> (Vec3<T>, Vec3<T>) {
     // v2 can easily be calculated by just negating one of the components:
     let v2 = if v1.x.abs() > v1.y.abs() {
@@ -125,8 +126,7 @@ pub fn coord_system<T: Float>(v1: Vec3<T>) -> (Vec3<T>, Vec3<T>) {
     (v2, v3)
 }
 
-// Aligns a vector vec so that it faces the same direction as the refv vector
-// by negating or not negating it.
+/// Aligns a vector `vec` so that it faces the same direction as the `refv` vector by negating or not negating it.
 pub fn align<T: Float>(refv: Vec3<T>, vec: Vec3<T>) -> Vec3<T> {
     if refv.dot(vec) < T::zero() {
         -vec
@@ -135,23 +135,9 @@ pub fn align<T: Float>(refv: Vec3<T>, vec: Vec3<T>) -> Vec3<T> {
     }
 }
 
-// Used for handling errors:
-
-pub fn gamma_f32(n: i32) -> f32 {
-    let n = n as f32;
-    const HALF_EPS: f32 = std::f32::EPSILON / 2.;
-    (n * HALF_EPS) / (1. - n * HALF_EPS)
-}
-
-pub fn gamma_f64(n: i64) -> f64 {
-    let n = n as f64;
-    const HALF_EPS: f64 = std::f64::EPSILON / 2.;
-    (n * HALF_EPS) / (1. - n * HALF_EPS)
-}
-
-// This is used so that we can have efficient comparisons
-// with PartialOrd types (like floats). According to the compiler
-// explorer, this converts to the proper minsd/maxsd instruction:
+/// This is used so that we can have efficient comparisons
+/// with PartialOrd types (like floats). According to the compiler
+/// explorer, this converts to the proper minsd/maxsd instruction:
 pub fn min<T: PartialOrd>(v0: T, v1: T) -> T {
     if v0 < v1 {
         v0
@@ -160,6 +146,7 @@ pub fn min<T: PartialOrd>(v0: T, v1: T) -> T {
     }
 }
 
+/// See `min` function for details.
 pub fn max<T: PartialOrd>(v0: T, v1: T) -> T {
     if v0 > v1 {
         v0
@@ -168,8 +155,7 @@ pub fn max<T: PartialOrd>(v0: T, v1: T) -> T {
     }
 }
 
-// Solves the quadratic equation robustly.
-// If no solution exists, Option is set to None:
+/// Solves the quadratic equation robustly. If no solution exists, Option is set to None.
 pub fn quadratic<T: Float>(a: T, b: T, c: T) -> Option<(T, T)> {
     let disc = b * b - T::from(4).unwrap() * a * c;
     if disc < T::zero() {
@@ -189,12 +175,12 @@ pub fn quadratic<T: Float>(a: T, b: T, c: T) -> Option<(T, T)> {
     Some((t0.min(t1), t0.max(t1)))
 }
 
-// Reflect function:
+/// Reflect function.
 pub fn reflect<T: Float>(wo: Vec3<T>, n: Vec3<T>) -> Vec3<T> {
     -wo + n.scale(T::two() * wo.dot(n))
 }
 
-// Refract function:
+/// Refract function.
 pub fn refract<T: Float>(wi: Vec3<T>, n: Vec3<T>, eta: T) -> Option<Vec3<T>> {
     let cos_theta_i = n.dot(wi);
     let sin2_theta_i = T::zero().max(T::one() - cos_theta_i * cos_theta_i);

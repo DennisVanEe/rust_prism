@@ -1,13 +1,10 @@
 [package]
 authors = ["Dennis van Ee <dennis@vanee.us>"]
 edition = "2018"
-name = "embree"
+name = "math"
 version = "0.1.0"
 
 [dependencies]
-bitflags = "1.2.1"
-math = {path = "../math"}
-simple-error = "0.2.1"
+num-traits = "0.2.12"
 
 [build-dependencies]
-bindgen = "0.54.1"

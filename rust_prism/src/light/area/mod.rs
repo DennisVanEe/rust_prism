@@ -4,9 +4,9 @@
 pub mod diffuse;
 
 use super::Light;
-use crate::math::vector::Vec3;
 use crate::mesh::Interaction;
 use crate::spectrum::Spectrum;
+use math::vector::Vec3;
 
 // An area light is a special type of light that is associated with some
 // sort of geometry. It's the only type of light that can be "intersected"

@@ -1,5 +1,5 @@
-use crate::math::numbers::Float;
-use crate::math::vector::Vec3;
+use crate::numbers::Float;
+use crate::vector::Vec3;
 
 /// A ray used to intersect a scene.
 #[derive(Clone, Copy, Debug)]

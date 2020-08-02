@@ -1,7 +1,7 @@
 // This file stores all of the different filters that PRISM
 // supports.
 
-use crate::math::vector::Vec2;
+use math::vector::Vec2;
 use std::hint;
 
 pub trait Filter {

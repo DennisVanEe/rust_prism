@@ -1,7 +1,7 @@
 pub mod perspective;
 
-use crate::math::ray::{PrimaryRay, Ray, RayDiff};
-use crate::math::vector::Vec2;
+use math::ray::{PrimaryRay, Ray, RayDiff};
+use math::vector::Vec2;
 
 #[derive(Clone, Copy, Debug)]
 pub struct CameraSample {

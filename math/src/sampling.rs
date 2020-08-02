@@ -1,5 +1,5 @@
-use crate::math::numbers::Float;
-use crate::math::vector::{Vec2, Vec3};
+use crate::numbers::Float;
+use crate::vector::{Vec2, Vec3};
 
 /// Used for multiple-importance sampling. Produces a weight for the "f" part of the distrubtion.
 pub fn balance_heuristic<T: Float>(num_f: u32, pdf_f: T, num_g: u32, pdf_g: T) -> T {
