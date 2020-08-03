@@ -10,7 +10,6 @@ mod filter;
 mod geometry;
 mod integrator;
 mod light;
-mod mesh;
 mod sampler;
 mod scene;
 mod spectrum;

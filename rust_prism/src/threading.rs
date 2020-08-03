@@ -2,11 +2,11 @@ use crate::camera::{Camera, CameraSample};
 use crate::film::{Film, TILE_DIM};
 use crate::filter::PixelFilter;
 use crate::integrator::{Integrator, IntegratorManager};
-use crate::math::vector::Vec2;
 use crate::sampler::{SampleTables, Sampler};
 use crate::scene::Scene;
 use core_affinity;
 use crossbeam::thread;
+use math::vector::Vec2;
 use simple_error::{bail, SimpleResult};
 
 /// Basic parameters used independent of the integrator used.

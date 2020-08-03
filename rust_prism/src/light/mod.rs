@@ -2,7 +2,6 @@ pub mod area;
 pub mod point;
 
 use crate::spectrum::Spectrum;
-use crate::transform::Transf;
 use math::vector::{Vec2, Vec3};
 
 use bitflags::bitflags;
@@ -21,7 +20,7 @@ bitflags! {
 
 /// An interface for defining a light in the scene. Lights are transformed into world
 /// space when being committed to a scene.
-pub trait Light: 'static {
+pub trait Light: Sync + 'static {
     /// Samples the light from a specific position (`point`) in world space, a `time` in case the light
     /// varies over time, and a random value used to sample the light.
     ///

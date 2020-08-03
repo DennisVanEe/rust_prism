@@ -1,4 +1,4 @@
-use crate::mesh::{Mesh, Triangle};
+use crate::geometry::mesh::{Mesh, Triangle};
 use math::vector::{Vec2, Vec3};
 use rply;
 use simple_error::{bail, SimpleResult};

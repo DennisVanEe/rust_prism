@@ -1,7 +1,7 @@
-use crate::math::matrix::{Mat3x4, Mat4};
-use crate::math::ray::{PrimaryRay, Ray, RayDiff};
-use crate::math::vector::{Vec3, Vec4};
-use crate::mesh::Interaction;
+use crate::geometry::GeomInteraction;
+use math::matrix::{Mat3x4, Mat4};
+use math::ray::{PrimaryRay, Ray, RayDiff};
+use math::vector::{Vec3, Vec4};
 
 use std::ops::Mul;
 
@@ -146,8 +146,8 @@ impl Transf {
         }
     }
 
-    pub fn interaction(self, i: Interaction) -> Interaction {
-        Interaction {
+    pub fn geom_interaction(self, i: GeomInteraction) -> GeomInteraction {
+        GeomInteraction {
             p: self.point(i.p),
             n: self.normal(i.n).normalize(),
             wo: self.vector(i.wo).normalize(),

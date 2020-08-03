@@ -223,7 +223,7 @@ impl Scene {
                 scene_geom.material_id,
             );
             // Don't forget to transform the interaction to world-space from the instance.
-            instance.transform.interaction(interaction)
+            instance.transform.geom_interaction(interaction)
         }
     }
 }
