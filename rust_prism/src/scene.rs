@@ -2,9 +2,8 @@ use crate::geometry::{GeomInteraction, Geometry};
 use crate::light::Light;
 use crate::transform::Transf;
 use embree;
-use math::matrix::Mat3x4;
-use math::ray::Ray;
-use simple_error::SimpleResult;
+use pmath::matrix::Mat3x4;
+use pmath::ray::Ray;
 
 //
 // Scene
@@ -31,20 +30,20 @@ pub struct Group {
 
 impl Group {
     /// Creates a new group.
-    pub fn new(device: embree::Device) -> SimpleResult<Self> {
-        Ok(Group {
+    pub fn new() -> Self {
+        Group {
             meshes: Vec::new(),
-            embree_scene: embree::new_scene(device)?,
-        })
+            embree_scene: embree::new_scene(),
+        }
     }
 
     /// Adds a mesh to the group (as a MeshID). Returns the geometry id (local to the group).
-    pub fn add_geom(&mut self, device: embree::Device, mesh: GeomRef) -> SimpleResult<u32> {
+    pub fn add_geom(&mut self, mesh: GeomRef) -> u32 {
         let geom_id = self.meshes.len() as u32;
-        embree::attach_geometry_by_id(device, self.embree_scene, mesh.embree_geom, geom_id)?;
-        embree::commit_geometry(device, mesh.embree_geom)?;
+        embree::attach_geometry_by_id(self.embree_scene, mesh.embree_geom, geom_id);
+        embree::commit_geometry(mesh.embree_geom);
         self.meshes.push(mesh.index);
-        Ok(geom_id)
+        geom_id
     }
 }
 
@@ -64,13 +63,13 @@ pub struct Scene {
 }
 
 impl Scene {
-    pub fn new(device: embree::Device) -> Self {
+    pub fn new() -> Self {
         Scene {
             geom_pool: Vec::new(),
             light_pool: Vec::new(),
             instances: Vec::new(),
             geometries: Vec::new(),
-            embree_scene: embree::new_scene(device).unwrap(),
+            embree_scene: embree::new_scene(),
         }
     }
 
@@ -90,18 +89,18 @@ impl Scene {
     }
 
     /// Sets the build quality to build the scene with.
-    pub fn set_build_quality(&self, device: embree::Device, quality: embree::BuildQuality) {
-        embree::set_scene_build_quality(device, self.embree_scene, quality).unwrap();
+    pub fn set_build_quality(&self, quality: embree::BuildQuality) {
+        embree::set_scene_build_quality(self.embree_scene, quality);
     }
 
     /// Sets any flags to the scene (see `SceneFlags` enum).
-    pub fn set_flags(&self, device: embree::Device, flags: embree::SceneFlags) {
-        embree::set_scene_flags(device, self.embree_scene, flags).unwrap();
+    pub fn set_flags(&self, flags: embree::SceneFlags) {
+        embree::set_scene_flags(self.embree_scene, flags);
     }
 
     /// After adding everything, this will build the top-level BVH:
-    pub fn build_scene(&self, device: embree::Device) {
-        embree::commit_scene(device, self.embree_scene).unwrap();
+    pub fn build_scene(&self) {
+        embree::commit_scene(self.embree_scene);
     }
 
     /// Adds a toplevel mesh and returns the geomID of that mesh.
@@ -109,17 +108,11 @@ impl Scene {
     /// Adds a toplevel mesh with the given device and material id. Returning a geomID that is used
     /// to determine how reference it in the future. Note that these mesh should already have been
     /// transformed and CANNOT be animated.
-    pub fn add_toplevel_geom(
-        &mut self,
-        device: embree::Device,
-        geom: GeomRef,
-        material_id: u32,
-    ) -> u32 {
+    pub fn add_toplevel_geom(&mut self, geom: GeomRef, material_id: u32) -> u32 {
         // First create an rtc geometry of the mesh:
         let geom_id = self.geometries.len() as u32;
-        embree::attach_geometry_by_id(device, self.embree_scene, geom.embree_geom, geom_id)
-            .unwrap();
-        embree::commit_geometry(device, geom.embree_geom).unwrap();
+        embree::attach_geometry_by_id(self.embree_scene, geom.embree_geom, geom_id);
+        embree::commit_geometry(geom.embree_geom);
         self.geometries.push(SceneGeom {
             index: geom.index,
             material_id,
@@ -134,7 +127,6 @@ impl Scene {
     /// the number of mesh in the group. Ordering is based on geom_id returned by add_group_mesh.
     pub fn add_group_instance(
         &mut self,
-        device: embree::Device,
         group: &Group,
         material_ids: &[u32],
         transform: Transf,
@@ -142,25 +134,23 @@ impl Scene {
         let geom_id = (self.geometries.len() + self.instances.len()) as u32;
 
         // First we commit the scene:
-        embree::commit_scene(device, group.embree_scene).unwrap();
+        embree::commit_scene(group.embree_scene);
 
-        let geom_ptr = embree::new_geometry(device, embree::GeometryType::Instance).unwrap();
-        embree::set_geometry_instance_scene(device, geom_ptr, group.embree_scene).unwrap();
-        embree::set_geometry_timestep_count(device, geom_ptr, 1).unwrap();
+        let geom_ptr = embree::new_geometry(embree::GeometryType::Instance);
+        embree::set_geometry_instance_scene(geom_ptr, group.embree_scene);
+        embree::set_geometry_timestep_count(geom_ptr, 1);
 
-        embree::attach_geometry_by_id(device, self.embree_scene, geom_ptr, geom_id).unwrap();
+        embree::attach_geometry_by_id(self.embree_scene, geom_ptr, geom_id);
 
         let mat = transform.get_frd().to_f32();
         embree::set_geometry_transform(
-            device,
             geom_ptr,
             0,
             embree::Format::Float3x4RowMajor,
             &mat as *const Mat3x4<f32>,
-        )
-        .unwrap();
+        );
 
-        embree::commit_geometry(device, geom_ptr).unwrap();
+        embree::commit_geometry(geom_ptr);
 
         // Set the material id's for each mesh in the instance
         let mut geometries = Vec::with_capacity(group.meshes.len());
@@ -243,12 +233,4 @@ struct Instance {
     transform: Transf,
     /// The geometry the scene belongs to (as part of the top-level)
     embree_geom: embree::Geometry,
-}
-
-impl Instance {
-    fn destroy_instance(&mut self, device: embree::Device) -> SimpleResult<()> {
-        let result = embree::release_geometry(device, self.embree_geom);
-        self.embree_geom = embree::Geometry::new_null();
-        result
-    }
 }

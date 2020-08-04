@@ -6,8 +6,8 @@ version = "0.1.0"
 
 [dependencies]
 bitflags = "1.2.1"
-math = {path = "../math"}
-simple-error = "0.2.1"
+lazy_static = "1.4.0"
+pmath = {path = "../pmath"}
 
 [build-dependencies]
 bindgen = "0.54.1"

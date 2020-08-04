@@ -6,7 +6,7 @@ use crate::sampler::{SampleTables, Sampler};
 use crate::scene::Scene;
 use core_affinity;
 use crossbeam::thread;
-use math::vector::Vec2;
+use pmath::vector::Vec2;
 use simple_error::{bail, SimpleResult};
 
 /// Basic parameters used independent of the integrator used.
@@ -172,7 +172,7 @@ fn thread_render<I: Integrator>(
     film: &Film,
     scene: &Scene,
     num_pixel_samples: u32,
-    integrator: I,
+    mut integrator: I,
 ) {
     loop {
         // When getting the next tile, we also check if any tiles are left in this pass.

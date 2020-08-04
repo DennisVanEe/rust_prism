@@ -1,11 +1,11 @@
 pub mod mesh;
+pub mod sphere;
 
 use crate::transform::Transf;
 use embree;
-use math;
-use math::ray::Ray;
-use math::vector::{Vec2, Vec3};
-use simple_error::SimpleResult;
+use pmath;
+use pmath::ray::Ray;
+use pmath::vector::{Vec2, Vec3};
 
 #[derive(Clone, Copy, Debug)]
 pub struct GeomInteraction {
@@ -32,8 +32,8 @@ pub struct GeomInteraction {
 pub trait Geometry: Sync + 'static {
     fn transform(&mut self, transf: Transf);
 
-    fn create_embree_geometry(&mut self, device: embree::Device) -> SimpleResult<embree::Geometry>;
-    fn delete_embree_geometry(&mut self, device: embree::Device) -> SimpleResult<()>;
+    fn create_embree_geometry(&mut self) -> embree::Geometry;
+    fn delete_embree_geometry(&mut self);
     fn get_embree_geometry(&self) -> embree::Geometry;
 
     fn get_surface_area(&self) -> f64;

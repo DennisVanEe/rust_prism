@@ -1,8 +1,8 @@
 pub mod area;
 pub mod point;
 
-use crate::spectrum::Spectrum;
-use math::vector::{Vec2, Vec3};
+use crate::spectrum::Color;
+use pmath::vector::{Vec2, Vec3};
 
 use bitflags::bitflags;
 
@@ -28,12 +28,12 @@ pub trait Light: Sync + 'static {
     /// *`Spectrum`: potential (if no occlusion occurs) energy the light contributes
     /// *`Vec3<f64>`: world space location of where the light will get hit (so one can calculate the wi value themselves)
     /// *`f64`: the probability density for the light sample
-    fn sample(&self, point: Vec3<f64>, time: f64, u: Vec2<f64>) -> (Spectrum, Vec3<f64>, f64);
+    fn sample(&self, point: Vec3<f64>, time: f64, u: Vec2<f64>) -> (Color, Vec3<f64>, f64);
 
     fn pdf(&self, point: Vec3<f64>, wi: Vec3<f64>) -> f64;
 
     /// Returns the total power of the light.
-    fn power(&self) -> Spectrum;
+    fn power(&self) -> Color;
 
     // Whether or not the light is a delta (like a point light):
     fn is_delta(&self) -> bool;

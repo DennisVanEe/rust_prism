@@ -1,5 +1,5 @@
-use crate::spectrum::Spectrum;
-use math::vector::Vec2;
+use crate::spectrum::Color;
+use pmath::vector::Vec2;
 use std::cell::Cell;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -7,7 +7,7 @@ pub mod png;
 
 #[derive(Clone, Copy, Debug)]
 pub struct Pixel {
-    pub color: Spectrum,
+    pub color: Color,
     pub count: u32,
 }
 
@@ -15,7 +15,7 @@ impl Pixel {
     /// Creates an instance of a pixel that is black.
     pub fn black() -> Self {
         Pixel {
-            color: Spectrum::black(),
+            color: Color::black(),
             count: 0,
         }
     }
@@ -23,24 +23,26 @@ impl Pixel {
     /// Creates an instance of a pixel that is white.
     pub fn white() -> Self {
         Pixel {
-            color: Spectrum::white(),
+            color: Color::white(),
             count: 0,
         }
     }
 
     /// Creates a new pixel with the given spectrum.
-    pub fn new(color: Spectrum) -> Self {
+    pub fn new(color: Color) -> Self {
         Pixel { color, count: 0 }
     }
 
     /// Adds a sample to the pixel.
-    pub fn add_sample(&mut self, color: Spectrum) {
-        self.color = self.color + color;
-        self.count += 1;
+    pub fn add_sample(self, color: Color) -> Self {
+        Pixel {
+            color: self.color + color,
+            count: self.count + 1,
+        }
     }
 
     /// Calculates the final color of the pixel.
-    pub fn final_color(self) -> Spectrum {
+    pub fn final_color(self) -> Color {
         if self.count == 0 {
             self.color
         } else {
@@ -177,7 +179,7 @@ impl Film {
 
     /// Given a function that converts XYZColor to an rgb value (in the form of an ImageBuffer),
     /// returns an ImageBuffer.
-    pub fn to_image_buffer(&self, transf: fn(Spectrum) -> ImagePixel) -> ImageBuffer {
+    pub fn to_image_buffer(&self, transf: fn(Color) -> ImagePixel) -> ImageBuffer {
         let res = self.tile_res.scale(TILE_DIM);
         let mut buffer = vec![ImagePixel::zero(); res.x * res.y];
 

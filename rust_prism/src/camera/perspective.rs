@@ -1,10 +1,10 @@
 use crate::camera::{Camera, CameraSample};
 use crate::transform::Transf;
-use math::bbox::BBox2;
-use math::matrix::Mat4;
-use math::ray::{PrimaryRay, Ray, RayDiff};
-use math::sampling;
-use math::vector::{Vec2, Vec3};
+use pmath::bbox::BBox2;
+use pmath::matrix::Mat4;
+use pmath::ray::{PrimaryRay, Ray, RayDiff};
+use pmath::sampling;
+use pmath::vector::{Vec2, Vec3};
 
 // NOTE: camera space has the camera at the origin, the y-axis pointing up,
 // the x-axis pointing right, and the z-axis pointing into the screen.

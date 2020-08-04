@@ -6,7 +6,7 @@ version = "0.1.0"
 
 [dependencies]
 embree = {path = "../embree"}
-math = {math = "../math"}
+pmath = {path = "../pmath"}
 pmj = {path = "../pmj"}
 rply = {path = "../rply"}
 

@@ -1,10 +1,9 @@
 use crate::geometry::{GeomInteraction, Geometry};
 use crate::transform::Transf;
 use embree;
-use math;
-use math::ray::Ray;
-use math::vector::{Vec2, Vec3};
-use simple_error::SimpleResult;
+use pmath;
+use pmath::ray::Ray;
+use pmath::vector::{Vec2, Vec3};
 use std::mem;
 
 #[repr(C)]
@@ -74,7 +73,7 @@ impl Triangle {
             let dn12 = nrms[1] - nrms[2];
             let dndu = (dn02.scale(duv12[1]) - dn12.scale(duv02[1])).scale(inv_det);
             let dndv = (dn02.scale(-duv12[0]) + dn12.scale(duv02[0])).scale(inv_det);
-            let n = math::align(shading_n, n); // If we have shading normals, let is decide orientation
+            let n = pmath::align(shading_n, n); // If we have shading normals, let is decide orientation
             (n, shading_n, dndu, dndv)
         };
 
@@ -192,13 +191,12 @@ impl Geometry for Mesh {
     ///
     /// Creates the embree geometry. Can be called multiple times, will only create
     /// the geometry once.
-    fn create_embree_geometry(&mut self, device: embree::Device) -> SimpleResult<embree::Geometry> {
+    fn create_embree_geometry(&mut self) -> embree::Geometry {
         // Delete the device first.
-        self.delete_embree_geometry(device)?;
+        self.delete_embree_geometry();
 
-        let embree_geom = embree::new_geometry(device, embree::GeometryType::Triangle)?;
+        let embree_geom = embree::new_geometry(embree::GeometryType::Triangle);
         embree::set_shared_geometry_buffer(
-            device,
             embree_geom,
             embree::BufferType::Vertex,
             0,
@@ -207,9 +205,8 @@ impl Geometry for Mesh {
             0,
             mem::size_of::<Vec3<f32>>(),
             self.pos.len() - 1, // See why we allocate one extra pos at the end
-        )?;
+        );
         embree::set_shared_geometry_buffer(
-            device,
             embree_geom,
             embree::BufferType::Index,
             0,
@@ -218,18 +215,18 @@ impl Geometry for Mesh {
             0,
             mem::size_of::<Triangle>(),
             self.triangles.len(),
-        )?;
+        );
 
         self.embree_geom = embree_geom;
-        Ok(embree_geom)
+        embree_geom
     }
 
-    fn delete_embree_geometry(&mut self, device: embree::Device) -> SimpleResult<()> {
+    fn delete_embree_geometry(&mut self) {
         if self.embree_geom.is_null() {
-            return Ok(());
+            return;
         }
 
-        let result = embree::release_geometry(device, self.embree_geom);
+        let result = embree::release_geometry(self.embree_geom);
         self.embree_geom = embree::Geometry::new_null();
         result
     }

@@ -346,6 +346,16 @@ impl<T: Zero + Copy> Vec3<T> {
     }
 }
 
+impl<T: One + Copy> Vec3<T> {
+    pub fn one() -> Self {
+        Vec3 {
+            x: T::one(),
+            y: T::one(),
+            z: T::one(),
+        }
+    }
+}
+
 impl<T: Add<Output = T> + Copy> Vec3<T> {
     pub fn horizontal_add(self) -> T {
         self.x + self.y + self.z
@@ -569,6 +579,17 @@ impl<T: Zero + Copy> Vec4<T> {
             y: T::zero(),
             z: T::zero(),
             w: T::zero(),
+        }
+    }
+}
+
+impl<T: One + Copy> Vec4<T> {
+    pub fn one() -> Self {
+        Vec4 {
+            x: T::one(),
+            y: T::one(),
+            z: T::one(),
+            w: T::one(),
         }
     }
 }

@@ -2,30 +2,32 @@
 
 use num_traits::clamp;
 
+use pmath::vector::Vec3;
 use std::ops::{Add, Div, Index, Mul, Sub};
 
-// Here we can decide which spectrum to use when building:
-pub type Spectrum = RGBSpectrum;
-
 #[derive(Clone, Copy, Debug)]
-pub struct RGBSpectrum {
+pub struct Color {
     pub r: f64,
     pub g: f64,
     pub b: f64,
 }
 
-impl RGBSpectrum {
-    pub fn from_xyz(xyz: XYZColor) -> Self {
-        RGBSpectrum {
-            r: 3.240479 * xyz.x - 1.537150 * xyz.y - 0.498535 * xyz.z,
-            g: -0.969256 * xyz.x + 1.875991 * xyz.y + 0.041556 * xyz.z,
-            b: 0.055648 * xyz.x - 0.204043 * xyz.y + 1.057311 * xyz.z,
+impl Color {
+    pub fn from_vec3(v: Vec3<f64>) -> Self {
+        Color {
+            r: v.x,
+            g: v.y,
+            b: v.z,
         }
+    }
+
+    pub fn from_scalar(s: f64) -> Self {
+        Color { r: s, g: s, b: s }
     }
 
     // Just a fancy way of returning 0 for everything:
     pub fn black() -> Self {
-        RGBSpectrum {
+        Color {
             r: 0.,
             g: 0.,
             b: 0.,
@@ -33,20 +35,16 @@ impl RGBSpectrum {
     }
 
     pub fn white() -> Self {
-        RGBSpectrum {
+        Color {
             r: 1.,
             g: 1.,
             b: 1.,
         }
     }
 
-    pub fn from_scalar(s: f64) -> Self {
-        RGBSpectrum { r: s, g: s, b: s }
-    }
-
     // Multiplies all of the components by the scale value:
     pub fn scale(self, s: f64) -> Self {
-        RGBSpectrum {
+        Color {
             r: self.r * s,
             g: self.g * s,
             b: self.b * s,
@@ -55,7 +53,7 @@ impl RGBSpectrum {
 
     // Divides all of the components by the scale value:
     pub fn div_scale(self, s: f64) -> Self {
-        RGBSpectrum {
+        Color {
             r: self.r / s,
             g: self.g / s,
             b: self.b / s,
@@ -67,7 +65,7 @@ impl RGBSpectrum {
     }
 
     pub fn sqrt(self) -> Self {
-        RGBSpectrum {
+        Color {
             r: self.r.sqrt(),
             g: self.g.sqrt(),
             b: self.b.sqrt(),
@@ -75,7 +73,7 @@ impl RGBSpectrum {
     }
 
     pub fn pow(self, p: f64) -> Self {
-        RGBSpectrum {
+        Color {
             r: self.r.powf(p),
             g: self.g.powf(p),
             b: self.b.powf(p),
@@ -83,7 +81,7 @@ impl RGBSpectrum {
     }
 
     pub fn exp(self) -> Self {
-        RGBSpectrum {
+        Color {
             r: self.r.exp(),
             g: self.g.exp(),
             b: self.b.exp(),
@@ -95,33 +93,19 @@ impl RGBSpectrum {
     }
 
     pub fn clamp(self, low: f64, high: f64) -> Self {
-        RGBSpectrum {
+        Color {
             r: clamp(self.r, low, high),
             g: clamp(self.g, low, high),
             b: clamp(self.b, low, high),
         }
     }
-
-    // Generates CIE 1931 XYZ color space result:
-    pub fn to_xyz(self) -> XYZColor {
-        XYZColor {
-            x: 0.412453 * self.r + 0.357580 * self.g + 0.180423 * self.b,
-            y: 0.212671 * self.r + 0.715160 * self.g + 0.072169 * self.b,
-            z: 0.019334 * self.r + 0.119193 * self.g + 0.950227 * self.b,
-        }
-    }
-
-    // Only generates the Y value (as this is often used):
-    pub fn to_y(self) -> f64 {
-        0.212671 * self.r + 0.715160 * self.g + 0.072169 * self.b
-    }
 }
 
-impl Add for RGBSpectrum {
+impl Add for Color {
     type Output = Self;
 
     fn add(self, rhs: Self) -> Self {
-        RGBSpectrum {
+        Color {
             r: self.r + rhs.r,
             g: self.g + rhs.g,
             b: self.b + rhs.b,
@@ -129,11 +113,11 @@ impl Add for RGBSpectrum {
     }
 }
 
-impl Sub for RGBSpectrum {
+impl Sub for Color {
     type Output = Self;
 
     fn sub(self, rhs: Self) -> Self {
-        RGBSpectrum {
+        Color {
             r: self.r - rhs.r,
             g: self.g - rhs.g,
             b: self.b - rhs.b,
@@ -141,11 +125,11 @@ impl Sub for RGBSpectrum {
     }
 }
 
-impl Div for RGBSpectrum {
+impl Div for Color {
     type Output = Self;
 
     fn div(self, rhs: Self) -> Self {
-        RGBSpectrum {
+        Color {
             r: self.r / rhs.r,
             g: self.g / rhs.g,
             b: self.b / rhs.b,
@@ -153,11 +137,11 @@ impl Div for RGBSpectrum {
     }
 }
 
-impl Mul for RGBSpectrum {
+impl Mul for Color {
     type Output = Self;
 
     fn mul(self, rhs: Self) -> Self {
-        RGBSpectrum {
+        Color {
             r: self.r * rhs.r,
             g: self.g * rhs.g,
             b: self.b * rhs.b,
@@ -165,7 +149,7 @@ impl Mul for RGBSpectrum {
     }
 }
 
-impl Index<usize> for RGBSpectrum {
+impl Index<usize> for Color {
     type Output = f64;
 
     fn index(&self, i: usize) -> &f64 {
@@ -173,69 +157,6 @@ impl Index<usize> for RGBSpectrum {
             0 => &self.r,
             1 => &self.g,
             2 => &self.b,
-            _ => panic!("Index out of range for Vec"),
-        }
-    }
-}
-
-// The CIE XYZ color space:
-#[derive(Clone, Copy, Debug)]
-pub struct XYZColor {
-    pub x: f64,
-    pub y: f64,
-    pub z: f64,
-}
-
-impl XYZColor {
-    pub fn zero() -> Self {
-        XYZColor {
-            x: 0.,
-            y: 0.,
-            z: 0.,
-        }
-    }
-
-    pub fn scale(self, s: f64) -> XYZColor {
-        XYZColor {
-            x: self.x * s,
-            y: self.y * s,
-            z: self.z * s,
-        }
-    }
-}
-
-impl Add for XYZColor {
-    type Output = Self;
-
-    fn add(self, rhs: Self) -> Self {
-        XYZColor {
-            x: self.x + rhs.x,
-            y: self.y + rhs.y,
-            z: self.z + rhs.z,
-        }
-    }
-}
-
-impl Sub for XYZColor {
-    type Output = Self;
-
-    fn sub(self, rhs: Self) -> Self {
-        XYZColor {
-            x: self.x - rhs.x,
-            y: self.y - rhs.y,
-            z: self.z - rhs.z,
-        }
-    }
-}
-
-impl Index<usize> for XYZColor {
-    type Output = f64;
-
-    fn index(&self, i: usize) -> &f64 {
-        match i {
-            0 => &self.x,
-            1 => &self.y,
-            2 => &self.z,
             _ => panic!("Index out of range for Vec"),
         }
     }

@@ -1,23 +1,23 @@
 use crate::light::{Light, LightType};
-use crate::spectrum::Spectrum;
-use math::numbers::Float;
-use math::vector::{Vec2, Vec3};
+use crate::spectrum::Color;
+use pmath::numbers::Float;
+use pmath::vector::{Vec2, Vec3};
 
 /// A point light source.
 pub struct Point {
-    intensity: Spectrum,
+    intensity: Color,
 }
 
 impl Point {
     const LIGHT_TYPE: LightType = LightType::DELTA_POSITION;
 
-    pub fn new(intensity: Spectrum) -> Self {
+    pub fn new(intensity: Color) -> Self {
         Point { intensity }
     }
 }
 
 impl Light for Point {
-    fn sample(&self, surface_point: Vec3<f64>, _: f64, u: Vec2<f64>) -> (Spectrum, Vec3<f64>, f64) {
+    fn sample(&self, surface_point: Vec3<f64>, _: f64, u: Vec2<f64>) -> (Color, Vec3<f64>, f64) {
         let dist_sqrt = (-surface_point).length2();
         (self.intensity.div_scale(dist_sqrt), Vec3::zero(), 1.)
     }
@@ -27,7 +27,7 @@ impl Light for Point {
         0.
     }
 
-    fn power(&self) -> Spectrum {
+    fn power(&self) -> Color {
         self.intensity.scale(f64::PI * 4.)
     }
 

@@ -1,7 +1,7 @@
 use crate::geometry::GeomInteraction;
-use math::matrix::{Mat3x4, Mat4};
-use math::ray::{PrimaryRay, Ray, RayDiff};
-use math::vector::{Vec3, Vec4};
+use pmath::matrix::{Mat3x4, Mat4};
+use pmath::ray::{PrimaryRay, Ray, RayDiff};
+use pmath::vector::{Vec3, Vec4};
 
 use std::ops::Mul;
 
