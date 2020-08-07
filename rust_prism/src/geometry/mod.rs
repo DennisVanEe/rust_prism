@@ -1,5 +1,4 @@
 pub mod mesh;
-pub mod sphere;
 
 use crate::transform::Transf;
 use embree;

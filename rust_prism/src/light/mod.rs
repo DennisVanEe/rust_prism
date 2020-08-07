@@ -1,4 +1,5 @@
 pub mod area;
+pub mod many_lights;
 pub mod point;
 
 use crate::spectrum::Color;

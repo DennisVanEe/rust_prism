@@ -32,18 +32,15 @@ use std::time::Instant;
 const MODEL: &'static str = "/home/dennis/Dev/rust_prism/test_files/sphere.ply";
 
 fn main() {
-    //let mut mesh = fileio::ply::load_mesh(MODEL).unwrap();
-    //mesh.create_embree_geometry();
+    let mut mesh = fileio::ply::load_mesh(MODEL).unwrap();
+    mesh.create_embree_geometry();
     //let mesh_pos = Transf::new_translate(Vec3 { x: 0.0, y: 0.0, z: 0.0 });
     //mesh.transform(mesh_pos);
 
     //let mesh_ref = scene::allocate_mesh(mesh);
 
-    let mut sphere = geometry::sphere::Spheres::new_one(Vec3::zero(), 1.0);
-    sphere.create_embree_geometry();
-
     let mut scene = scene::Scene::new();
-    let mesh_ref = scene.add_to_geom_pool(sphere); //mesh);
+    let mesh_ref = scene.add_to_geom_pool(mesh); //mesh);
     scene.add_toplevel_geom(mesh_ref, 0);
     scene.build_scene();
 
