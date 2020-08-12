@@ -1,3 +1,4 @@
+use crate::light::many_lights::LightCone;
 use crate::light::{Light, LightType};
 use crate::spectrum::Color;
 use pmath::numbers::Float;
@@ -34,5 +35,9 @@ impl Light for Point {
     fn is_delta(&self) -> bool {
         Self::LIGHT_TYPE.contains(LightType::DELTA_POSITION)
             || Self::LIGHT_TYPE.contains(LightType::DELTA_DIRECTION)
+    }
+
+    fn get_cone(&self) -> LightCone {
+        todo!();
     }
 }

@@ -77,8 +77,9 @@ pub struct BBox3<T: PartialOrd + Bounded + Copy> {
 }
 
 impl<T: PartialOrd + Bounded + Copy> BBox3<T> {
-    /// Constructs a new `BBox3`.
-    pub fn new() -> Self {
+    /// Constructs a "initial" bounding box. An initial bounding box is one, when combined
+    /// with another, takes on the value of that other bounding box.
+    pub fn new_initial() -> Self {
         BBox3 {
             pmin: Vec3 {
                 x: T::max_value(),

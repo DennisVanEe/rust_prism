@@ -11,6 +11,7 @@ mod geometry;
 mod integrator;
 mod light;
 mod sampler;
+mod sampling;
 mod scene;
 mod spectrum;
 mod threading;

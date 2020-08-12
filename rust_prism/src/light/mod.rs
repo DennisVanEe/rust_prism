@@ -2,6 +2,7 @@ pub mod area;
 pub mod many_lights;
 pub mod point;
 
+use crate::light::many_lights::LightCone;
 use crate::spectrum::Color;
 use pmath::vector::{Vec2, Vec3};
 
@@ -38,6 +39,9 @@ pub trait Light: Sync + 'static {
 
     // Whether or not the light is a delta (like a point light):
     fn is_delta(&self) -> bool;
+
+    // Returns the normal extent and emission extent of the light in the form of a light cone.
+    fn get_cone(&self) -> LightCone;
 }
 
 // // This essentially calculates Planck's law for a range of wavelengths.
