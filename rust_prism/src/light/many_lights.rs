@@ -2,25 +2,24 @@
 // Importance Sampling of Many Lights with Adaptive Tree Splitting by
 // Estevez and Kulla.
 
+use partition;
 use pmath::bbox::BBox3;
 use pmath::matrix::Mat3x4;
 use pmath::numbers::Float;
 use pmath::vector::Vec3;
 
-use array_init;
-
 /// A light cone represents the extent of a light
 #[derive(Copy, Clone, Debug)]
-pub struct LightCone {
+pub struct Cone {
     axis: Vec3<f64>,
     theta_o: f64, // All angles are in radians
     theta_e: f64,
 }
 
-impl LightCone {
+impl Cone {
     /// Construct an "initial" `LightCone`. This cone will equal whatever cone ii is combined with.
     pub fn new_initial() -> Self {
-        LightCone {
+        Cone {
             axis: Vec3::zero(),
             theta_o: 0.0,
             theta_e: 0.0,
@@ -29,7 +28,7 @@ impl LightCone {
 
     /// Construct a new `LightCone`:
     pub fn new(axis: Vec3<f64>, theta_o: f64, theta_e: f64) -> Self {
-        LightCone {
+        Cone {
             axis: axis.normalize(),
             theta_o: theta_o.max(0.0).min(f64::PI), // Make sure theta_o is in [0, PI]
             theta_e: theta_e.max(0.0).min(f64::PI_OVER_2), // Make sure theta_e is in [0, PI/2]
@@ -37,7 +36,7 @@ impl LightCone {
     }
 
     /// Combines two `LightCone`s into one `LightCone` that encompasses everything.
-    fn combine(self, b: LightCone) -> Self {
+    fn combine(self, b: Cone) -> Self {
         // Ensure that a.theta_o > b.theta_o
         let (a, b) = if self.theta_o > b.theta_o {
             (self, b)
@@ -49,7 +48,7 @@ impl LightCone {
         let theta_e = a.theta_e.max(b.theta_e);
 
         if f64::PI.min(theta_d + b.theta_o) <= a.theta_o {
-            return LightCone {
+            return Cone {
                 axis: a.axis,
                 theta_o: a.theta_o,
                 theta_e,
@@ -58,7 +57,7 @@ impl LightCone {
 
         let theta_o = (a.theta_o + theta_d + b.theta_o) * 0.5;
         if f64::PI <= theta_o {
-            return LightCone {
+            return Cone {
                 axis: a.axis,
                 theta_o: f64::PI,
                 theta_e,
@@ -72,7 +71,7 @@ impl LightCone {
             rot_mat.mul_vec_zero(a.axis)
         };
 
-        LightCone {
+        Cone {
             axis,
             theta_o,
             theta_e,
@@ -98,12 +97,37 @@ impl LightBVH {}
 
 const BIN_COUNT: usize = 12;
 
+/// Describes the bound over a bunch of lights:
+#[derive(Clone, Copy, Debug)]
+struct LightBound {
+    bbox: BBox3<f64>,
+    cone: Cone,
+    power: f64,
+}
+
+impl LightBound {
+    fn new_initial() -> Self {
+        LightBound {
+            bbox: BBox3::new_initial(),
+            cone: Cone::new_initial(),
+            power: 0.0,
+        }
+    }
+
+    fn combine(self, bound: LightBound) -> Self {
+        LightBound {
+            bbox: self.bbox.combine_bnd(bound.bbox),
+            cone: self.cone.combine(bound.cone),
+            power: self.power + bound.power,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
 struct LightInfo {
-    index: usize,        // The index of the light
-    cone: LightCone,     // The cone or extent of the light
-    power: f64,          // The power of the light
-    bound: BBox3<f64>,   // The bounds on the light
-    centoird: Vec3<f64>, // The centroid position of the light
+    index: usize,      // The index of the light
+    bound: LightBound, // The bound over the lights
+    centroid: Vec3<f64>,
 }
 
 // TODO: figure out naming convention and what to do about global_bin (which doesn't really make sense).
@@ -117,65 +141,64 @@ struct LightInfo {
 /// * `lights` - A collection of all of the light info we are currently working with
 /// * `bound`  - The overall bound of all of the lights
 /// * `cone`   - The overall cone of all of the lights
-fn split_clusters_axis(lights: &mut [LightInfo], global_bin: Bin) -> Option<(&mut [LightInfo], &mut [LightInfo])> {
+fn split_clusters_axis(
+    lights: &mut [LightInfo],
+    global_bound: LightBound,
+) -> Option<(&mut [LightInfo], &mut [LightInfo])> {
     // These values are used for the regularization factor:
-    let bound_diagonal = bound.diagonal();
-    let bound_max_length = bound_diagonal[bound_diagonal.max_dim()];
+    let bbox_diagonal = global_bound.bbox.diagonal();
+    let bbox_max_length = bbox_diagonal[bbox_diagonal.max_dim()];
 
     let mut global_min_cost = f64::INFINITY;
     let mut global_min_bin = 0;
     let mut global_min_axis = 0;
 
     // Stores all of the potential splits across a number of different bins:
-    let mut global_bins = [[Bin::new_initial(); BIN_COUNT]; 3];
+    let mut global_bins = [[LightBound::new_initial(); BIN_COUNT]; 3];
 
     // Look for the best split across all of the different axises:
     for (axis, bins) in global_bins.iter_mut().enumerate() {
         // Go through all the lights and place them into different sets of buckets:
         for l in lights.iter() {
             // Get the bucket index for the current primitive:
-            let b = (BIN_COUNT as f64) * bound.offset(l.centoird)[axis];
+            let b = (BIN_COUNT as f64) * global_bound.bbox.offset(l.centroid)[axis];
             let b = if b >= (BIN_COUNT as f64) {
                 BIN_COUNT - 1
             } else {
                 b.floor() as usize
             };
 
-            let bin = &mut bins[b];
-
-            // Update the values as appropriate in each of the bins:
-            bin.bound = bin.bound.combine_bnd(l.bound);
-            bin.cone = bin.cone.combine(l.cone);
-            bin.power = bin.power + l.power;
+            bins[b] = bins[b].combine(l.bound);
         }
 
         let mut min_cost = f64::INFINITY;
         let mut min_bin = 0;
 
         // Compute the regularization factor so that thin bounds aren't taken:
-        let kr = bound_max_length / bound_diagonal[axis];
+        let kr = bbox_max_length / bbox_diagonal[axis];
 
         for b in 0..(BIN_COUNT - 1) {
             // Combine everything up to bin b (inclusive):
             let left_bins = &bins[0..=b]
                 .iter()
-                .fold(Bin::new_initial(), |accum, &bin| accum.combine(bin));
+                .fold(LightBound::new_initial(), |accum, &bin| accum.combine(bin));
 
             // Combine everything after bin b:
             let right_bins = &bins[(b + 1)..BIN_COUNT]
                 .iter()
-                .fold(Bin::new_initial(), |accum, &bin| accum.combine(bin));
+                .fold(LightBound::new_initial(), |accum, &bin| accum.combine(bin));
 
             // The
             let left_cost = left_bins.power
-                * left_bins.bound.surface_area()
+                * left_bins.bbox.surface_area()
                 * left_bins.cone.surface_area_orientation_heuristic();
             let right_cost = right_bins.power
-                * right_bins.bound.surface_area()
+                * right_bins.bbox.surface_area()
                 * right_bins.cone.surface_area_orientation_heuristic();
             let cost = kr
                 * ((left_cost + right_cost)
-                    / (bound.surface_area() * cone.surface_area_orientation_heuristic()));
+                    / (global_bound.bbox.surface_area()
+                        * global_bound.cone.surface_area_orientation_heuristic()));
 
             if cost < min_cost {
                 min_cost = cost;
@@ -190,31 +213,21 @@ fn split_clusters_axis(lights: &mut [LightInfo], global_bin: Bin) -> Option<(&mu
         }
     }
 
-    // Now check if we should perform a split or not:
-    if min_cost >= 
-}
-
-#[derive(Clone, Copy, Debug)]
-struct Bin {
-    bound: BBox3<f64>, // Total bounds
-    cone: LightCone,   // Total light cone
-    power: f64,        // Total power
-}
-
-impl Bin {
-    fn new_initial() -> Self {
-        Bin {
-            bound: BBox3::new_initial(),
-            cone: LightCone::new_initial(),
-            power: 0.0,
-        }
+    // Now check if we should perform a split or not (if it's not worth it, then we don't).
+    if global_min_cost >= global_bound.power {
+        return None;
     }
 
-    fn combine(self, bin: Bin) -> Self {
-        Bin {
-            bound: self.bound.combine_bnd(bin.bound),
-            cone: self.cone.combine(bin.cone),
-            power: self.power + bin.power,
-        }
-    }
+    // Now we go ahead and perform the partition:
+    let (left_part, right_part) = partition::partition(lights, |l| {
+        let b = (BIN_COUNT as f64) * global_bound.bbox.offset(l.centroid)[global_min_axis];
+        let b = if b >= (BIN_COUNT as f64) {
+            BIN_COUNT - 1
+        } else {
+            b.floor() as usize
+        };
+        b <= global_min_bin
+    });
+
+    Some((left_part, right_part))
 }
