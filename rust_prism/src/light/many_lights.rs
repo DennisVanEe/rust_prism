@@ -2,6 +2,8 @@
 // Importance Sampling of Many Lights with Adaptive Tree Splitting by
 // Estevez and Kulla.
 
+use crate::light::Light;
+use bumpalo::Bump;
 use partition;
 use pmath::bbox::BBox3;
 use pmath::matrix::Mat3x4;
@@ -91,18 +93,105 @@ impl Cone {
     }
 }
 
-pub struct LightBVH {}
-
-impl LightBVH {}
-
+/// The number of bins to use when deciding how to split the tree
 const BIN_COUNT: usize = 12;
+/// If the number of primitives hits this count, automatically create a leaf
+const MIN_LIGHT_LEAF_COUNT: usize = 4;
+
+pub struct LightBVH {
+    lights: Vec<usize>, // An array of light indices
+    nodes: Vec<Node>,
+}
+
+impl LightBVH {
+    pub fn new(original_lights: &[&dyn Light]) -> Self {
+        // First we go ahead and create a bunch of light info:
+        let mut lights = Vec::with_capacity(original_lights.len());
+        for (index, light) in original_lights.iter().enumerate() {
+            lights.push(LightInfo {
+                index,
+                bound: light.get_bound(),
+                centroid: light.get_centroid(),
+            })
+        }
+
+        // Construct the nodes:
+        let mut build_nodes = Vec::new();
+        let mut ordered_lights: Vec::new();
+        Self::rec_construct_bvh(&mut lights, &mut ordered_lights, &mut build_nodes);
+
+        // Now go ahead and compact it linearly:
+    }
+
+    // Recursively constructs the bvh:
+    fn rec_construct_bvh(
+        lights: &mut [LightInfo],
+        ordered_lights: &mut Vec<LightInfo>,
+        build_nodes: &mut Vec<BuildNode>,
+    ) {
+        let global_bound = lights
+            .iter()
+            .fold(LightBound::new_initial(), |accum, light| {
+                accum.combine(light.bound)
+            });
+
+        // Check the number of lights and see if we should make a leaf or not:
+        if lights.len() < MIN_LIGHT_LEAF_COUNT {
+            let light_index = ordered_lights.len();
+            ordered_lights.extend(lights.iter());
+            build_nodes.push(BuildNode::Leaf {
+                bound: global_bound,
+                light_index,
+                num_lights: lights.len(),
+            })
+        }
+
+        // Otherwise, we can try to split:
+        match split_clusters(lights, global_bound) {
+            Some((left, right)) => {
+                // We recursively build the left and right one:
+                Self::rec_construct_bvh(left, ordered_lights, build_nodes);
+                Self::rec_construct_bvh(right, ordered_lights, build_nodes);
+            }
+            None => {
+                // Don't bother splitting (not worth the cost), so go ahead:
+                let light_index = ordered_lights.len();
+                ordered_lights.extend(lights.iter());
+                build_nodes.push(BuildNode::Leaf {
+                    bound: global_bound,
+                    light_index,
+                    num_lights: lights.len(),
+                })
+            }
+        }
+    }
+}
+
+/// The final node used in the tree.
+#[derive(Clone, Copy, Debug)]
+struct Node {}
+
+/// The Node used when constructing the tree.
+#[derive(Clone, Copy, Debug)]
+enum BuildNode {
+    Internal {
+        bound: LightBound,
+        left: usize,
+        right: usize,
+    },
+    Leaf {
+        bound: LightBound,
+        light_index: usize,
+        num_lights: usize,
+    },
+}
 
 /// Describes the bound over a bunch of lights:
 #[derive(Clone, Copy, Debug)]
-struct LightBound {
-    bbox: BBox3<f64>,
-    cone: Cone,
-    power: f64,
+pub struct LightBound {
+    pub bbox: BBox3<f64>,
+    pub cone: Cone,
+    pub power: f64,
 }
 
 impl LightBound {
@@ -137,11 +226,10 @@ struct LightInfo {
 /// split was performed (because it wasn't worht it), then `None` is returned.
 ///
 /// # Arguments
-/// * `axis`   - Which of the axis to use (0 for x, 1 for y, and 2 for z)
 /// * `lights` - A collection of all of the light info we are currently working with
 /// * `bound`  - The overall bound of all of the lights
 /// * `cone`   - The overall cone of all of the lights
-fn split_clusters_axis(
+fn split_clusters(
     lights: &mut [LightInfo],
     global_bound: LightBound,
 ) -> Option<(&mut [LightInfo], &mut [LightInfo])> {

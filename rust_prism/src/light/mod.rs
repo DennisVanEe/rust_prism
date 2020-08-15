@@ -2,7 +2,7 @@ pub mod area;
 pub mod many_lights;
 pub mod point;
 
-use crate::light::many_lights::LightCone;
+use crate::light::many_lights::LightBound;
 use crate::spectrum::Color;
 use pmath::vector::{Vec2, Vec3};
 
@@ -41,7 +41,10 @@ pub trait Light: Sync + 'static {
     fn is_delta(&self) -> bool;
 
     // Returns the normal extent and emission extent of the light in the form of a light cone.
-    fn get_cone(&self) -> LightCone;
+    fn get_bound(&self) -> LightBound;
+
+    // Returns the centroid of the light source:
+    fn get_centroid(&self) -> Vec3<f64>;
 }
 
 // // This essentially calculates Planck's law for a range of wavelengths.
