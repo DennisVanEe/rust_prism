@@ -191,13 +191,13 @@ impl PixelFilter {
         // First, we sample the x-value:
         let x = match self.cdf_x.iter().position(|&cdf| cdf > r.x) {
             Some(x) => x,
-            _ => unsafe { hint::unreachable_unchecked() },
+            _ => FILTER_TABLE_WIDTH / 2,
         };
 
         // Using this x-value, we can now find the y-value:
         let y = match self.cdf_y[x].iter().position(|&cdf| cdf >= r.y) {
             Some(y) => y,
-            _ => unsafe { hint::unreachable_unchecked() },
+            _ => FILTER_TABLE_WIDTH / 2,
         };
 
         // Convert these indices to x and y coordinates:

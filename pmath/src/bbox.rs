@@ -162,6 +162,11 @@ impl<T: Float + Bounded> BBox3<T> {
         let d = self.diagonal();
         T::two() * (d.x * d.y + d.x * d.y + d.y * d.z)
     }
+
+    /// Returns the center of the bounding box.
+    pub fn center(self) -> Vec3<T> {
+        self.diagonal().scale(T::half())
+    }
 }
 
 impl<T: Sub<Output = T> + PartialOrd + Bounded + Copy> BBox3<T> {
