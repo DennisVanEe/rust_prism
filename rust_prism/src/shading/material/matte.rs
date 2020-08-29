@@ -2,7 +2,7 @@ use crate::shading::lobe::lambertian::LambertianReflection;
 use crate::shading::lobe::oren_nayar::OrenNayar;
 use crate::shading::lobe::Lobe;
 use crate::shading::material::{Bsdf, Material, MaterialConstructor, MaterialPool};
-use crate::spectrum::RGBSpectrum;
+use crate::spectrum::Color;
 
 // This uses a the same value for these properties across the entire
 // surface of the model. If you want this to be parametarized, see

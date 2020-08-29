@@ -29,6 +29,7 @@ pub struct GeomInteraction {
 
 /// A geometry is something that can be intersected in the scene.
 pub trait Geometry: Sync + 'static {
+    /// Applies a permanent transformation to the geometry
     fn transform(&mut self, transf: Transf);
 
     fn create_embree_geometry(&mut self) -> embree::Geometry;

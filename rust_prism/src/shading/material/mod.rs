@@ -1,73 +1,50 @@
 pub mod matte;
 pub mod plastic;
 
-use crate::mesh::Interaction;
-use crate::math::vector::{Vec2, Vec3};
+use crate::geometry::GeomInteraction;
 use crate::shading::lobe::{Lobe, LobeType};
-use crate::spectrum::Spectrum;
+use crate::spectrum::Color;
 use arrayvec::ArrayVec;
-use bumpalo::Bump;
+use pmath::vector::{Vec2, Vec3};
 
-// Manages all of the materials in a scene. Used to index materials given a
-// material id:
-
-// Ensures that the lobes have static lifetime
-static LOBE_POOL: Bump = Bump::new();
-
-pub struct MaterialPool<'a> {
-    materials: Vec<Material<'a>>, // Stores all of the materials
+/// A MaterialPool holds all of the materials during rendering.
+pub struct MaterialPool {
+    materials: Vec<Box<dyn Material>>,
 }
 
-impl<'a> MaterialPool<'a> {
+impl MaterialPool {
     pub fn new() -> Self {
         MaterialPool {
             materials: Vec::new(),
         }
     }
 
-    // Any lobes that may be required for the varying bsdfs in the design
-    // can add there stuff here:
-    pub fn add_lobe<T: Lobe + 'a>(&self, lobe: T) -> &'a dyn Lobe {
-        LOBE_POOL.alloc_with(|| lobe) as &'a dyn Lobe
-    }
-
-    pub fn add_material(&mut self, material: Material<'a>) -> u32 {
+    /// Adds a material to the material pool, returns a material_id.
+    pub fn add_material<M: Material>(&mut self, material: M) -> u32 {
         let material_id = self.materials.len() as u32;
-        self.materials.push(material);
+        self.materials.push(Box::new(material));
         material_id
     }
 
-    // Need to ensure that the material_id is correct and whatnot
-    pub unsafe fn get_material(&self, material_id: u32) -> &'a Material {
-        self.materials.get_unchecked(material_id as usize)
+    pub unsafe fn get_material(&self, material_id: u32) -> &dyn Material {
+        &self.materials[material_id as usize]
     }
 }
 
-// Just a bsdf and bssrdf
-pub struct Material<'a> {
-    bsdf: Bsdf<'a>,
-    // TODO: add support for bssrdf
+// TODO: in order to incorporate textutres (where the color of the bsdf is effected),
+// I need some way to construct bsdfs without allocating memory. I could have lobes specify
+// their own prepare function that materials are aware of (that don't allocate memory), but then
+// I would need this lobe's memory to exist for all threads... I don't want to have a material pool
+// across all of these threads. Maybe we just add something extra to the lobe? So that it can decide?
+// I don't know, I'll figure something out.
+
+/// A material defines how to interact with surfaces when a ray hits it
+pub trait Material {
+    fn get_bsdf(&self, interaction: GeomInteraction) -> &Bsdf;
 }
 
-impl<'a> Material<'a> {
-    pub fn new(bsdf: Bsdf<'a>) -> Self {
-        Material {
-            bsdf,
-        }
-    }
-
-    pub fn get_bsdf(&self) -> &'a Bsdf {
-        &self.bsdf
-    }
-}
-
-// Used to construct a material and add it to the MaterialPool:
-pub trait MaterialConstructor {
-    fn new_material(&self, pool: &mut MaterialPool);
-}
-
-// Used to convert to and from shading coordinate space:
-#[derive(Clone, Copy)]
+/// Used to convert to and from shading coordinate space:
+#[derive(Clone, Copy, Debug)]
 pub struct ShadingCoord {
     geometry_n: Vec3<f64>,
     n: Vec3<f64>,
@@ -76,7 +53,8 @@ pub struct ShadingCoord {
 }
 
 impl ShadingCoord {
-    pub fn new(interaction: Interaction) -> Self {
+    /// Given an interaction, can construct a new shading coordinate system
+    pub fn new(interaction: GeomInteraction) -> Self {
         let s = interaction.dpdu.normalize();
         ShadingCoord {
             geometry_n: interaction.n,
@@ -86,7 +64,8 @@ impl ShadingCoord {
         }
     }
 
-    pub fn world_to_shading(self, v: Vec3<f64>) -> Vec3<f64> {
+    /// Transforms a vector from world space to shading space.
+    pub fn world_to_shading_vec(self, v: Vec3<f64>) -> Vec3<f64> {
         Vec3 {
             x: v.dot(self.s),
             y: v.dot(self.t),
@@ -94,7 +73,8 @@ impl ShadingCoord {
         }
     }
 
-    pub fn shading_to_world(self, v: Vec3<f64>) -> Vec3<f64> {
+    /// Transforms a vector from shading space to world space.
+    pub fn shading_to_world_vec(self, v: Vec3<f64>) -> Vec3<f64> {
         Vec3 {
             x: (self.s.x * v.x) + (self.t.x * v.y) + (self.n.x * v.z),
             y: (self.s.y * v.x) + (self.t.y * v.y) + (self.n.y * v.z),
@@ -109,35 +89,40 @@ impl ShadingCoord {
     }
 }
 
-// Public so that anyone making materials has this information.
-// This can be pretty important:
+/// The maximum number of lobes per bsdf.
 pub const MAX_NUM_LOBES: usize = 8;
 
 #[derive(Clone)]
-pub struct Bsdf<'a> {
-    lobes: ArrayVec<[&'a dyn Lobe; MAX_NUM_LOBES]>,
+pub struct Bsdf {
+    lobes: ArrayVec<[Box<dyn Lobe>; MAX_NUM_LOBES]>,
     eta: f64,
 }
 
-impl<'a> Bsdf<'a> {
-    pub fn new(eta: f64, in_lobes: &[&'a dyn Lobe]) -> Self {
-        // Check if we can fit that many lobes:
-        debug_assert!(in_lobes.len() <= MAX_NUM_LOBES);
-        // ArrayVec has no clone_from_slice function, so we do it this way:
-        let mut lobes = ArrayVec::<[_; MAX_NUM_LOBES]>::new();
-        for &lobe in in_lobes {
-            lobes.push(lobe);
-        }
-
+impl Bsdf {
+    /// Creates a new bsdf for opaque materials.
+    pub fn new_opaque() -> Self {
         Bsdf {
-            lobes,
+            lobes: ArrayVec::new(),
+            eta: 1.0,
+        }
+    }
+
+    /// Creates a new bsdf with a given refractive index (`eta`).
+    pub fn new(eta: f64) -> Self {
+        Bsdf {
+            lobes: ArrayVec::new(),
             eta,
         }
     }
 
-    // Returns the number of lobes that have the specified lobe type:
+    /// Adds a lobe to the Bsdf. If it exceed `MAX_NUM_LOBES`, the function will panic.
+    pub fn add_lobe<L: Lobe>(&mut self, lobe: L) {
+        self.lobes.push(Box::new(lobe));
+    }
+
+    /// Returns the number of lobes that have the specified lobe type:
     pub fn num_contains_type(&self, lobe_type: LobeType) -> usize {
-        self.lobes.iter().fold(0, |count, &lobe| {
+        self.lobes.iter().fold(0, |count, lobe| {
             if lobe.contains_type(lobe_type) {
                 count + 1
             } else {
@@ -146,76 +131,86 @@ impl<'a> Bsdf<'a> {
         })
     }
 
-    // Both wo and wi here are in SHADING SPACE
-    pub fn eval(&self, wo: Vec3<f64>, wi: Vec3<f64>, fl: LobeType, is_reflect: bool) -> Spectrum {
-        self.lobes.iter().fold(Spectrum::black(), |f, lobe| {
-            let matches = lobe.contains_type(fl);
-            // Checks that, if it's reflected then we have a reflection lobe and if it's
-            // not reflected we have a transmission lobe.
-            let valid_direction = (is_reflect && lobe.contains_type(LobeType::REFLECTION))
-            || (!is_reflect && lobe.contains_type(LobeType::TRANSMISSION));
+    /// Evaluate the lobe, with `wo` and `wi` in world space.
+    pub fn eval(
+        &self,
+        wo: Vec3<f64>,
+        wi: Vec3<f64>,
+        lobe_type: LobeType,
+        shading_coord: ShadingCoord,
+    ) -> Color {
+        let shading_wo = shading_coord.world_to_shading_vec(wo);
+        let shading_wi = shading_coord.world_to_shading_vec(wi);
+        let is_reflect = shading_coord.geometry_n.dot(wo) * shading_coord.geometry_n.dot(wi) > 0.0;
 
-            if matches && valid_direction {
-                f + lobe.eval(wo, wi)
-            } else {
-                f // otherwise we do nothing
-            }
-        })
+        self.lobes
+            .iter()
+            .fold(Color::black(), |result_color, lobe| {
+                let matches = lobe.contains_type(lobe_type);
+                // Checks that, if it's reflected then we have a reflection lobe and if it's
+                // not reflected we have a transmission lobe.
+                let valid_direction = (is_reflect && lobe.contains_type(LobeType::REFLECTION))
+                    || (!is_reflect && lobe.contains_type(LobeType::TRANSMISSION));
+
+                if matches && valid_direction {
+                    result_color + lobe.eval(shading_wo, shading_wi)
+                } else {
+                    result_color // otherwise we do nothing
+                }
+            })
     }
 
-    // Both wo and wi here are in SHADING SPACE
-    pub fn pdf(&self, wo: Vec3<f64>, wi: Vec3<f64>, fl: LobeType) -> f64 {
+    /// Evaluate the lobe, with `wo` and `wi` in world space.
+    pub fn pdf(
+        &self,
+        wo: Vec3<f64>,
+        wi: Vec3<f64>,
+        lobe_type: LobeType,
+        shading_coord: ShadingCoord,
+    ) -> f64 {
+        let shading_wo = shading_coord.world_to_shading_vec(wo);
+        let shading_wi = shading_coord.world_to_shading_vec(wi);
+
         // We are essentially averaging the pdfs that match the flags:
-        let (pdf, num_has_type) =
-            self.lobes
-                .iter()
-                .fold((0.0, 0), |(pdf_sum, count), lobe| {
-                    // Don't double count the lobe we sampled:
-                    if lobe.contains_type(fl) {
-                        (pdf_sum + lobe.pdf(wo, wi), count + 1)
-                    } else {
-                        (pdf_sum, count)
-                    }
-                });
+        let (pdf, num_has_type) = self
+            .lobes
+            .iter()
+            .fold((0.0, 0u32), |(pdf_sum, count), lobe| {
+                if lobe.contains_type(lobe_type) {
+                    (pdf_sum + lobe.pdf(shading_wo, shading_wi), count + 1)
+                } else {
+                    (pdf_sum, count)
+                }
+            });
         pdf / (num_has_type as f64)
     }
 
-    // Returns, in the following order:
-    // Resulting throughput, wi (world space), pdf, lobe type of lobe samples (as option, in case there is no lobe sampled):
+    /// Samples the bsdf given a `wo` in world space.
+    /// Returns, in the following order: resulting throughput, wi (world space), pdf, lobe type of lobe samples:
     pub fn sample(
         &self,
-        world_wo: Vec3<f64>,
+        wo: Vec3<f64>,
         u: Vec2<f64>,
         lobe_type: LobeType,
-    ) -> (Spectrum, Vec3<f64>, f64, LobeType) {
-        let num_has_type = self.num_contains_type(lobe_type);
-        if num_has_type == 0 {
-            return (Spectrum::black(), Vec3::zero(), 0., LobeType::NONE);
+        shading_coord: ShadingCoord,
+    ) -> (Color, Vec3<f64>, f64, LobeType) {
+        // First, make sure we only consider lobes that match with the specified LobeType.
+        let mut potential_lobes: ArrayVec<[_; MAX_NUM_LOBES]> = ArrayVec::new();
+        for &lobe in &self.lobes {
+            if lobe.contains_type(lobe_type) {
+                potential_lobes.push(&*lobe);
+            }
         }
-        // TODO: pick a wiser selection algorithm for lobes that are much more
-        // likely to be called instead of using just a uniform approach:
-        // Uniformly select a lobe:
-        // We have the min in case u.x * num_has_type >= 1
-        let selected_lobe_index =
-            ((u.x * (num_has_type as f64)).floor() as usize).min(num_has_type - 1);
-        // Now we loop over our lobes and pick the first one that is selected_lobe'th place:
-        let mut curr_count = 0;
-        let &selected_lobe = self
-            .lobes
-            .iter()
-            .find(|lobe| {
-                if lobe.contains_type(lobe_type) {
-                    curr_count += 1;
-                    if curr_count == selected_lobe_index {
-                        return true;
-                    }
-                }
+        let num_has_type = potential_lobes.len();
+        if num_has_type == 0 {
+            return (Color::black(), Vec3::zero(), 0.0, LobeType::NONE);
+        }
 
-                false
-            })
-            .unwrap();
+        // TODO: pick a wiser selection algorithm for lobes.
+        let selected_lobe_index = ((u.x * (num_has_type as f64)) as usize).min(num_has_type - 1);
+        let selected_lobe = potential_lobes[selected_lobe_index];
 
-        // We still want to use u, so we have to remap it so that u can still
+        // We still want to use u.x, so we have to remap it so that u can still
         // be between 0 and 1.
         let u = Vec2 {
             x: u.x * (num_has_type - selected_lobe_index) as f64,
@@ -223,72 +218,49 @@ impl<'a> Bsdf<'a> {
         };
 
         // Sample the selected lobe for the wi value:
-        let wo = self.world_to_shading(world_wo);
+        let shading_wo = shading_coord.world_to_shading_vec(wo);
         let sampled_lobe_type = selected_lobe.get_type();
-        let (throughput, wi, pdf) = selected_lobe.sample(wo, u);
-        let world_wi = self.shading_to_world(wi);
+        let (selected_color, shading_wi, selected_pdf) = selected_lobe.sample(shading_wo, u);
+        let wi = shading_coord.shading_to_world_vec(shading_wi);
 
-        // Calculate the new pdf value if it isn't specular and there are multiple lobes.
-        // For now it's merely the average of all of the pdfs of each of the lobes.
-        // (Not specular because the pdf = 1 as it's a dirac delta function):
-        // TODO: when changing the above for efficiency, make sure to modify this pdf value as well!
-        let pdf = if !sampled_lobe_type.contains(LobeType::SPECULAR) && num_has_type > 1 {
-            self.lobes.iter().fold(pdf, |pdf_sum, &lobe| {
-                // Don't double count the lobe we sampled:
-                if (lobe as *const dyn Lobe != selected_lobe as *const dyn Lobe)
-                    && lobe.matches_type(lobe_type)
-                {
-                    pdf_sum + lobe.pdf(wo, wi)
-                } else {
-                    pdf_sum
-                }
-            }) / num_has_type as f64
+        // Take into account all of the other pdf values unless it's specular, then the pdf is 1.
+        let pdf = if !sampled_lobe_type.contains(LobeType::SPECULAR) {
+            potential_lobes
+                .iter()
+                .enumerate()
+                .fold(selected_pdf, |pdf_sum, (index, lobe)| {
+                    if index == selected_lobe_index {
+                        pdf_sum
+                    } else {
+                        pdf_sum + lobe.pdf(wo, wi)
+                    }
+                })
+                / (num_has_type as f64) // Averaging, remember?
         } else {
-            pdf
+            selected_pdf
         };
 
         // Now we calculate the throughput by summing the contributions from each of the lobes.
-        // It's more efficient to do it this way than constantly calling the Bsdf's eval function:
-        let throughput = if !sampled_lobe_type.contains(LobeType::SPECULAR) && num_has_type > 1 {
+        let color = if !sampled_lobe_type.contains(LobeType::SPECULAR) {
             // Check if they are on the same side relative to the normal (reflected):
-            let is_reflect = world_wi.dot(self.geometry_n) * world_wo.dot(self.geometry_n) > 0.;
-            self.lobes.iter().fold(throughput, |result, &lobe| {
-                // Don't want to compute eval twice when we already have it's throughput.
-                // See the eval function for what the rest of the checks are doing:
-                if (lobe as *const dyn Lobe != selected_lobe as *const dyn Lobe)
-                    && lobe.matches_type(lobe_type)
-                    && ((is_reflect && lobe.matches_type(LobeType::REFLECTION))
-                        || (!is_reflect && lobe.matches_type(LobeType::TRANSMISSION)))
-                {
-                    result + lobe.eval(wo, wi)
-                } else {
-                    result
-                }
-            })
+            let is_reflect = wi.dot(self.geometry_n) * wo.dot(self.geometry_n) > 0.;
+            potential_lobes
+                .iter()
+                .enumerate()
+                .fold(selected_color, |color, (index, lobe)| {
+                    if (selected_lobe_index != index)
+                        && ((is_reflect && lobe.contains_type(LobeType::REFLECTION))
+                            || (!is_reflect && lobe.contains_type(LobeType::TRANSMISSION)))
+                    {
+                        selected_color + lobe.eval(shading_wo, shading_wi)
+                    } else {
+                        selected_color
+                    }
+                })
         } else {
-            throughput
+            selected_color
         };
 
-        (throughput, world_wi, pdf, sampled_lobe_type)
+        (color, wi, pdf, sampled_lobe_type)
     }
-
-    // pub fn rho_hd(&self, wo: Vec3<f64>, samples: &[Vec2<f64>], fl: LobeType) -> Spectrum {
-    //     self.lobes.iter().fold(Spectrum::black(), |f, &lobe| {
-    //         if lobe.matches_type(fl) {
-    //             f + lobe.rho_hd(wo, samples)
-    //         } else {
-    //             f
-    //         }
-    //     })
-    // }
-
-    // pub fn rho_hh(&self, samples0: &[Vec2<f64>], samples1: &[Vec2<f64>], fl: LobeType) -> Spectrum {
-    //     self.lobes.iter().fold(Spectrum::black(), |f, &lobe| {
-    //         if lobe.matches_type(fl) {
-    //             f + lobe.rho_hh(samples0, samples1)
-    //         } else {
-    //             f
-    //         }
-    //     })
-    // }
 }

@@ -9,22 +9,18 @@ use pmath::ray::Ray;
 // Scene
 //
 
-/// A simple structure that is used to refer to a mesh once it has been added to the Scene's mesh pool.
-#[derive(Clone, Copy, Debug)]
+/// Holds information about
+#[derive(Copy, Clone, Debug)]
 pub struct GeomRef {
     index: u32,
     embree_geom: embree::Geometry,
 }
 
-/// A simple structure that is used to refer to a light once it has been added to the Light's mesh pool.
-#[derive(Clone, Copy, Debug)]
-pub struct LightRef {
-    index: u32,
-}
-
-/// A group is a collection of mesh that can be instanced.
+/// A group is a collection of mesh that can be instanced. They don't
+/// exist during rendering, they are instead used during the construction
+/// of a scene.
 pub struct Group {
-    meshes: Vec<u32>,
+    geometries: Vec<u32>,
     embree_scene: embree::Scene,
 }
 
@@ -32,13 +28,13 @@ impl Group {
     /// Creates a new group.
     pub fn new() -> Self {
         Group {
-            meshes: Vec::new(),
+            geometries: Vec::new(),
             embree_scene: embree::new_scene(),
         }
     }
 
-    /// Adds a mesh to the group (as a MeshID). Returns the geometry id (local to the group).
-    pub fn add_geom(&mut self, mesh: GeomRef) -> u32 {
+    /// Adds geometry to the group, returning the geometry ID that is local to this specific group.
+    pub fn add_geom(&mut self, geom: GeomRef) -> u32 {
         let geom_id = self.meshes.len() as u32;
         embree::attach_geometry_by_id(self.embree_scene, mesh.embree_geom, geom_id);
         embree::commit_geometry(mesh.embree_geom);
@@ -47,8 +43,12 @@ impl Group {
     }
 }
 
+/// The instance id of the top level (used to index geometries that are not instanced).
+const TOP_LEVEL_INST_ID: u32 = u32::max_value();
+
 pub struct Scene {
-    /// The mesh pool, which contains all of the mesh in a Scene.
+    /// The mesh pool, which contains all of the mesh in a Scene. It also contains
+    /// the embree geometry associated with it.
     geom_pool: Vec<Box<dyn Geometry>>,
     /// The light pool, which contains all of the lights in a Scene.
     light_pool: Vec<Box<dyn Light>>,
@@ -73,7 +73,28 @@ impl Scene {
         }
     }
 
-    /// Adds a mesh to the mesh pool of the scene.
+    /// Given a geometry id and an instance id, returns a reference to the geometry and material
+    /// associated with the geometry.
+    pub fn get_geom(&self, geom_id: u32, inst_id: u32) -> (&dyn Geometry, u32) {
+        if inst_id == TOP_LEVEL_INST_ID {
+            let scene_geom = self.geometries[geom_id as usize];
+            (&self.geom_pool[scene_geom.index], scene_geom.material_id)
+        } else {
+            if (inst_id as usize) < self.geometries.len() {
+                panic!("Invalid instance id provided");
+            }
+
+            let instance = &self.instances[(inst_id as usize) - self.geometries.len()];
+            let scene_geom = instance.geometries[geom_id as usize];
+            (&self.geom_pool[scene_geom.index], scene_geom.material_id)
+        }
+    }
+
+    pub fn get_light(&self, light_id: u32) -> &dyn Light {
+        &self.light_pool[light_id as usize]
+    }
+
+    /// Adds a mesh to the mesh pool of the scene, returning a geometry index.
     pub fn add_to_geom_pool<T: Geometry>(&mut self, geom: T) -> GeomRef {
         let index = self.geom_pool.len() as u32;
         let embree_geom = geom.get_embree_geometry();
@@ -81,11 +102,12 @@ impl Scene {
         GeomRef { index, embree_geom }
     }
 
-    /// Adds a light to the light pool of the scene.
-    pub fn add_to_light_pool<T: Light>(&mut self, light: T) -> LightRef {
+    /// Adds a light to the scene, returning a global light index. Note that lights aren't instanced.
+    /// If a light is associated with instanced geometry, have the light store a geom_id and inst_id.
+    pub fn add_light<T: Light>(&mut self, light: T) -> u32 {
         let index = self.light_pool.len() as u32;
         self.light_pool.push(Box::new(light));
-        LightRef { index }
+        index
     }
 
     /// Sets the build quality to build the scene with.
@@ -99,8 +121,10 @@ impl Scene {
     }
 
     /// After adding everything, this will build the top-level BVH:
-    pub fn build_scene(&self) {
+    pub fn build_scene(&mut self) {
         embree::commit_scene(self.embree_scene);
+        self.geom_pool.shrink_to_fit();
+        self.light_pool.shrink_to_fit();
     }
 
     /// Adds a toplevel mesh and returns the geomID of that mesh.
@@ -108,7 +132,12 @@ impl Scene {
     /// Adds a toplevel mesh with the given device and material id. Returning a geomID that is used
     /// to determine how reference it in the future. Note that these mesh should already have been
     /// transformed and CANNOT be animated.
-    pub fn add_toplevel_geom(&mut self, geom: GeomRef, material_id: u32) -> u32 {
+    pub fn add_toplevel_geom(&mut self, geom: u32, material_id: u32) -> u32 {
+        // Check if we are adding them too early:
+        if !self.instances.is_empty() {
+            panic!("Adding top level geometry after instance has already been added.")
+        }
+
         // First create an rtc geometry of the mesh:
         let geom_id = self.geometries.len() as u32;
         embree::attach_geometry_by_id(self.embree_scene, geom.embree_geom, geom_id);
@@ -220,6 +249,7 @@ impl Scene {
 
 /// A reference to a single mesh in the scene. It is
 /// paired with a material id for that specific mesh.
+#[derive(Clone, Copy, Debug)]
 struct SceneGeom {
     index: u32,
     material_id: u32,

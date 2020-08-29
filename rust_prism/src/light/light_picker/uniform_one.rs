@@ -1,7 +1,15 @@
-use crate::light::light_picker::LightPicker;
+use crate::light::light_picker::{LightPicker, LightPickerManager};
 use crate::sampler::Sampler;
 use crate::scene::Scene;
 use pmath::vector::Vec3;
+
+pub struct UniformOneManager {}
+
+impl LightPickerManager<UniformOne> for UniformOneManager {
+    fn spawn_lightpicker(&self, _thread_id: u32) -> UniformOne {
+        UniformOne::new()
+    }
+}
 
 pub struct UniformOne {
     max_num_lights: usize,

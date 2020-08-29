@@ -12,6 +12,7 @@ mod integrator;
 mod light;
 mod sampler;
 mod scene;
+mod shading;
 mod spectrum;
 mod threading;
 mod transform;

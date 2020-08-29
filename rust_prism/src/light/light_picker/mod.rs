@@ -7,6 +7,14 @@ use crate::scene::Scene;
 use crate::spectrum::Color;
 use pmath::vector::{Vec2, Vec3};
 
+/// A `LightPickerManager` is used to spawn light pickers for each thread and maintain any
+/// information that a light picker may need across different threads may want to use. It is guaranteed
+/// that the LightPickerManager instance will exist until all threads have finished rendering.
+pub trait LightPickerManager<L: LightPicker>: Sync {
+    /// Spawns an integrator for a specific thread with the provided id.
+    fn spawn_lightpicker(&self, thread_id: u32) -> L;
+}
+
 /// Given a random number, returns a number of lights to sample.
 pub trait LightPicker {
     /// All lights in the scene are described using a Light ID starting from 0 to `num_lights` (exclusive).
@@ -14,7 +22,6 @@ pub trait LightPicker {
     fn set_scene_lights(&mut self, num_lights: usize, scene: &Scene);
 
     /// Runs through the process of picking the needed lights. Call this before calling `get_next_light`.
-    /// It returns the random number rescaled so that it may be used again later.
     fn pick_lights(
         &mut self,
         shading_point: Vec3<f64>,

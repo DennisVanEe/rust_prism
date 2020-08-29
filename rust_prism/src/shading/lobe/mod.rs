@@ -1,15 +1,13 @@
 pub mod lambertian;
-pub mod microfacet;
-pub mod oren_nayar;
-pub mod specular;
+//pub mod microfacet;
+//pub mod oren_nayar;
+//pub mod specular;
 
-use crate::math::sampling;
-use crate::math::vector::{Vec2, Vec3};
-use crate::spectrum::Spectrum;
-
-use num_traits::clamp;
-
+use crate::spectrum::Color;
 use bitflags::bitflags;
+use num_traits::clamp;
+use pmath::sampling;
+use pmath::vector::{Vec2, Vec3};
 
 bitflags! {
     pub struct LobeType : u32 {
@@ -26,20 +24,20 @@ bitflags! {
     }
 }
 
-// This is a trait that represents BRDF (reflections) and BTDF (transmissions).
+/// This is a trait that represents brdf (reflections) and btdf (transmissions).
 pub trait Lobe {
-    // Returns whether or not the lobe has these types present.
-    // This will be redundant as hell, but rust does not support fields
-    // in traits.
+    /// Returns whether or not the lobe has these types present.
+    /// This will be redundant as hell, but rust does not support fields
+    /// in traits.
     fn contains_type(&self, lobe_type: LobeType) -> bool;
-    // Returns the lobe type:
+    /// Returns the lobe type:
     fn get_type(&self) -> LobeType;
-    // Evaluates the lobe (wo and wi are in shading space):
-    fn eval(&self, wo: Vec3<f64>, wi: Vec3<f64>) -> Spectrum;
-    // Sample is for sampling the lobe and also works when we have a delta function
-    // (for instance, with perfectly specular surfaces). Note that wo is in shading space.
-    // DEFAULT: samples the lobe using a cosine weighted hemisphere
-    fn sample(&self, wo: Vec3<f64>, u: Vec2<f64>) -> (Spectrum, Vec3<f64>, f64) {
+    /// Evaluates the lobe (wo and wi are in shading space):
+    fn eval(&self, wo: Vec3<f64>, wi: Vec3<f64>) -> Color;
+    /// Sampling the lobe and also works when we have a delta function
+    /// (for instance, with perfectly specular surfaces). Note that wo is in shading space.
+    /// If the trait isn't implemented, it uses a cosine hemisphere sampling technique.
+    fn sample(&self, wo: Vec3<f64>, u: Vec2<f64>) -> (Color, Vec3<f64>, f64) {
         // If wo.z < 0 then it's not on the side of the normal. Because we are sampling
         // a hemisphere in the shading space, we need to flip around the final z result
         // to make sure it's on the same side as wo:
@@ -55,10 +53,10 @@ pub trait Lobe {
         };
         (self.eval(wo, wi), wi, self.pdf(wo, wi))
     }
-    // Returns the pdf of distribution used to sample the lobe given the incoming and
-    // the outgoing directions. Both of which are in shading space and point away from
-    // the surface.
-    // DEFAULT: assumes we sampled it as a cosine weighted hemisphere:
+    /// Returns the pdf of distribution used to sample the lobe given the incoming and
+    /// the outgoing directions. Both of which are in shading space and point away from
+    /// the surface.
+    /// If the trait isn't implemented, it assumes a cosine weighted hemisphere.
     fn pdf(&self, wo: Vec3<f64>, wi: Vec3<f64>) -> f64 {
         if is_in_same_hemisphere(wo, wi) {
             sampling::cos_sphere_pdf(abs_cos_theta(wi))
@@ -66,47 +64,6 @@ pub trait Lobe {
             0.
         }
     }
-
-    // // Used when calculating the hemispherical-directional reflectance (hdr):
-    // // Though, to calculate this value, we would need some samples if we don't have a closed-form solution.
-    // // DEFAULT: calculate this using monte carlo:
-    // fn hdr(&self, wo: Vec3<f64>, samples: &[Vec2<f64>]) -> Spectrum {
-    //     // By default, performs Monte Carlo integration:
-    //     samples
-    //         .iter()
-    //         .fold(Spectrum::black(), |eval, &u| {
-    //             // Sample the lobe given the sample value:
-    //             let (result, wi, pdf) = self.sample(wo, u);
-    //             // Only do this for non-zero pdf values (always pdf >= 0.)
-    //             if pdf != 0. {
-    //                 eval + result.scale(abs_cos_theta(wi) / pdf)
-    //             } else {
-    //                 eval
-    //             }
-    //         })
-    //         // Don't forget to divide by the number of samples!
-    //         .div_scale(samples.len() as f64)
-    // }
-    // // This performs the same calculation, but over the entire hemisphere:
-    // fn rho_hh(&self, samples0: &[Vec2<f64>], samples1: &[Vec2<f64>]) -> Spectrum {
-    //     debug_assert!(samples0.len() == samples1.len());
-    //     samples0
-    //         .iter()
-    //         .zip(samples1.iter())
-    //         .fold(Spectrum::black(), |eval, (&u0, &u1)| {
-    //             // Use u0 to sample a wo direction:
-    //             let wo = sampling::uniform_sample_hemisphere(u0);
-    //             let pdfo = sampling::uniform_hemisphere_pdf();
-    //             let (result, wi, pdfi) = self.sample(wo, u1);
-    //             if pdfi != 0. {
-    //                 eval + result.scale(abs_cos_theta(wi) * abs_cos_theta(wo) / (pdfo * pdfi))
-    //             } else {
-    //                 eval
-    //             }
-    //         })
-    //         // We already checked that samples0.len() == samples1.len()
-    //         .div_scale(f64::PI * samples0.len() as f64)
-    // }
 }
 
 // These functions assume one is currently in the shading space (that is, the normal is
