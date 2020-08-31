@@ -40,7 +40,6 @@ impl LightPicker for UniformAll {
     ) {
         // Fairly straight forward as it just goes through all of the lights uniformly
         self.curr_light = 0;
-        u
     }
 
     fn get_next_light(&mut self) -> Option<(usize, f64)> {

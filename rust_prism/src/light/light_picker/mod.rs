@@ -1,11 +1,13 @@
 pub mod uniform_all;
 pub mod uniform_one;
 
-use crate::light::many_lights::LightBound;
+use crate::geometry::GeomInteraction;
+use crate::light;
 use crate::sampler::Sampler;
 use crate::scene::Scene;
+use crate::shading::material::Bsdf;
 use crate::spectrum::Color;
-use pmath::vector::{Vec2, Vec3};
+use pmath::vector::Vec3;
 
 /// A `LightPickerManager` is used to spawn light pickers for each thread and maintain any
 /// information that a light picker may need across different threads may want to use. It is guaranteed
@@ -33,4 +35,32 @@ pub trait LightPicker {
     /// Loops over all of the lights until None is returned, indicating no more lights need to get sampled.
     /// It also returns a weight to apply to the specific light to ensure correct
     fn get_next_light(&mut self) -> Option<(usize, f64)>;
+}
+
+/// Samples all of the lights in a scene given a light picker.
+pub fn sample_lights(
+    interaction: GeomInteraction,
+    bsdf: &Bsdf,
+    time: f64,
+    scene: &Scene,
+    sampler: &mut Sampler,
+    light_picker: &mut dyn LightPicker,
+) -> Color {
+    light_picker.pick_lights(interaction.p, interaction.shading_n, sampler, scene);
+    let mut final_color = Color::black();
+    while let Some((light_id, light_scale)) = light_picker.get_next_light() {
+        // TODO: explore whether to make specular false.
+        final_color = final_color
+            + light::estimate_direct_light(
+                interaction,
+                bsdf,
+                time,
+                sampler,
+                scene,
+                light_id,
+                false,
+            )
+            .scale(light_scale);
+    }
+    final_color
 }
