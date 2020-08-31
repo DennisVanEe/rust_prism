@@ -28,6 +28,17 @@ impl<T: Float> Ray<T> {
         }
     }
 
+    /// Constructs a new `Ray` with an extent (t_far):
+    pub fn new_extent(org: Vec3<T>, dir: Vec3<T>, time: T, t_far: T) -> Self {
+        Ray {
+            org,
+            dir,
+            time,
+            t_far,
+            t_near: T::SELF_INT_COMP,
+        }
+    }
+
     /// Calculates a point along the ray given a parametric parameter.
     pub fn point_at(self, t: T) -> Vec3<T> {
         self.org + self.dir.scale(t)

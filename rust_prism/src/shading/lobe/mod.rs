@@ -3,6 +3,7 @@ pub mod lambertian;
 //pub mod oren_nayar;
 //pub mod specular;
 
+use crate::geometry::GeomInteraction;
 use crate::spectrum::Color;
 use bitflags::bitflags;
 use num_traits::clamp;
@@ -32,12 +33,18 @@ pub trait Lobe {
     fn contains_type(&self, lobe_type: LobeType) -> bool;
     /// Returns the lobe type:
     fn get_type(&self) -> LobeType;
-    /// Evaluates the lobe (wo and wi are in shading space):
-    fn eval(&self, wo: Vec3<f64>, wi: Vec3<f64>) -> Color;
+    /// Evaluates the lobe (wo and wi are in shading space). It also includes an interaction
+    /// in case the lobe needed extra information with regards to it.
+    fn eval(&self, wo: Vec3<f64>, wi: Vec3<f64>, interaction: GeomInteraction) -> Color;
     /// Sampling the lobe and also works when we have a delta function
     /// (for instance, with perfectly specular surfaces). Note that wo is in shading space.
     /// If the trait isn't implemented, it uses a cosine hemisphere sampling technique.
-    fn sample(&self, wo: Vec3<f64>, u: Vec2<f64>) -> (Color, Vec3<f64>, f64) {
+    fn sample(
+        &self,
+        wo: Vec3<f64>,
+        u: Vec2<f64>,
+        interaction: GeomInteraction,
+    ) -> (Color, Vec3<f64>, f64) {
         // If wo.z < 0 then it's not on the side of the normal. Because we are sampling
         // a hemisphere in the shading space, we need to flip around the final z result
         // to make sure it's on the same side as wo:
@@ -57,7 +64,7 @@ pub trait Lobe {
     /// the outgoing directions. Both of which are in shading space and point away from
     /// the surface.
     /// If the trait isn't implemented, it assumes a cosine weighted hemisphere.
-    fn pdf(&self, wo: Vec3<f64>, wi: Vec3<f64>) -> f64 {
+    fn pdf(&self, wo: Vec3<f64>, wi: Vec3<f64>, interaction: GeomInteraction) -> f64 {
         if is_in_same_hemisphere(wo, wi) {
             sampling::cos_sphere_pdf(abs_cos_theta(wi))
         } else {

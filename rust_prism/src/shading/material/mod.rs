@@ -40,7 +40,9 @@ impl MaterialPool {
 
 /// A material defines how to interact with surfaces when a ray hits it
 pub trait Material {
-    fn get_bsdf(&self, interaction: GeomInteraction) -> &Bsdf;
+    /// Returns a reference to the bsdf and an interaction if this should be updated.
+    /// This may be due to bump mapping, for instance.
+    fn bsdf(&self, interaction: GeomInteraction) -> (&Bsdf, GeomInteraction);
 }
 
 /// Used to convert to and from shading coordinate space:

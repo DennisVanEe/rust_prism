@@ -4,16 +4,24 @@ use crate::transform::Transf;
 use embree;
 use pmath::matrix::Mat3x4;
 use pmath::ray::Ray;
+use std::cmp::Eq;
 
 //
 // Scene
 //
 
-/// Holds information about
+/// Holds information about a geometry when constructing the scene.
 #[derive(Copy, Clone, Debug)]
-pub struct GeomRef {
+pub struct GeomPoolRef {
     index: u32,
     embree_geom: embree::Geometry,
+}
+
+#[derive(Copy, Clone, Eq, Debug)]
+pub struct GeomRef {
+    geom_id: u32,
+    inst_id: u32,
+    prim_id: u32,
 }
 
 /// A group is a collection of mesh that can be instanced. They don't
@@ -34,11 +42,11 @@ impl Group {
     }
 
     /// Adds geometry to the group, returning the geometry ID that is local to this specific group.
-    pub fn add_geom(&mut self, geom: GeomRef) -> u32 {
+    pub fn add_geom(&mut self, geom: GeomPoolRef) -> u32 {
         let geom_id = self.meshes.len() as u32;
-        embree::attach_geometry_by_id(self.embree_scene, mesh.embree_geom, geom_id);
-        embree::commit_geometry(mesh.embree_geom);
-        self.meshes.push(mesh.index);
+        embree::attach_geometry_by_id(self.embree_scene, geom.embree_geom, geom_id);
+        embree::commit_geometry(geom.embree_geom);
+        self.meshes.push(geom.index);
         geom_id
     }
 }
@@ -75,17 +83,17 @@ impl Scene {
 
     /// Given a geometry id and an instance id, returns a reference to the geometry and material
     /// associated with the geometry.
-    pub fn get_geom(&self, geom_id: u32, inst_id: u32) -> (&dyn Geometry, u32) {
-        if inst_id == TOP_LEVEL_INST_ID {
-            let scene_geom = self.geometries[geom_id as usize];
+    pub fn get_geom(&self, geom_ref: GeomRef) -> (&dyn Geometry, u32) {
+        if geom_ref.inst_id == TOP_LEVEL_INST_ID {
+            let scene_geom = self.geometries[geom_ref.geom_id as usize];
             (&self.geom_pool[scene_geom.index], scene_geom.material_id)
         } else {
-            if (inst_id as usize) < self.geometries.len() {
+            if (geom_ref.inst_id as usize) < self.geometries.len() {
                 panic!("Invalid instance id provided");
             }
 
-            let instance = &self.instances[(inst_id as usize) - self.geometries.len()];
-            let scene_geom = instance.geometries[geom_id as usize];
+            let instance = &self.instances[(geom_ref.inst_id as usize) - self.geometries.len()];
+            let scene_geom = instance.geometries[geom_ref.geom_id as usize];
             (&self.geom_pool[scene_geom.index], scene_geom.material_id)
         }
     }
@@ -95,11 +103,11 @@ impl Scene {
     }
 
     /// Adds a mesh to the mesh pool of the scene, returning a geometry index.
-    pub fn add_to_geom_pool<T: Geometry>(&mut self, geom: T) -> GeomRef {
+    pub fn add_to_geom_pool<T: Geometry>(&mut self, geom: T) -> GeomPoolRef {
         let index = self.geom_pool.len() as u32;
         let embree_geom = geom.get_embree_geometry();
         self.geom_pool.push(Box::new(geom));
-        GeomRef { index, embree_geom }
+        GeomPoolRef { index, embree_geom }
     }
 
     /// Adds a light to the scene, returning a global light index. Note that lights aren't instanced.

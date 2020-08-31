@@ -1,5 +1,6 @@
 pub mod mesh;
 
+use crate::scene::GeomRef;
 use crate::transform::Transf;
 use embree;
 use pmath;
@@ -25,6 +26,8 @@ pub struct GeomInteraction {
     pub shading_dndv: Vec3<f64>,
 
     pub material_id: u32, // An index to the material specified with this interaction
+
+    pub geom: GeomRef,
 }
 
 /// A geometry is something that can be intersected in the scene.
