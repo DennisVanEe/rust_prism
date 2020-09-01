@@ -10,14 +10,15 @@ pub struct NormalIntegratorManager {
     use_geom_normal: bool,
 }
 
-impl IntegratorManager<NormalIntegrator> for NormalIntegratorManager {
-    type InitParam = bool;
-
-    fn new(param: bool) -> Self {
+impl NormalIntegratorManager {
+    pub fn new(param: bool) -> Self {
         NormalIntegratorManager {
             use_geom_normal: param,
         }
     }
+}
+
+impl IntegratorManager<NormalIntegrator> for NormalIntegratorManager {
     fn spawn_integrator(&self, _thread_id: u32) -> NormalIntegrator {
         NormalIntegrator {
             use_geom_normal: self.use_geom_normal,

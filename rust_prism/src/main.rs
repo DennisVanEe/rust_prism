@@ -8,7 +8,7 @@ mod fileio;
 mod film;
 mod filter;
 mod geometry;
-mod integrator;
+//mod integrator;
 mod light;
 mod sampler;
 mod scene;

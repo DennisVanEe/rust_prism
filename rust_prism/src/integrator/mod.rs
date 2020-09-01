@@ -1,22 +1,19 @@
 pub mod normal;
+pub mod path_tracer;
 
 use crate::film::Pixel;
-use crate::light::Light;
+use crate::light::light_picker::LightPicker;
 use crate::sampler::Sampler;
 use crate::scene::Scene;
-use crate::spectrum::Color;
-use pmath::numbers::Float;
 use pmath::ray::PrimaryRay;
-use pmath::ray::Ray;
-use pmath::vector::{Vec2, Vec3};
 
 /// An `IntegratorManager` is used to spawn integrators for each thread and maintain any
 /// information that integrators across different threads may want to use. It is guaranteed
 /// that the IntegratorManager instance will exist until all threads have finished rendering.
-pub trait IntegratorManager<I: Integrator>: Sync {
-    /// Spawns an integrator for a specific thread with the provided id.
-    fn spawn_integrator(&self, thread_id: u32) -> I;
-}
+// pub trait IntegratorManager<I: Integrator>: Sync {
+//     /// Spawns an integrator for a specific thread with the provided id.
+//     fn spawn_integrator(&self, thread_id: u32) -> I;
+// }
 
 /// Defines different integrators for use with PRISM. Each thread gets its own `Integrator` instance.
 pub trait Integrator {
@@ -27,6 +24,7 @@ pub trait Integrator {
         &mut self,
         prim_ray: PrimaryRay<f64>,
         scene: &Scene,
+        light_picker: &mut LightPicker,
         sampler: &mut Sampler,
         pixel: Pixel,
     ) -> Pixel;

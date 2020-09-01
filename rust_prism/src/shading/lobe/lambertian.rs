@@ -1,7 +1,7 @@
-use crate::math::numbers::Float;
-use crate::math::vector::Vec3;
 use crate::shading::lobe::{Lobe, LobeType};
-use crate::spectrum::RGBSpectrum;
+use crate::spectrum::Color;
+use pmath::numbers::Float;
+use pmath::vector::Vec3;
 
 //
 // Lamabertian Reflection
@@ -9,13 +9,13 @@ use crate::spectrum::RGBSpectrum;
 // A very basic diffuse surface. It has the same brightness from any angle you look at it.
 
 pub struct LambertianReflection {
-    r_scale: RGBSpectrum,
+    r_scale: Color,
 }
 
 impl LambertianReflection {
     const LOBE_TYPE: LobeType = LobeType::REFLECTION | LobeType::DIFFUSE;
 
-    pub fn new(r_scale: RGBSpectrum) -> Self {
+    pub fn new(r_scale: Color) -> Self {
         LambertianReflection { r_scale }
     }
 }
@@ -30,7 +30,7 @@ impl Lobe for LambertianReflection {
         Self::LOBE_TYPE
     }
 
-    fn eval(&self, wo: Vec3<f64>, wi: Vec3<f64>) -> RGBSpectrum {
+    fn eval(&self, wo: Vec3<f64>, wi: Vec3<f64>) -> Color {
         self.r_scale.scale(f64::INV_PI)
     }
 
@@ -48,13 +48,13 @@ impl Lobe for LambertianReflection {
 //
 
 pub struct LambertianTransmission {
-    t_scale: RGBSpectrum,
+    t_scale: Color,
 }
 
 impl LambertianTransmission {
     const LOBE_TYPE: LobeType = LobeType::REFLECTION | LobeType::DIFFUSE;
 
-    pub fn new(t_scale: RGBSpectrum) -> Self {
+    pub fn new(t_scale: Color) -> Self {
         LambertianTransmission { t_scale }
     }
 }
@@ -68,7 +68,7 @@ impl Lobe for LambertianTransmission {
         Self::LOBE_TYPE
     }
 
-    fn eval(&self, wo: Vec3<f64>, wi: Vec3<f64>) -> RGBSpectrum {
+    fn eval(&self, wo: Vec3<f64>, wi: Vec3<f64>) -> Color {
         self.t_scale.scale(f64::INV_PI)
     }
 
