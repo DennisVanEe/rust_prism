@@ -26,7 +26,7 @@ impl MaterialPool {
         material_id
     }
 
-    pub unsafe fn get_material(&self, material_id: u32) -> &dyn Material {
+    pub fn get_material(&self, material_id: u32) -> &dyn Material {
         &self.materials[material_id as usize]
     }
 }

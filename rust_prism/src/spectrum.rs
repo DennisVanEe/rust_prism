@@ -3,7 +3,7 @@
 use num_traits::clamp;
 
 use pmath::vector::Vec3;
-use std::ops::{Add, Div, Index, Mul, Sub};
+use std::ops::{Add, AddAssign, Div, Index, Mul, Sub};
 
 #[derive(Clone, Copy, Debug)]
 pub struct Color {
@@ -110,6 +110,16 @@ impl Add for Color {
             g: self.g + rhs.g,
             b: self.b + rhs.b,
         }
+    }
+}
+
+impl AddAssign for Color {
+    fn add_assign(&mut self, rhs: Self) {
+        *self = Color {
+            r: self.r + rhs.r,
+            g: self.g + rhs.g,
+            b: self.b + rhs.b,
+        };
     }
 }
 

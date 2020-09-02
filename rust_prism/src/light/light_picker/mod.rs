@@ -10,10 +10,10 @@ use crate::spectrum::Color;
 use pmath::vector::Vec3;
 
 /// Generates an iterator to iterate over all of the lights that were chosen.
-pub trait LightPicker<I: Iterator<Item = (usize, f64)>> {
+pub trait LightPicker<I: Iterator<Item = (u32, f64)>> {
     /// All lights in the scene are described using a Light ID starting from 0 to `num_lights` (exclusive).
     /// If any allocation is required, make sure to do that in this step.
-    fn set_scene_lights(&mut self, num_lights: usize, scene: &Scene);
+    fn set_scene_lights(&mut self, num_lights: u32, scene: &Scene);
 
     /// Picks a number of lights and returns an iterator to those lights.
     fn pick_lights(
@@ -26,7 +26,7 @@ pub trait LightPicker<I: Iterator<Item = (usize, f64)>> {
 }
 
 /// Samples all of the lights in a scene given a light picker.
-pub fn sample_lights<I: Iterator<Item = (usize, f64)>, L: LightPicker<I>>(
+pub fn sample_lights<I: Iterator<Item = (u32, f64)>, L: LightPicker<I>>(
     interaction: GeomInteraction,
     bsdf: &Bsdf,
     time: f64,
@@ -38,17 +38,9 @@ pub fn sample_lights<I: Iterator<Item = (usize, f64)>, L: LightPicker<I>>(
     let mut final_color = Color::black();
     for (light_id, light_scale) in light_iter {
         // TODO: explore whether to make specular false.
-        final_color = final_color
-            + light::estimate_direct_light(
-                interaction,
-                bsdf,
-                time,
-                sampler,
-                scene,
-                light_id,
-                false,
-            )
-            .scale(light_scale);
+        final_color +=
+            light::estimate_direct_light(interaction, bsdf, time, sampler, scene, light_id, false)
+                .scale(light_scale);
     }
 
     final_color

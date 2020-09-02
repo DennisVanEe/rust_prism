@@ -1,5 +1,7 @@
 use crate::film::Pixel;
 use crate::integrator::{Integrator, IntegratorManager};
+use crate::light::light_picker::LightPicker;
+use crate::shading::material::MaterialPool;
 use crate::sampler::Sampler;
 use crate::scene::Scene;
 use crate::spectrum::Color;
@@ -32,13 +34,19 @@ pub struct NormalIntegrator {
 }
 
 impl Integrator for NormalIntegrator {
-    fn integrate(
+    fn integrate<LI, L>(
         &mut self,
         prim_ray: PrimaryRay<f64>,
         scene: &Scene,
-        _sampler: &mut Sampler,
+        materials: &MaterialPool,
+        light_picker: &L,
+        sampler: &mut Sampler,
         pixel: Pixel,
-    ) -> Pixel {
+    ) -> Pixel
+    where
+        LI: Iterator<Item = (u32, f64)>,
+        L: LightPicker<LI>,
+    {
         // Intersect the scene and get the normal at the intersection.
         let normal = match scene.intersect(prim_ray.ray) {
             Some(int) => {

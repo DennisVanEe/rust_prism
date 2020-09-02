@@ -1,6 +1,6 @@
 pub mod area;
 pub mod light_picker;
-pub mod many_lights;
+//pub mod many_lights;
 pub mod point;
 
 use crate::geometry::GeomInteraction;

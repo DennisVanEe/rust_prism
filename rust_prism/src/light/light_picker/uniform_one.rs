@@ -1,54 +1,56 @@
-// use crate::light::light_picker::{LightPicker, LightPickerManager};
-// use crate::sampler::Sampler;
-// use crate::scene::Scene;
-// use pmath::vector::Vec3;
+use crate::light::light_picker::LightPicker;
+use crate::sampler::Sampler;
+use crate::scene::Scene;
+use pmath::vector::Vec3;
 
-// pub struct UniformOneManager {}
+pub struct UniformOne {
+    max_num_lights: u32,
+}
 
-// impl LightPickerManager<UniformOne> for UniformOneManager {
-//     fn spawn_lightpicker(&self, _thread_id: u32) -> UniformOne {
-//         UniformOne::new()
-//     }
-// }
+impl UniformOne {
+    pub fn new() -> Self {
+        UniformOne { max_num_lights: 0 }
+    }
+}
 
-// pub struct UniformOne {
-//     max_num_lights: usize,
-//     picked_light: Option<usize>,
-// }
+impl LightPicker<UniformOneIter> for UniformOne {
+    fn set_scene_lights(&mut self, num_lights: u32, _scene: &Scene) {
+        self.max_num_lights = num_lights;
+    }
 
-// impl UniformOne {
-//     pub fn new() -> Self {
-//         UniformOne {
-//             max_num_lights: 0,
-//             picked_light: None,
-//         }
-//     }
-// }
+    fn pick_lights<'a>(
+        &mut self,
+        _shading_point: Vec3<f64>,
+        _normal: Vec3<f64>,
+        sampler: &mut Sampler,
+        _scene: &Scene,
+    ) -> UniformOneIter {
+        let u = sampler.sample().x;
+        let picked_light =
+            Some(((u * (self.max_num_lights as f64)) as usize).min(self.max_num_lights - 1));
+        UniformOneIter {
+            picked_light,
+            max_num_lights: self.max_num_lights as f64,
+        }
+    }
+}
 
-// impl LightPicker for UniformOne {
-//     fn set_scene_lights(&mut self, num_lights: usize, _scene: &Scene) {
-//         self.max_num_lights = num_lights;
-//     }
+pub struct UniformOneIter {
+    picked_light: Option<u32>,
+    max_num_lights: f64,
+}
 
-//     fn pick_lights<'a>(
-//         &mut self,
-//         _shading_point: Vec3<f64>,
-//         _normal: Vec3<f64>,
-//         sampler: &mut Sampler,
-//         _scene: &Scene,
-//     ) {
-//         let u = sampler.sample().x;
-//         self.picked_light =
-//             Some(((u * (self.max_num_lights as f64)) as usize).min(self.max_num_lights - 1));
-//     }
+impl Iterator for UniformOneIter {
+    type Item = (u32, f64);
 
-//     fn get_next_light(&mut self) -> Option<(usize, f64)> {
-//         match self.picked_light {
-//             Some(light) => {
-//                 self.picked_light = None;
-//                 Some((light, self.max_num_lights as f64))
-//             }
-//             None => None,
-//         }
-//     }
-// }
+    fn next(&mut self) -> Option<(u32, f64)> {
+        match self.picked_light {
+            Some(light) => {
+                let result = (light, self.max_num_lights);
+                self.picked_light = None;
+                result
+            }
+            None => None,
+        }
+    }
+}
