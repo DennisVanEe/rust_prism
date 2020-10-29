@@ -10,7 +10,6 @@ use numbers::Float;
 use vector::{Vec2, Vec3};
 
 use std::cmp::PartialOrd;
-use std::f64;
 
 /// Morton encodes form two u32's to a single u64.
 pub fn morton_from_2d(xy: Vec2<u32>) -> u64 {

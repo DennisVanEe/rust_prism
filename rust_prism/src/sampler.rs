@@ -1,6 +1,6 @@
 use crate::film::TILE_SIZE;
-use pmj::{self, Sample};
 use pmath::vector::Vec2;
+use pmj::{self, Sample};
 use rand::SeedableRng;
 use rand_pcg::Pcg32;
 

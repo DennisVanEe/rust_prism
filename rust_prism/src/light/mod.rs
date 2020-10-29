@@ -27,6 +27,12 @@ bitflags! {
     }
 }
 
+/// A `LightHandle` points to a specific light source.
+#[derive(Clone, Copy, Debug)]
+pub struct LightHandle {
+    index: u32,
+}
+
 /// An interface for defining a light in the scene. Lights are transformed into world
 /// space when being committed to a scene.
 pub trait Light: Sync + 'static {

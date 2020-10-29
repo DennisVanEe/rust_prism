@@ -1,0 +1,46 @@
+TARGET = Some("x86_64-pc-windows-msvc")
+OPT_LEVEL = Some("0")
+HOST = Some("x86_64-pc-windows-msvc")
+CC_x86_64-pc-windows-msvc = None
+CC_x86_64_pc_windows_msvc = None
+HOST_CC = None
+CC = None
+CFLAGS_x86_64-pc-windows-msvc = None
+CFLAGS_x86_64_pc_windows_msvc = None
+HOST_CFLAGS = None
+CFLAGS = None
+CRATE_CC_NO_DEFAULTS = None
+CARGO_CFG_TARGET_FEATURE = Some("fxsr,sse,sse2")
+DEBUG = Some("true")
+running: "C:\\Program Files (x86)\\Microsoft Visual Studio\\2019\\Community\\VC\\Tools\\MSVC\\14.27.29110\\bin\\HostX64\\x64\\cl.exe" "-nologo" "-MD" "-Z7" "-Brepro" "-W4" "-Fod:\\Repos\\rust_prism\\rust_prism\\target\\rls\\debug\\build\\rply-94c14b0aa687f196\\out\\extern/rply.o" "-c" "extern/rply.c"
+rply.c
+extern/rply.c(362): warning C4996: 'fopen': This function or variable may be unsafe. Consider using fopen_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+extern/rply.c(465): warning C4996: 'fopen': This function or variable may be unsafe. Consider using fopen_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+extern/rply.c(515): warning C4996: 'strcpy': This function or variable may be unsafe. Consider using strcpy_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+extern/rply.c(533): warning C4996: 'strcpy': This function or variable may be unsafe. Consider using strcpy_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+extern/rply.c(557): warning C4996: 'strcpy': This function or variable may be unsafe. Consider using strcpy_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+extern/rply.c(582): warning C4996: 'strcpy': This function or variable may be unsafe. Consider using strcpy_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+extern/rply.c(596): warning C4996: 'strcpy': This function or variable may be unsafe. Consider using strcpy_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+extern/rply.c(1251): warning C4996: 'strcpy': This function or variable may be unsafe. Consider using strcpy_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+extern/rply.c(1266): warning C4996: 'strcpy': This function or variable may be unsafe. Consider using strcpy_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+extern/rply.c(1269): warning C4996: 'sscanf': This function or variable may be unsafe. Consider using sscanf_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+extern/rply.c(1291): warning C4996: 'vsprintf': This function or variable may be unsafe. Consider using vsprintf_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+extern/rply.c(1312): warning C4127: conditional expression is constant
+extern/rply.c(1313): warning C4127: conditional expression is constant
+extern/rply.c(1314): warning C4127: conditional expression is constant
+extern/rply.c(1315): warning C4127: conditional expression is constant
+extern/rply.c(1316): warning C4127: conditional expression is constant
+extern/rply.c(1317): warning C4127: conditional expression is constant
+extern/rply.c(1318): warning C4127: conditional expression is constant
+extern/rply.c(1319): warning C4127: conditional expression is constant
+D:\Repos\rust_prism\rply\extern\rply.c(379) : warning C4700: uninitialized local variable 'ply' used
+D:\Repos\rust_prism\rply\extern\rply.c(481) : warning C4700: uninitialized local variable 'ply' used
+exit code: 0
+AR_x86_64-pc-windows-msvc = None
+AR_x86_64_pc_windows_msvc = None
+HOST_AR = None
+AR = None
+running: "C:\\Program Files (x86)\\Microsoft Visual Studio\\2019\\Community\\VC\\Tools\\MSVC\\14.27.29110\\bin\\HostX64\\x64\\lib.exe" "-out:d:\\Repos\\rust_prism\\rust_prism\\target\\rls\\debug\\build\\rply-94c14b0aa687f196\\out\\librply.a" "-nologo" "d:\\Repos\\rust_prism\\rust_prism\\target\\rls\\debug\\build\\rply-94c14b0aa687f196\\out\\extern/rply.o"
+exit code: 0
+cargo:rustc-link-lib=static=rply
+cargo:rustc-link-search=native=d:\Repos\rust_prism\rust_prism\target\rls\debug\build\rply-94c14b0aa687f196\out

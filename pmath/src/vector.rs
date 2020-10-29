@@ -4,6 +4,10 @@ use num_traits::{One, Signed, Zero};
 use std::cmp::{PartialEq, PartialOrd};
 use std::ops::{Add, Div, Index, IndexMut, Mul, Neg, Sub};
 
+//
+// 2D Vector
+//
+
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
 pub struct Vec2<T: Copy> {
@@ -34,6 +38,22 @@ impl<T: Signed + Copy> Vec2<T> {
         Vec2 {
             x: self.x.abs(),
             y: self.y.abs(),
+        }
+    }
+
+    // Returns a vec of bools indicating whether or
+    // not the entry is positive or negative:
+    pub fn comp_wise_is_neg(self) -> Vec2<bool> {
+        Vec2 {
+            x: self.x.is_negative(),
+            y: self.y.is_negative(),
+        }
+    }
+
+    pub fn comp_wise_is_pos(self) -> Vec2<bool> {
+        Vec2 {
+            x: self.x.is_positive(),
+            y: self.y.is_positive(),
         }
     }
 }
@@ -109,13 +129,14 @@ impl<T: PartialOrd + Copy> Vec2<T> {
     }
 }
 
-// This is for operations that require a float (like a length function):
+// This is for operations that require a float for now.
 impl<T: Float> Vec2<T> {
-    /// Returns the "length" or magnitude of the vector.
+    /// Calculates the length of the vector
     pub fn length(self) -> T {
         self.length2().sqrt()
     }
 
+    /// Applies exp to each component of the vector
     pub fn exp(self) -> Self {
         Vec2 {
             x: self.x.exp(),
@@ -123,6 +144,7 @@ impl<T: Float> Vec2<T> {
         }
     }
 
+    /// Normalizes the vector
     pub fn normalize(self) -> Self {
         let scale = T::one() / self.length();
         self.scale(scale)
@@ -209,33 +231,9 @@ impl<T: Neg<Output = T> + Copy> Neg for Vec2<T> {
     }
 }
 
-/// Special structure used for permuting a vector.
-#[derive(Copy, Clone)]
-pub enum Vec3Perm {
-    XYZ,
-    XZY,
-    YXZ,
-    YZX,
-    ZXY,
-    ZYX,
-}
-
-impl Vec3Perm {
-    /// Given a permutation, convert it to the the enum.
-    pub fn new(x: usize, y: usize, z: usize) -> Vec3Perm {
-        let perm_code = x + 2 * y + 4 * z;
-        match perm_code {
-            8 /*xzy*/ => Vec3Perm::XZY,
-            5 /*yzx*/ => Vec3Perm::YZX,
-            9 /*yxz*/ => Vec3Perm::YXZ,
-            4 /*zyx*/ => Vec3Perm::ZYX,
-            6 /*zxy*/ => Vec3Perm::ZXY,
-            10 /*xyz*/ => Vec3Perm::XYZ,
-            // TODO: support more permutations:
-            _ => panic!("Invalid permutation number for Vec3"),
-        }
-    }
-}
+//
+// 3D Vector
+//
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
@@ -254,50 +252,15 @@ impl<T: Copy> Vec3<T> {
         }
     }
 
+    pub fn from_vec2(v: Vec2<T>, z: T) -> Self {
+        Vec3 { x: v.x, y: v.y, z }
+    }
+
     pub fn from_vec4(v: Vec4<T>) -> Self {
         Vec3 {
             x: v.x,
             y: v.y,
             z: v.z,
-        }
-    }
-
-    pub fn from_vec2(v: Vec2<T>, z: T) -> Self {
-        Vec3 { x: v.x, y: v.y, z }
-    }
-
-    pub fn permute(self, perm: Vec3Perm) -> Self {
-        match perm {
-            Vec3Perm::XYZ => Vec3 {
-                x: self.x,
-                y: self.y,
-                z: self.z,
-            },
-            Vec3Perm::XZY => Vec3 {
-                x: self.x,
-                y: self.z,
-                z: self.y,
-            },
-            Vec3Perm::YXZ => Vec3 {
-                x: self.y,
-                y: self.x,
-                z: self.z,
-            },
-            Vec3Perm::YZX => Vec3 {
-                x: self.y,
-                y: self.z,
-                z: self.x,
-            },
-            Vec3Perm::ZXY => Vec3 {
-                x: self.z,
-                y: self.x,
-                z: self.y,
-            },
-            Vec3Perm::ZYX => Vec3 {
-                x: self.z,
-                y: self.y,
-                z: self.x,
-            },
         }
     }
 }
@@ -534,6 +497,10 @@ impl<T: Neg<Output = T> + Copy> Neg for Vec3<T> {
         }
     }
 }
+
+//
+// 4D Vector
+//
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]

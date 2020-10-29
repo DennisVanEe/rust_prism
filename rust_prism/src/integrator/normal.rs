@@ -1,9 +1,9 @@
 use crate::film::Pixel;
 use crate::integrator::{Integrator, IntegratorManager};
 use crate::light::light_picker::LightPicker;
-use crate::shading::material::MaterialPool;
 use crate::sampler::Sampler;
 use crate::scene::Scene;
+use crate::shading::material::MaterialPool;
 use crate::spectrum::Color;
 use pmath::ray::PrimaryRay;
 use pmath::vector::Vec3;

@@ -10,29 +10,51 @@ use std::cmp::Eq;
 // Scene
 //
 
-/// Holds information about a geometry when constructing the scene.
+/// A handle to a geometry in the geometry pool. This is not a part of the scene itself yet.
 #[derive(Copy, Clone, Debug)]
-pub struct GeomPoolRef {
+pub struct GeomPoolHandle {
     index: u32,
     embree_geom: embree::Geometry,
 }
 
+/// A handle to any geometry in the scene that a ray can intersect.
+/// There exists one unique geometry handle for every object in a scene.
 #[derive(Copy, Clone, Eq, Debug)]
-pub struct GeomRef {
+pub struct GeomSceneHandle {
     geom_id: u32,
     inst_id: u32,
-    prim_id: u32,
+    // If the geometry should be treated as a light source. If it should,
+    // then we have a light source handle.
+    light_handle: Option<LightHandle>,
 }
 
-/// A group is a collection of mesh that can be instanced. They don't
-/// exist during rendering, they are instead used during the construction
-/// of a scene.
-pub struct Group {
+/// A handle to a light source in the scene.
+#[derive(Copy, Clone, Eq, Debug)]
+pub struct LightHandle {
+    light_id: u32,
+}
+
+/// A handle to a specific material.
+#[derive(Copy, Clone, Eq, Debug)]
+pub struct MaterialHandle {
+    material_id: u32,
+}
+
+/// A hanlde to a specific instance of a group.
+#[derive(Copy, Clone, Eq, Debug)]
+pub struct InstanceHandle {
+    inst_id: u32,
+}
+
+/// A collection of geometries. These geometries are not part of the scene yet.
+/// In order to perform instancing, the geometry must be part of the group (even
+/// when instancing only one geometry).
+pub struct GeomGroup {
     geometries: Vec<u32>,
     embree_scene: embree::Scene,
 }
 
-impl Group {
+impl GeomGroup {
     /// Creates a new group.
     pub fn new() -> Self {
         Group {
@@ -41,8 +63,8 @@ impl Group {
         }
     }
 
-    /// Adds geometry to the group, returning the geometry ID that is local to this specific group.
-    pub fn add_geom(&mut self, geom: GeomPoolRef) -> u32 {
+    /// Adds a geometry to the group, returning
+    pub fn add_geom(&mut self, geom: GeomPoolHandle) -> u32 {
         let geom_id = self.meshes.len() as u32;
         embree::attach_geometry_by_id(self.embree_scene, geom.embree_geom, geom_id);
         embree::commit_geometry(geom.embree_geom);
@@ -55,8 +77,7 @@ impl Group {
 const TOP_LEVEL_INST_ID: u32 = u32::max_value();
 
 pub struct Scene {
-    /// The mesh pool, which contains all of the mesh in a Scene. It also contains
-    /// the embree geometry associated with it.
+    /// The mesh pool, which contains all of the mesh in a Scene.
     geom_pool: Vec<Box<dyn Geometry>>,
     /// The light pool, which contains all of the lights in a Scene.
     light_pool: Vec<Box<dyn Light>>,
@@ -81,41 +102,46 @@ impl Scene {
         }
     }
 
-    /// Given a geometry id and an instance id, returns a reference to the geometry and material
-    /// associated with the geometry.
-    pub fn get_geom(&self, geom_ref: GeomRef) -> (&dyn Geometry, u32) {
-        if geom_ref.inst_id == TOP_LEVEL_INST_ID {
+    /// Given a `GeomSceneHandle`, returns a reference to the geometry and material associated with the geometry.
+    pub fn get_geom(&self, geom_handle: GeomSceneHandle) -> (&dyn Geometry, MaterialHandle) {
+        if geom_handle.inst_id == TOP_LEVEL_INST_ID {
             let scene_geom = self.geometries[geom_ref.geom_id as usize];
-            (&self.geom_pool[scene_geom.index], scene_geom.material_id)
+            (
+                &self.geom_pool[scene_geom.index],
+                MaterialHandle {
+                    material_id: scene_geom.material_id,
+                },
+            )
         } else {
-            if (geom_ref.inst_id as usize) < self.geometries.len() {
-                panic!("Invalid instance id provided");
+            if (geom_handle.inst_id as usize) < self.geometries.len() {
+                panic!("Invalid instance id.");
             }
 
-            let instance = &self.instances[(geom_ref.inst_id as usize) - self.geometries.len()];
-            let scene_geom = instance.geometries[geom_ref.geom_id as usize];
+            let instance = &self.instances[(geom_handle.inst_id as usize) - self.geometries.len()];
+            let scene_geom = instance.geometries[geom_handle.geom_id as usize];
             (&self.geom_pool[scene_geom.index], scene_geom.material_id)
         }
     }
 
-    pub fn get_light(&self, light_id: u32) -> &dyn Light {
-        &self.light_pool[light_id as usize]
+    /// Given a `LightHandle`, returns a reference to the light.
+    pub fn get_light(&self, light_handle: LightHandle) -> &dyn Light {
+        &self.light_pool[light_handle.light_id as usize]
     }
 
-    /// Adds a mesh to the mesh pool of the scene, returning a geometry index.
-    pub fn add_to_geom_pool<T: Geometry>(&mut self, geom: T) -> GeomPoolRef {
+    /// Adds a mesh to the mesh pool of the scene, returning a handle to this specific geometry in the pool.
+    pub fn add_to_geom_pool<T: Geometry>(&mut self, geom: T) -> GeomPoolHandle {
         let index = self.geom_pool.len() as u32;
         let embree_geom = geom.get_embree_geometry();
         self.geom_pool.push(Box::new(geom));
-        GeomPoolRef { index, embree_geom }
+        GeomPoolHandle { index, embree_geom }
     }
 
     /// Adds a light to the scene, returning a global light index. Note that lights aren't instanced.
     /// If a light is associated with instanced geometry, have the light store a geom_id and inst_id.
-    pub fn add_light<T: Light>(&mut self, light: T) -> u32 {
-        let index = self.light_pool.len() as u32;
+    pub fn add_light<T: Light>(&mut self, light: T) -> LightHandle {
+        let light_id = self.light_pool.len() as u32;
         self.light_pool.push(Box::new(light));
-        index
+        LightHandle { light_id }
     }
 
     /// Sets the build quality to build the scene with.
@@ -140,7 +166,11 @@ impl Scene {
     /// Adds a toplevel mesh with the given device and material id. Returning a geomID that is used
     /// to determine how reference it in the future. Note that these mesh should already have been
     /// transformed and CANNOT be animated.
-    pub fn add_toplevel_geom(&mut self, geom: u32, material_id: u32) -> u32 {
+    pub fn add_toplevel_geom(
+        &mut self,
+        geom: u32,
+        material_handle: MaterialHandle,
+    ) -> GeomSceneHandle {
         // Check if we are adding them too early:
         if !self.instances.is_empty() {
             panic!("Adding top level geometry after instance has already been added.")
@@ -152,23 +182,27 @@ impl Scene {
         embree::commit_geometry(geom.embree_geom);
         self.geometries.push(SceneGeom {
             index: geom.index,
-            material_id,
+            material_handle,
         });
-        geom_id
+
+        GeomSceneHandle {
+            geom_id,
+            inst_id: TOP_LEVEL_INST_ID,
+            light_handle: None,
+        }
     }
 
     /// Given a group, adds an instance of it in the scene.
     ///
-    /// Adds an instance to the toplevel scene. Returns the instID (geomID in the top-level scene).
-    /// Pass in the material_id for each of the group mesh in the group. Must be the same length as
-    /// the number of mesh in the group. Ordering is based on geom_id returned by add_group_mesh.
+    /// Adds an instance to the toplevel scene. Returns an `InstanceHandle` that can be used to get `GeomSceneHandle`s
+    /// by calling `get_instance_geom_handle` with a specific `GeomGroupHandle`.
     pub fn add_group_instance(
         &mut self,
         group: &Group,
-        material_ids: &[u32],
+        materials: &[MaterialHandle],
         transform: Transf,
-    ) -> u32 {
-        let geom_id = (self.geometries.len() + self.instances.len()) as u32;
+    ) -> InstanceHandle {
+        let inst_id = (self.geometries.len() + self.instances.len()) as u32;
 
         // First we commit the scene:
         embree::commit_scene(group.embree_scene);
@@ -177,7 +211,7 @@ impl Scene {
         embree::set_geometry_instance_scene(geom_ptr, group.embree_scene);
         embree::set_geometry_timestep_count(geom_ptr, 1);
 
-        embree::attach_geometry_by_id(self.embree_scene, geom_ptr, geom_id);
+        embree::attach_geometry_by_id(self.embree_scene, geom_ptr, inst_id);
 
         let mat = transform.get_frd().to_f32();
         embree::set_geometry_transform(
@@ -191,8 +225,11 @@ impl Scene {
 
         // Set the material id's for each mesh in the instance
         let mut geometries = Vec::with_capacity(group.meshes.len());
-        for (&index, &material_id) in group.meshes.iter().zip(material_ids.iter()) {
-            geometries.push(SceneGeom { index, material_id })
+        for (&index, &material_handle) in group.meshes.iter().zip(materials.iter()) {
+            geometries.push(SceneGeom {
+                index,
+                material_handle,
+            })
         }
 
         self.instances.push(Instance {
@@ -201,7 +238,7 @@ impl Scene {
             embree_geom: geom_ptr,
         });
 
-        geom_id
+        InstanceHandle { inst_id }
     }
 
     /// Peforms an intersection, returning the interaction in world space.
@@ -260,7 +297,7 @@ impl Scene {
 #[derive(Clone, Copy, Debug)]
 struct SceneGeom {
     index: u32,
-    material_id: u32,
+    material_handle: MaterialHandle,
 }
 
 /// An instance of a mesh in the scene.

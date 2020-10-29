@@ -10,38 +10,31 @@ pub struct Ray<T: Float> {
     pub dir: Vec3<T>,
     /// The current time in the scene of the ray.
     pub time: T,
+}
+
+impl<T: Float> Ray<T> {
+    /// Calculates a point along the ray given a parametric parameter.
+    pub fn point_at(self, t: T) -> Vec3<T> {
+        self.org + self.dir.scale(t)
+    }
+}
+
+/// A `RayExtent` defines the extent of the ray.
+#[derive(Clone, Copy, Debug)]
+pub struct RayExtent<T: Float> {
     /// The max extent of the ray to consider when tracing against geometry.
     pub t_far: T,
     /// Where along the ray to start checking for intersections.
     pub t_near: T,
 }
 
-impl<T: Float> Ray<T> {
-    /// Constructs a new Ray for intersecting a scene, that is, without a parametric restriction.
-    pub fn new(org: Vec3<T>, dir: Vec3<T>, time: T) -> Self {
-        Ray {
-            org,
-            dir,
-            time,
+impl<T: Float> RayExtent<T> {
+    /// Constructs a new `RayExtent` with default values (infinite `t_far`).
+    pub fn new() -> Self {
+        RayExtent {
             t_far: T::infinity(),
             t_near: T::SELF_INT_COMP,
         }
-    }
-
-    /// Constructs a new `Ray` with an extent (t_far):
-    pub fn new_extent(org: Vec3<T>, dir: Vec3<T>, time: T, t_far: T) -> Self {
-        Ray {
-            org,
-            dir,
-            time,
-            t_far,
-            t_near: T::SELF_INT_COMP,
-        }
-    }
-
-    /// Calculates a point along the ray given a parametric parameter.
-    pub fn point_at(self, t: T) -> Vec3<T> {
-        self.org + self.dir.scale(t)
     }
 }
 
@@ -59,8 +52,6 @@ impl<T: Float> PrimaryRay<T> {
             org: self.ray_diff.rx_org,
             dir: self.ray_diff.rx_dir,
             time: self.ray.time,
-            t_far: self.ray.t_far,
-            t_near: self.ray.t_near,
         }
     }
 
@@ -69,8 +60,6 @@ impl<T: Float> PrimaryRay<T> {
             org: self.ray_diff.ry_org,
             dir: self.ray_diff.ry_dir,
             time: self.ray.time,
-            t_far: self.ray.t_far,
-            t_near: self.ray.t_near,
         }
     }
 }

@@ -1,0 +1,13 @@
+d:\Repos\rust_prism\rust_prism\target\rls\debug\deps\rgb-8f1cf87b219b288d.rmeta: C:\Users\denni\.cargo\registry\src\github.com-1ecc6299db9ec823\rgb-0.8.20\src\lib.rs C:\Users\denni\.cargo\registry\src\github.com-1ecc6299db9ec823\rgb-0.8.20\src\internal\convert\mod.rs C:\Users\denni\.cargo\registry\src\github.com-1ecc6299db9ec823\rgb-0.8.20\src\internal\convert\array.rs C:\Users\denni\.cargo\registry\src\github.com-1ecc6299db9ec823\rgb-0.8.20\src\internal\convert\tuple.rs C:\Users\denni\.cargo\registry\src\github.com-1ecc6299db9ec823\rgb-0.8.20\src\internal\ops.rs C:\Users\denni\.cargo\registry\src\github.com-1ecc6299db9ec823\rgb-0.8.20\src\internal\pixel.rs C:\Users\denni\.cargo\registry\src\github.com-1ecc6299db9ec823\rgb-0.8.20\src\internal\rgb.rs C:\Users\denni\.cargo\registry\src\github.com-1ecc6299db9ec823\rgb-0.8.20\src\internal\rgba.rs C:\Users\denni\.cargo\registry\src\github.com-1ecc6299db9ec823\rgb-0.8.20\src\alt.rs
+
+d:\Repos\rust_prism\rust_prism\target\rls\debug\deps\rgb-8f1cf87b219b288d.d: C:\Users\denni\.cargo\registry\src\github.com-1ecc6299db9ec823\rgb-0.8.20\src\lib.rs C:\Users\denni\.cargo\registry\src\github.com-1ecc6299db9ec823\rgb-0.8.20\src\internal\convert\mod.rs C:\Users\denni\.cargo\registry\src\github.com-1ecc6299db9ec823\rgb-0.8.20\src\internal\convert\array.rs C:\Users\denni\.cargo\registry\src\github.com-1ecc6299db9ec823\rgb-0.8.20\src\internal\convert\tuple.rs C:\Users\denni\.cargo\registry\src\github.com-1ecc6299db9ec823\rgb-0.8.20\src\internal\ops.rs C:\Users\denni\.cargo\registry\src\github.com-1ecc6299db9ec823\rgb-0.8.20\src\internal\pixel.rs C:\Users\denni\.cargo\registry\src\github.com-1ecc6299db9ec823\rgb-0.8.20\src\internal\rgb.rs C:\Users\denni\.cargo\registry\src\github.com-1ecc6299db9ec823\rgb-0.8.20\src\internal\rgba.rs C:\Users\denni\.cargo\registry\src\github.com-1ecc6299db9ec823\rgb-0.8.20\src\alt.rs
+
+C:\Users\denni\.cargo\registry\src\github.com-1ecc6299db9ec823\rgb-0.8.20\src\lib.rs:
+C:\Users\denni\.cargo\registry\src\github.com-1ecc6299db9ec823\rgb-0.8.20\src\internal\convert\mod.rs:
+C:\Users\denni\.cargo\registry\src\github.com-1ecc6299db9ec823\rgb-0.8.20\src\internal\convert\array.rs:
+C:\Users\denni\.cargo\registry\src\github.com-1ecc6299db9ec823\rgb-0.8.20\src\internal\convert\tuple.rs:
+C:\Users\denni\.cargo\registry\src\github.com-1ecc6299db9ec823\rgb-0.8.20\src\internal\ops.rs:
+C:\Users\denni\.cargo\registry\src\github.com-1ecc6299db9ec823\rgb-0.8.20\src\internal\pixel.rs:
+C:\Users\denni\.cargo\registry\src\github.com-1ecc6299db9ec823\rgb-0.8.20\src\internal\rgb.rs:
+C:\Users\denni\.cargo\registry\src\github.com-1ecc6299db9ec823\rgb-0.8.20\src\internal\rgba.rs:
+C:\Users\denni\.cargo\registry\src\github.com-1ecc6299db9ec823\rgb-0.8.20\src\alt.rs:
