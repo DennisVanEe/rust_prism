@@ -16,6 +16,10 @@ pub struct Vec2<T: Copy> {
 }
 
 impl<T: Copy> Vec2<T> {
+    pub fn from_arr(a: [T; 3]) -> Self {
+        Vec2 { x: a[0], y: a[1] }
+    }
+
     /// Constructs a `Vec2` from a `Vec3`, dropping the last element.
     pub fn from_vec3(v: Vec3<T>) -> Self {
         Vec2 { x: v.x, y: v.y }
@@ -24,6 +28,13 @@ impl<T: Copy> Vec2<T> {
     /// Constructs a `Vec2` from a `Vec4`, dropping the last two elements.
     pub fn from_vec4(v: Vec4<T>) -> Self {
         Vec2 { x: v.x, y: v.y }
+    }
+
+    pub fn permute(self, perm: Vec2<usize>) -> Vec2<T> {
+        Vec2 {
+            x: self[perm.x],
+            y: self[perm.y],
+        }
     }
 }
 
@@ -244,11 +255,11 @@ pub struct Vec3<T: Copy> {
 }
 
 impl<T: Copy> Vec3<T> {
-    pub fn from_arr(v: [T; 3]) -> Self {
+    pub fn from_arr(a: [T; 3]) -> Self {
         Vec3 {
-            x: v[0],
-            y: v[1],
-            z: v[2],
+            x: a[0],
+            y: a[1],
+            z: a[2],
         }
     }
 
@@ -261,6 +272,14 @@ impl<T: Copy> Vec3<T> {
             x: v.x,
             y: v.y,
             z: v.z,
+        }
+    }
+
+    pub fn permute(self, perm: Vec3<usize>) -> Vec3<T> {
+        Vec3 {
+            x: self[perm.x],
+            y: self[perm.y],
+            z: self[perm.z],
         }
     }
 }
@@ -512,12 +531,39 @@ pub struct Vec4<T: Copy> {
 }
 
 impl<T: Copy> Vec4<T> {
+    pub fn from_arr(a: [T; 4]) -> Self {
+        Vec4 {
+            x: a[0],
+            y: a[1],
+            z: a[2],
+            w: a[3],
+        }
+    }
+
+    pub fn from_vec2(v: Vec2<T>, z: T, w: T) -> Self {
+        Vec4 {
+            x: v.x,
+            y: v.y,
+            z,
+            w,
+        }
+    }
+
     pub fn from_vec3(v: Vec3<T>, w: T) -> Self {
         Vec4 {
             x: v.x,
             y: v.y,
             z: v.z,
             w,
+        }
+    }
+
+    pub fn permute(self, perm: Vec4<usize>) -> Vec4<T> {
+        Vec4 {
+            x: self[perm.x],
+            y: self[perm.y],
+            z: self[perm.z],
+            w: self[perm.w],
         }
     }
 }

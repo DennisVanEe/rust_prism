@@ -1,7 +1,6 @@
 [workspace]
 members = [
   "rust_prism",
-  "embree",
   "pmj",
   "rply",
   "pmath",

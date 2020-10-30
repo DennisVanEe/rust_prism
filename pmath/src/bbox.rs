@@ -1,5 +1,5 @@
 use crate::numbers::Float;
-use crate::ray::{Ray, RayExtent};
+use crate::ray::Ray;
 use crate::vector::{Vec2, Vec3};
 use num_traits::Bounded;
 use std::cmp::PartialOrd;
@@ -126,7 +126,7 @@ impl<T: PartialOrd + Bounded + Copy> BBox3<T> {
         BBox3 { pmin, pmax }
     }
 
-    /// Creates a new `BBox2` that encompases the box and another box.
+    /// Creates a new `BBox3` that encompases the box and another box.
     pub fn combine_bnd(self, bnd: BBox3<T>) -> Self {
         let pmin = self.pmin.min(bnd.pmin);
         let pmax = self.pmax.max(bnd.pmax);
@@ -164,16 +164,16 @@ impl<T: Float + Bounded> BBox3<T> {
         T::two() * (d.x * d.y + d.x * d.y + d.y * d.z)
     }
 
-    /// Returns the center of the bounding box.
-    pub fn center(self) -> Vec3<T> {
-        self.diagonal().scale(T::half())
+    /// Returns the centroid of the bounding box.
+    pub fn centroid(self) -> Vec3<T> {
+        self.pmin.scale(T::half()) + self.pmax.scale(T::half())
     }
 
     // Performs an intersection of a bounding box, returning the t value along the ray
     // where the ray first hits the box and where it leaves the box.
-    pub fn intersect(&self, ray: Ray<T>, ray_extent: RayExtent<T>) -> Option<(T, T)> {
-        let mut t0 = ray_extent.t_near;
-        let mut t1 = ray_extent.t_far;
+    pub fn intersect(&self, ray: Ray<T>) -> Option<(T, T)> {
+        let mut t0 = ray.t_near;
+        let mut t1 = ray.t_far;
 
         for i in 0..3 {
             let inv_dir = T::one() / ray.dir[i];
@@ -194,13 +194,7 @@ impl<T: Float + Bounded> BBox3<T> {
         Some((t0, t1))
     }
 
-    pub fn intersect_test(
-        &self,
-        ray: Ray<T>,
-        ray_extent: RayExtent<T>,
-        inv_dir: Vec3<T>,
-        is_dir_neg: Vec3<bool>,
-    ) -> bool {
+    pub fn intersect_test(&self, ray: Ray<T>, inv_dir: Vec3<T>, is_dir_neg: Vec3<bool>) -> bool {
         // Use as indices:
         let is_dir_neg = [
             usize::from(is_dir_neg.x),
@@ -235,7 +229,7 @@ impl<T: Float + Bounded> BBox3<T> {
         let t_min = if tz_min > t_min { tz_min } else { t_min };
         let t_max = if tz_max < t_max { tz_max } else { t_max };
 
-        t_min < ray_extent.t_far && t_max > T::zero() && t_max > ray_extent.t_near
+        t_min < ray.t_far && t_max > T::zero() && t_max > ray.t_near
     }
 }
 
