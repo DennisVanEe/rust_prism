@@ -1,311 +1,277 @@
-use crate::geometry::{GeomInteraction, Geometry};
+use crate::bvh::{BVHObject, BVH};
+use crate::geometry::{GeomSurface, Geometry};
 use crate::light::Light;
+use crate::shading::material::Material;
 use crate::transform::Transf;
-use embree;
-use pmath::matrix::Mat3x4;
+use pmath::bbox::BBox3;
 use pmath::ray::Ray;
-use std::cmp::Eq;
+use std::sync::{Arc, Mutex};
 
 //
-// Scene
+// Lights
 //
 
-/// A handle to a geometry in the geometry pool. This is not a part of the scene itself yet.
-#[derive(Copy, Clone, Debug)]
-pub struct GeomPoolHandle {
-    index: u32,
-    embree_geom: embree::Geometry,
+// TODO: handle the case where we may clone values with the LightHandle. The problem is simple, if we clone a handle that
+// contains a light handle, then we should register it (heck, maybe just do this everytime we clone? but then we need a 
+// unique light for every single object, or at least, a unique SceneLight in the SceneLightRegistrar. Hmmm...)
+
+/// A single scene light holds the light itself as well as any transformations that belong to the light. Because we
+/// build on the lights, the transf that belongs to each light will be a "world" position of said light. This is
+/// public to allow light pickers to pick lights based on their property and whatnot.
+pub struct SceneLight {
+    light: Arc<dyn Light>,
+    transf: Transf,
 }
 
-/// A handle to any geometry in the scene that a ray can intersect.
-/// There exists one unique geometry handle for every object in a scene.
-#[derive(Copy, Clone, Eq, Debug)]
-pub struct GeomSceneHandle {
-    geom_id: u32,
-    inst_id: u32,
-    // If the geometry should be treated as a light source. If it should,
-    // then we have a light source handle.
-    light_handle: Option<LightHandle>,
+impl SceneLight {
+    /// Returns the light as a reference and the transformation of the light (in world space).
+    pub fn get_light_transf(&self) -> (&dyn Light, Transf) {
+        (self.light.as_ref(), self.transf)
+    }
 }
 
-/// A handle to a light source in the scene.
-#[derive(Copy, Clone, Eq, Debug)]
+/// There is only 1 light pool allowed per scene, and every light that can be created has to go through the LightPool
+/// (i.e, it needs to registger with it).
+pub struct SceneLightRegistrar {
+    light_list: Mutex<Vec<SceneLight>>,
+}
+
+impl SceneLightRegistrar {
+    fn new() -> Self {
+        SceneLightRegistrar {
+            light_list: Mutex::new(Vec::new()),
+        }
+    }
+
+    /// Adds a light to the registrar, returning the index of said light.
+    fn add_light(&self, light: &Arc<dyn Light>, transf: Transf) -> usize {
+        // Acquire a lock for the vector:
+        let light_list = self.light_list.lock().unwrap();
+
+        let index = light_list.len();
+        light_list.push(SceneLight {
+            light: light.clone(),
+            transf,
+        });
+        index
+    }
+
+    /// Updates the transform of the light in the registrar by multiplying on the left side.
+    fn update_ligth_transf(&self, index: usize, transf: Transf) {
+        // Acquire a lock for the vector:
+        let light_list = self.light_list.lock().unwrap();
+        let scene_light = light_list.get_mut(index).unwrap();
+        scene_light.transf = transf * scene_light.transf;
+    }
+}
+
+static SCENE_LIGHT_REGISTRAR: SceneLightRegistrar = SceneLightRegistrar::new();
+
+// Lights are a little different from everything. I need to be able to access all light sources in a scene quickly
+// in a single list. This is to make light sampling easier. So, how do we do that? Well, we need to keep some sort of
+// "light stack" of transformations. As this could happen to multiple objects outside of regular lights, I'll attach
+// support for this to the ScenePrimitive itself as well.
+
+#[derive(Clone)]
 pub struct LightHandle {
-    light_id: u32,
+    light: Arc<dyn Light>, // the light itself
+    index: Option<usize>,          // index into the scene light registrar
 }
 
-/// A handle to a specific material.
-#[derive(Copy, Clone, Eq, Debug)]
-pub struct MaterialHandle {
-    material_id: u32,
-}
+impl LightHandle {
+    /// Creates a new `LightHandle`. This function should be called by the light creation function (e.g. a function
+    /// for creating point lights, etc.) and never by the end user through a script or something.
+    pub fn new(light: Arc<dyn Light>) -> Self {
+        LightHandle { light, index: None }
+    }
 
-/// A hanlde to a specific instance of a group.
-#[derive(Copy, Clone, Eq, Debug)]
-pub struct InstanceHandle {
-    inst_id: u32,
-}
+    /// Once the light becomes a part of a `ScenePrimitive` object, this should be called to register it. It should
+    /// get registered with an original transformation.
+    fn register_light(&mut self, transf: Transf) {
+        self.index = Some(SCENE_LIGHT_REGISTRAR.add_light(&self.light, transf));
+    }
 
-/// A collection of geometries. These geometries are not part of the scene yet.
-/// In order to perform instancing, the geometry must be part of the group (even
-/// when instancing only one geometry).
-pub struct GeomGroup {
-    geometries: Vec<u32>,
-    embree_scene: embree::Scene,
-}
-
-impl GeomGroup {
-    /// Creates a new group.
-    pub fn new() -> Self {
-        Group {
-            geometries: Vec::new(),
-            embree_scene: embree::new_scene(),
+    /// If the ScenePrimitive joins something that changes it's position in the global space, make sure to update
+    /// the light as appropriate:
+    fn update_transf(&mut self, transf: Transf) {
+        // For now, we just ignore the case where index wasn't set:
+        if let Some(index) = self.index {
+            SCENE_LIGHT_REGISTRAR.update_ligth_transf(index, transf);
         }
     }
+}
 
-    /// Adds a geometry to the group, returning
-    pub fn add_geom(&mut self, geom: GeomPoolHandle) -> u32 {
-        let geom_id = self.meshes.len() as u32;
-        embree::attach_geometry_by_id(self.embree_scene, geom.embree_geom, geom_id);
-        embree::commit_geometry(geom.embree_geom);
-        self.meshes.push(geom.index);
-        geom_id
+/// A scene primitive is anything that can
+trait ScenePrimitive: 'static {
+    // All of the stuff that is required for intersections:
+
+    fn get_bbox(&self) -> BBox3<f64>;
+    fn intersect_test(&self, ray: Ray<f64>) -> bool;
+    fn intersect(&self, ray: Ray<f64>) -> Option<GeomSurface>;
+
+    /// If anything part of the scene primitive needs to update it's position in the world.
+    fn update_transf(&mut self, transf: Transf);
+}
+
+type ScenePrimitiveHandle = Arc<dyn ScenePrimitive>;
+type GeometryHandle = Arc<dyn Geometry>;
+type MaterialHandle = Arc<dyn Material>;
+
+//
+// SceneGeom
+//
+
+/// A `SceneGeometry` can either be a light source (e.g. a mesh light) or an object with a material.
+
+enum SceneGeometryType {
+    Material(MaterialHandle),
+    Light(LightHandle),
+}
+
+/// A geometry in the scene. This means a bunch of stuff.
+pub struct SceneGeometry {
+    geometry: GeometryHandle,
+    scene_geometry_type: SceneGeometryType,
+}
+
+impl SceneGeometry {
+    /// Constructs a new `SceneGeometry` that has a material associated with it.
+    pub fn new_material(
+        geometry: &GeometryHandle,
+        material: &MaterialHandle,
+    ) -> ScenePrimitiveHandle {
+        Arc::new(SceneGeometry {
+            geometry: geometry.clone(),
+            scene_geometry_type: SceneGeometryType::Material(material.clone()),
+        })
+    }
+
+    /// Constructs a new `SceneGeometry` that has a light associated with it.
+    pub fn new_light(geometry: &GeometryHandle, light: &LightHandle) -> ScenePrimitiveHandle {
+        // WE don't need to register it yet. Once it is attached to a BVH, then we do it.
+        Arc::new(SceneGeometry {
+            geometry: geometry.clone(),
+            scene_geometry_type: SceneGeometryType::Light(light.clone()),
+        })
     }
 }
 
-/// The instance id of the top level (used to index geometries that are not instanced).
-const TOP_LEVEL_INST_ID: u32 = u32::max_value();
-
-pub struct Scene {
-    /// The mesh pool, which contains all of the mesh in a Scene.
-    geom_pool: Vec<Box<dyn Geometry>>,
-    /// The light pool, which contains all of the lights in a Scene.
-    light_pool: Vec<Box<dyn Light>>,
-
-    /// Contains all of the instances in a scene.
-    instances: Vec<Instance>,
-    /// Contains all of the top-level meshes in a scene.
-    geometries: Vec<SceneGeom>,
-
-    /// The embree pointer for the specific scene.
-    embree_scene: embree::Scene,
-}
-
-impl Scene {
-    pub fn new() -> Self {
-        Scene {
-            geom_pool: Vec::new(),
-            light_pool: Vec::new(),
-            instances: Vec::new(),
-            geometries: Vec::new(),
-            embree_scene: embree::new_scene(),
-        }
+impl ScenePrimitive for SceneGeometry {
+    fn get_bbox(&self) -> BBox3<f64> {
+        self.geometry.get_bbox()
     }
 
-    /// Given a `GeomSceneHandle`, returns a reference to the geometry and material associated with the geometry.
-    pub fn get_geom(&self, geom_handle: GeomSceneHandle) -> (&dyn Geometry, MaterialHandle) {
-        if geom_handle.inst_id == TOP_LEVEL_INST_ID {
-            let scene_geom = self.geometries[geom_ref.geom_id as usize];
-            (
-                &self.geom_pool[scene_geom.index],
-                MaterialHandle {
-                    material_id: scene_geom.material_id,
-                },
-            )
-        } else {
-            if (geom_handle.inst_id as usize) < self.geometries.len() {
-                panic!("Invalid instance id.");
+    fn intersect_test(&self, ray: Ray<f64>) -> bool {
+        self.geometry.intersect_test(ray)
+    }
+
+    fn intersect(&self, ray: Ray<f64>) -> Option<GeomSurface> {
+        self.geometry.intersect(ray)
+    }
+
+    fn update_transf(&mut self, transf: Transf) {
+        // We only perform the update if we have a light:
+        if let SceneGeometryType::Light(light_handle) = &mut self.scene_geometry_type {
+            match light_handle.index {
+                Some(index) => light_handle.update_transf(transf),
+                None => light_handle.register_light(transf),
             }
-
-            let instance = &self.instances[(geom_handle.inst_id as usize) - self.geometries.len()];
-            let scene_geom = instance.geometries[geom_handle.geom_id as usize];
-            (&self.geom_pool[scene_geom.index], scene_geom.material_id)
-        }
-    }
-
-    /// Given a `LightHandle`, returns a reference to the light.
-    pub fn get_light(&self, light_handle: LightHandle) -> &dyn Light {
-        &self.light_pool[light_handle.light_id as usize]
-    }
-
-    /// Adds a mesh to the mesh pool of the scene, returning a handle to this specific geometry in the pool.
-    pub fn add_to_geom_pool<T: Geometry>(&mut self, geom: T) -> GeomPoolHandle {
-        let index = self.geom_pool.len() as u32;
-        let embree_geom = geom.get_embree_geometry();
-        self.geom_pool.push(Box::new(geom));
-        GeomPoolHandle { index, embree_geom }
-    }
-
-    /// Adds a light to the scene, returning a global light index. Note that lights aren't instanced.
-    /// If a light is associated with instanced geometry, have the light store a geom_id and inst_id.
-    pub fn add_light<T: Light>(&mut self, light: T) -> LightHandle {
-        let light_id = self.light_pool.len() as u32;
-        self.light_pool.push(Box::new(light));
-        LightHandle { light_id }
-    }
-
-    /// Sets the build quality to build the scene with.
-    pub fn set_build_quality(&self, quality: embree::BuildQuality) {
-        embree::set_scene_build_quality(self.embree_scene, quality);
-    }
-
-    /// Sets any flags to the scene (see `SceneFlags` enum).
-    pub fn set_flags(&self, flags: embree::SceneFlags) {
-        embree::set_scene_flags(self.embree_scene, flags);
-    }
-
-    /// After adding everything, this will build the top-level BVH:
-    pub fn build_scene(&mut self) {
-        embree::commit_scene(self.embree_scene);
-        self.geom_pool.shrink_to_fit();
-        self.light_pool.shrink_to_fit();
-    }
-
-    /// Adds a toplevel mesh and returns the geomID of that mesh.
-    ///
-    /// Adds a toplevel mesh with the given device and material id. Returning a geomID that is used
-    /// to determine how reference it in the future. Note that these mesh should already have been
-    /// transformed and CANNOT be animated.
-    pub fn add_toplevel_geom(
-        &mut self,
-        geom: u32,
-        material_handle: MaterialHandle,
-    ) -> GeomSceneHandle {
-        // Check if we are adding them too early:
-        if !self.instances.is_empty() {
-            panic!("Adding top level geometry after instance has already been added.")
-        }
-
-        // First create an rtc geometry of the mesh:
-        let geom_id = self.geometries.len() as u32;
-        embree::attach_geometry_by_id(self.embree_scene, geom.embree_geom, geom_id);
-        embree::commit_geometry(geom.embree_geom);
-        self.geometries.push(SceneGeom {
-            index: geom.index,
-            material_handle,
-        });
-
-        GeomSceneHandle {
-            geom_id,
-            inst_id: TOP_LEVEL_INST_ID,
-            light_handle: None,
-        }
-    }
-
-    /// Given a group, adds an instance of it in the scene.
-    ///
-    /// Adds an instance to the toplevel scene. Returns an `InstanceHandle` that can be used to get `GeomSceneHandle`s
-    /// by calling `get_instance_geom_handle` with a specific `GeomGroupHandle`.
-    pub fn add_group_instance(
-        &mut self,
-        group: &Group,
-        materials: &[MaterialHandle],
-        transform: Transf,
-    ) -> InstanceHandle {
-        let inst_id = (self.geometries.len() + self.instances.len()) as u32;
-
-        // First we commit the scene:
-        embree::commit_scene(group.embree_scene);
-
-        let geom_ptr = embree::new_geometry(embree::GeometryType::Instance);
-        embree::set_geometry_instance_scene(geom_ptr, group.embree_scene);
-        embree::set_geometry_timestep_count(geom_ptr, 1);
-
-        embree::attach_geometry_by_id(self.embree_scene, geom_ptr, inst_id);
-
-        let mat = transform.get_frd().to_f32();
-        embree::set_geometry_transform(
-            geom_ptr,
-            0,
-            embree::Format::Float3x4RowMajor,
-            &mat as *const Mat3x4<f32>,
-        );
-
-        embree::commit_geometry(geom_ptr);
-
-        // Set the material id's for each mesh in the instance
-        let mut geometries = Vec::with_capacity(group.meshes.len());
-        for (&index, &material_handle) in group.meshes.iter().zip(materials.iter()) {
-            geometries.push(SceneGeom {
-                index,
-                material_handle,
-            })
-        }
-
-        self.instances.push(Instance {
-            geometries,
-            transform,
-            embree_geom: geom_ptr,
-        });
-
-        InstanceHandle { inst_id }
-    }
-
-    /// Peforms an intersection, returning the interaction in world space.
-    ///
-    /// Given a ray, intersects the geometry and returns an interaction in the
-    /// top-level scene space (aka world space).
-    pub fn intersect(&self, ray: Ray<f64>) -> Option<GeomInteraction> {
-        match embree::intersect(self.embree_scene, ray, 0, 0, 0) {
-            Some((ray, hit)) => Some(self.calc_interaction(ray, hit)),
-            _ => None,
-        }
-    }
-
-    /// Performs an intersection test.
-    ///
-    /// Performs an intersection test. Returns true if intersection worked and false
-    /// if it did not work.
-    pub fn intersect_test(&self, ray: Ray<f64>) -> bool {
-        embree::occluded(self.embree_scene, ray, 0, 0, 0)
-    }
-
-    /// Calculates the interaction given an RTCRayHit.
-    fn calc_interaction(&self, ray: Ray<f64>, hit: embree::Hit<f64>) -> GeomInteraction {
-        // Check if it hit a top-level geom or a bottom-level geom:
-        let inst_id = hit.inst_id[0];
-        if inst_id == embree::INVALID_GEOM_ID {
-            // Get the top-level geom associated with the intersection:
-            let scene_geom = &self.geometries[hit.geom_id as usize];
-            // Get the specific primitive that we hit (the triangle):
-            self.geom_pool[scene_geom.index as usize].calc_interaction(
-                ray,
-                hit,
-                scene_geom.material_id,
-            )
-        } else {
-            // Get an instance index. Because all instance geometry comes after the top-level geom,
-            // we have to subtract the number of geom to get a local instance index into the vector:
-            let inst_index = (inst_id as usize) - self.geometries.len();
-            let instance = &self.instances[inst_index];
-            // Get the mesh this instance was instancing:
-            let scene_geom = &instance.geometries[hit.geom_id as usize];
-            // Get the specific primitive that we hit (the triangle):
-            let interaction = self.geom_pool[scene_geom.index as usize].calc_interaction(
-                ray,
-                hit,
-                scene_geom.material_id,
-            );
-            // Don't forget to transform the interaction to world-space from the instance.
-            instance.transform.geom_interaction(interaction)
         }
     }
 }
 
-/// A reference to a single mesh in the scene. It is
-/// paired with a material id for that specific mesh.
-#[derive(Clone, Copy, Debug)]
-struct SceneGeom {
-    index: u32,
-    material_handle: MaterialHandle,
+//
+// SceneBVHObject
+//
+
+/// A `SceneBVHObject` is an object that can be inserted into a bvh. It is made up of a `ScenePrimitiveHandle` and a
+/// `Transf` to transform it (relative to the BVH itself, of course).
+#[derive(Clone)]
+struct SceneBVHObject {
+    object: ScenePrimitiveHandle,
+    transf: Transf,
 }
 
-/// An instance of a mesh in the scene.
-struct Instance {
-    /// The collection of different meshes in the scene.
-    geometries: Vec<SceneGeom>,
-    /// Instance-to-world transformation.
-    transform: Transf,
-    /// The geometry the scene belongs to (as part of the top-level)
-    embree_geom: embree::Geometry,
+impl SceneBVHObject {
+    /// Constructs a new `SceneBVHObject`. Note that the `ScenePrimitiveHandle` isn't moved, it's cloned so that we
+    /// can mimic some form of instancing.
+    pub fn new(object: &ScenePrimitiveHandle, transf: Transf) -> Self {
+        let object = object.clone();
+        object.update_transf(transf);
+        SceneBVHObject {
+            object,
+            transf,
+        }
+    }
+}
+
+impl BVHObject for SceneBVHObject {
+    type UserData = ();
+
+    fn get_bbox(&self, _: &Self::UserData) -> BBox3<f64> {
+        self.object.get_bbox()
+    }
+
+    fn intersect_test(&self, ray: Ray<f64>, _: &Self::UserData) -> bool {
+        self.object.intersect_test(ray)
+    }
+
+    fn intersect(&self, ray: Ray<f64>, _: &Self::UserData) -> Option<GeomSurface> {
+        self.object.intersect(ray)
+    }
+}
+
+//
+// SceneBVH
+//
+
+// Just make sure it can itself be a `ScenePrimitive`.
+impl ScenePrimitive for BVH<SceneBVHObject> {
+    fn get_bbox(&self) -> BBox3<f64> {
+        self.get_bbox()
+    }
+
+    fn intersect_test(&self, ray: Ray<f64>) -> bool {
+        self.intersect_test(ray, &())
+    }
+
+    fn intersect(&self, ray: Ray<f64>) -> Option<GeomSurface> {
+        self.intersect(ray, &())
+    }
+}
+
+//
+// SceneBVHBuilder
+//
+
+/// A `SceneBVHBuilder` is an object used to collect different `SceneBVHObject`s and spit out a `SceneBVH` as a final
+/// result.
+pub struct SceneBVHBuilder {
+    objects: Vec<SceneBVHObject>,
+}
+
+impl SceneBVHBuilder {
+    /// Constructs a new `SceneBVHBuilder`
+    pub fn new() -> Self {
+        SceneBVHBuilder {
+            objects: Vec::new(),
+        }
+    }
+
+    /// Adds an object to the bvh builder.
+    pub fn add_object(&mut self, obj: SceneBVHObject) {
+        self.objects.push(obj);
+    }
+
+    /// Creates the `SceneBVH`. Note that this will clear the objects directory, so you can't call it multiple times.
+    /// It'll also panic if no items were added. Returns
+    pub fn create_bvh(&mut self, max_objects_per_leaf: usize) -> ScenePrimitiveHandle {
+        if self.objects.is_empty() {
+            panic!("Error creating BVH, SceneBVHBuilder has no objects.");
+        }
+
+        let bvh = BVH::new(&self.objects, max_objects_per_leaf, &());
+        self.objects.clear();
+        Arc::new(bvh)
+    }
 }

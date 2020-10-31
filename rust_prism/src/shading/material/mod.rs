@@ -1,7 +1,7 @@
 pub mod matte;
 pub mod plastic;
 
-use crate::geometry::GeomInteraction;
+use crate::geometry::GeomSurface;
 use crate::shading::lobe::{Lobe, LobeType};
 use crate::spectrum::Color;
 use arrayvec::ArrayVec;
