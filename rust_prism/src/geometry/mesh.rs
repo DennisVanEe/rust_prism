@@ -1,5 +1,6 @@
 use crate::bvh::{BVHObject, BVH};
-use crate::geometry::{GeomSurface, Geometry};
+use crate::geometry::Geometry;
+use crate::interaction::{GeomSurf, SurfType, Surface};
 use pmath;
 use pmath::bbox::BBox3;
 use pmath::ray::Ray;
@@ -165,7 +166,7 @@ impl BVHObject for Triangle {
         t_scaled * inv_sum_e > 0.
     }
 
-    fn intersect(&self, ray: Ray<f64>, mesh: &MeshData) -> Option<GeomSurface> {
+    fn intersect(&self, ray: Ray<f64>, mesh: &MeshData) -> Option<Surface> {
         let int_info = RayIntInfo::new(ray);
         let poss = self.pos(mesh);
 
@@ -296,7 +297,7 @@ impl BVHObject for Triangle {
         // TODO: texture stuff goes here
 
         // Calculate the shading normals now:
-        let shading_n = if mesh.has_nrm() {
+        let sn = if mesh.has_nrm() {
             n // No normal information was provided, so we use the calculated normal.
         } else {
             let norms = self.nrm(mesh);
@@ -308,10 +309,10 @@ impl BVHObject for Triangle {
             }
         };
         // Update n with the new shading normal from the provided normal:
-        let n = pmath::align(shading_n, n);
+        let n = pmath::align(sn, n);
 
         // Calculate the shading dndu and dndv values:
-        let (shading_dndu, shading_dndv) = if mesh.has_nrm() {
+        let (sdndu, sdndv) = if mesh.has_nrm() {
             (Vec3::zero(), Vec3::zero())
         } else {
             let norms = self.nrm(mesh);
@@ -333,7 +334,7 @@ impl BVHObject for Triangle {
         };
 
         // Calculate the shading tangents:
-        let shading_dpdu = if mesh.has_tan() {
+        let sdpdu = if mesh.has_tan() {
             let tans = self.tan(mesh);
             let st = tans[0].scale(b[0]) + tans[1].scale(b[1]) + tans[2].scale(b[2]);
             if st.length2() == 0. {
@@ -346,30 +347,35 @@ impl BVHObject for Triangle {
         };
 
         // Calculate the shaind bitangent:
-        let (shading_dpdu, shading_dpdv) = {
-            let sbt = shading_n.cross(shading_dpdu);
+        let (sdpdu, sdpdv) = {
+            let sbt = sn.cross(sdpdu);
             if sbt.length2() > 0. {
-                (sbt.cross(shading_dpdu), sbt.normalize())
+                (sbt.cross(sdpdu), sbt.normalize())
             } else {
-                pmath::coord_system(shading_n)
+                pmath::coord_system(sn)
             }
         };
 
         let wo = -ray.dir;
 
-        Some(GeomSurface {
+        let geom_surf = GeomSurf {
+            uv,
+            dpdu,
+            dpdv,
+            sn,
+            sdpdu,
+            sdpdv,
+            sdndu,
+            sdndv,
+        };
+
+        Some(Surface {
             p,
             n,
             wo,
             t,
-            uv,
-            dpdu,
-            dpdv,
-            shading_n,
-            shading_dpdu,
-            shading_dpdv,
-            shading_dndu,
-            shading_dndv,
+            time: ray.time,
+            surf_type: SurfType::Geom(geom_surf),
         })
     }
 
@@ -439,7 +445,7 @@ impl Mesh {
 }
 
 impl Geometry for Mesh {
-    fn intersect(&self, ray: Ray<f64>) -> Option<GeomSurface> {
+    fn intersect(&self, ray: Ray<f64>) -> Option<Surface> {
         // Calculate the ray information:
         self.bvh.intersect(ray, &self.mesh_data)
     }

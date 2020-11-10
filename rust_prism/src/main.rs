@@ -10,6 +10,7 @@ mod film;
 mod filter;
 mod geometry;
 mod integrator;
+mod interaction;
 mod light;
 mod sampler;
 mod scene;
