@@ -1,11 +1,30 @@
 use crate::bvh::{BVHObject, BVH};
-use crate::geometry::{GeomSurface, Geometry};
+use crate::geometry::Geometry;
+use crate::interaction::{GeomIntr, Interaction};
 use crate::light::Light;
 use crate::shading::material::Material;
 use crate::transform::Transf;
 use pmath::bbox::BBox3;
 use pmath::ray::Ray;
 use std::sync::{Arc, Mutex};
+
+//
+// ScenePrim
+//
+
+/// A public trait that represents a scene primitive
+trait ScenePrim {
+    fn get_transf(&self) -> Transf;
+    fn get_light(&self) -> Option<Arc<dyn Light>>;
+
+    /// Returns the number of primitives contained in this primitive other then itself
+    fn num_prims(&self) -> usize;
+    fn get_prim_at(&self, i: usize) -> &dyn ScenePrim;
+
+    fn get_bbox(&self) -> BBox3<f64>;
+    fn intersect(&self, ray: Ray<f64>) -> Option<Interaction>;
+    fn intersect_test(&self, ray: Ray<f64>) -> bool;
+}
 
 //
 // Lights
@@ -70,91 +89,76 @@ static SCENE_LIGHT_REGISTRAR: SceneLightRegistrar = SceneLightRegistrar::new();
 
 /// A `SceneGeometry` can either be a light source (e.g. a mesh light) or an object with a material.
 
-enum SceneGeometryType {
+enum SceneGeomType {
     Material(Arc<dyn Material>),
     Light(Arc<dyn Light>),
 }
 
 /// A geometry in the scene. This means a bunch of stuff.
-pub struct SceneGeometry {
-    geometry: Arc<dyn Geometry>,
-    scene_geometry_type: SceneGeometryType,
+pub struct SceneGeom {
+    geom: Arc<dyn Geometry>,
+    scene_geom_type: SceneGeomType,
+    transf: Transf, // geom to world
 }
 
-impl SceneGeometry {
-    /// Constructs a new `SceneGeometry` that has a material associated with it.
+impl SceneGeom {
+    /// Constructs a new `SceneGeom` that has a material associated with it.
     pub fn new_material(
-        geometry: &Arc<dyn Geometry>,
-        material: &Arc<dyn Material>,
-    ) -> Arc<dyn ScenePrimitive> {
-        Arc::new(SceneGeometry {
-            geometry: geometry.clone(),
-            scene_geometry_type: SceneGeometryType::Material(material.clone()),
-        })
+        geom: Arc<dyn Geometry>,
+        material: Arc<dyn Material>,
+        transf: Transf,
+    ) -> Self {
+        SceneGeom {
+            geom,
+            scene_geom_type: SceneGeomType::Material(material),
+            transf,
+        }
     }
 
     /// Constructs a new `SceneGeometry` that has a light associated with it.
-    pub fn new_light(
-        geometry: &Arc<dyn Geometry>,
-        light: &Arc<dyn Light>,
-    ) -> Arc<dyn ScenePrimitive> {
-        Arc::new(SceneGeometry {
-            geometry: geometry.clone(),
-            scene_geometry_type: SceneGeometryType::Light(light.clone()),
-        })
+    pub fn new_light(geom: Arc<dyn Geometry>, light: Arc<dyn Light>, transf: Transf) -> Self {
+        SceneGeom {
+            geom,
+            scene_geom_type: SceneGeomType::Light(light),
+            transf,
+        }
     }
 }
 
-impl ScenePrimitive for SceneGeometry {
+impl ScenePrim for SceneGeom {
+    fn get_transf(&self) -> Transf {
+        self.transf
+    }
+
+    fn get_light(&self) -> Option<Arc<dyn Light>> {
+        match self.scene_geom_type {
+            SceneGeomType::Light(light) => Some(light),
+            _ => None,
+        }
+    }
+
+    fn num_prims(&self) -> usize {
+        0
+    }
+
+    fn get_prim_at(&self, _: usize) -> &dyn ScenePrim {
+        panic!("SceneGeom doesn't itself contain other ScenePrim objects");
+    }
+
     fn get_bbox(&self) -> BBox3<f64> {
-        self.geometry.get_bbox()
+        self.transf.bbox(self.geom.get_bbox())
+    }
+
+    fn intersect(&self, ray: Ray<f64>) -> Option<Interaction> {
+        let geom_space_ray = self.transf.inverse().ray(ray);
+        self.geom
+            .intersect(geom_space_ray)
+            .map(|o| self.transf.interaction(o))
     }
 
     fn intersect_test(&self, ray: Ray<f64>) -> bool {
-        self.geometry.intersect_test(ray)
-    }
-
-    fn intersect(&self, ray: Ray<f64>) -> Option<GeomSurface> {
-        self.geometry.intersect(ray)
-    }
-}
-
-//
-// SceneBVHObject
-//
-
-/// A `SceneBVHObject` is an object that can be inserted into a bvh. It is made up of a `ScenePrimitiveHandle` and a
-/// `Transf` to give it a trasnformation. It also has a special handle that allows it to register and update any lights
-/// that may belong to it.
-#[derive(Clone)]
-struct SceneBVHObject {
-    object: Arc<dyn ScenePrimitive>,
-    transf: Transf,
-}
-
-impl SceneBVHObject {
-    /// Constructs a new `SceneBVHObject`. Note that the `ScenePrimitiveHandle` isn't moved, it's cloned so that we
-    /// can mimic some form of instancing.
-    pub fn new(object: &ScenePrimitiveHandle, transf: Transf) -> Self {
-        let object = object.clone();
-        object.update_transf(transf);
-        SceneBVHObject { object, transf }
-    }
-}
-
-impl BVHObject for SceneBVHObject {
-    type UserData = ();
-
-    fn get_bbox(&self, _: &Self::UserData) -> BBox3<f64> {
-        self.object.get_bbox()
-    }
-
-    fn intersect_test(&self, ray: Ray<f64>, _: &Self::UserData) -> bool {
-        self.object.intersect_test(ray)
-    }
-
-    fn intersect(&self, ray: Ray<f64>, _: &Self::UserData) -> Option<GeomSurface> {
-        self.object.intersect(ray)
+        let geom_space_ray = self.transf.inverse().ray(ray);
+        self.geom.intersect_test(geom_space_ray)
     }
 }
 
@@ -162,70 +166,91 @@ impl BVHObject for SceneBVHObject {
 // SceneBVH
 //
 
-// Just make sure it can itself be a `ScenePrimitive`.
-impl ScenePrimitive for BVH<SceneBVHObject> {
+pub struct SceneBVH {
+    bvh: BVH<Arc<dyn ScenePrim>>,
+    transf: Transf,
+}
+
+impl ScenePrim for SceneBVH {
+    fn get_transf(&self) -> Transf {
+        self.transf
+    }
+
+    fn get_light(&self) -> Option<Arc<dyn Light>> {
+        None
+    }
+
+    fn num_prims(&self) -> usize {
+        self.bvh.get_objects().len()
+    }
+
+    fn get_prim_at(&self, i: usize) -> &dyn ScenePrim {
+        &self.bvh.get_objects()[i]
+    }
+
     fn get_bbox(&self) -> BBox3<f64> {
-        self.get_bbox()
+        self.transf.bbox(self.bvh.get_bbox())
+    }
+
+    fn intersect(&self, ray: Ray<f64>) -> Option<Interaction> {
+        let geom_space_ray = self.transf.inverse().ray(ray);
+        self.bvh
+            .intersect(geom_space_ray, &())
+            .map(|o| self.transf.interaction(o))
     }
 
     fn intersect_test(&self, ray: Ray<f64>) -> bool {
-        self.intersect_test(ray, &())
-    }
-
-    fn intersect(&self, ray: Ray<f64>) -> Option<GeomSurface> {
-        self.intersect(ray, &())
+        let geom_space_ray = self.transf.inverse().ray(ray);
+        self.bvh.intersect_test(geom_space_ray, &())
     }
 }
 
 //
-// ScenePrimitive
-//
+// The "SceneBVHObject" is just an Arc<dyn ScenePrim>:
 
-// pub trait ScenePrimitive {
-//     fn intersect(ray: Ray<f64>) -> Option<GeomSurface>;
-//     fn
-// }
+impl BVHObject for Arc<dyn ScenePrim> {
+    type UserData = ();
 
-//
-// SceneObject
-//
-
-pub struct SceneObject {
-    primitive: Arc<dyn ScenePrimitive>,
-}
-
-//
-// InstanceBuilder
-//
-
-type Instance = BVH;
-
-/// An object used to construct an instance. An instance is made  up of scene objects.
-pub struct InstanceBuilder {
-    objects: Vec<SceneBVHObject>,
-}
-
-impl InstanceBuilder {
-    pub fn new() -> Self {
-        InstanceBuilder {
-            objects: Vec::new(),
-        }
+    fn get_bbox(&self, _: &Self::UserData) -> BBox3<f64> {
+        self.as_ref().get_bbox()
     }
 
-    /// Adds an object to the bvh builder.
-    pub fn add_scene_object(&mut self, obj: SceneBVHObject) {
-        self.objects.push(obj);
+    fn intersect_test(&self, ray: Ray<f64>, _: &Self::UserData) -> bool {
+        self.as_ref().intersect_test(ray)
     }
 
-    /// Creates the `SceneBVH`. Note that this will clear the objects directory, so you can't call it multiple times.
-    /// It'll also panic if no items were added. Returns
-    pub fn create_instance(&mut self, max_objects_per_leaf: usize) -> ScenePrimitiveHandle {
-        if self.objects.is_empty() {
-            panic!("Error creating BVH, SceneBVHBuilder has no objects.");
-        }
+    fn intersect(&self, ray: Ray<f64>, _: &Self::UserData) -> Option<Interaction> {
+        self.as_ref().intersect(ray)
+    }
+}
 
-        let bvh = BVH::new(&self.objects, max_objects_per_leaf, &());
-        self.objects.clear();
-        Arc::new(bvh)
+impl ScenePrim for Arc<dyn ScenePrim> {
+    fn get_transf(&self) -> Transf {
+        self.get_transf()
+    }
+
+    fn get_light(&self) -> Option<Arc<dyn Light>> {
+        self.get_light()
+    }
+
+    fn num_prims(&self) -> usize {
+        self.num_prims()
+    }
+
+    fn get_prim_at(&self, i: usize) -> &dyn ScenePrim {
+        self.get_prim_at(i)
+    }
+
+    fn get_bbox(&self) -> BBox3<f64> {
+        // Remove the ambiguity:
+        self.as_ref().get_bbox()
+    }
+
+    fn intersect_test(&self, ray: Ray<f64>) -> bool {
+        self.as_ref().intersect_test(ray)
+    }
+
+    fn intersect(&self, ray: Ray<f64>) -> Option<Interaction> {
+        self.as_ref().intersect(ray)
     }
 }

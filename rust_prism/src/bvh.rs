@@ -2,7 +2,7 @@
 // Importance Sampling of Many Lights with Adaptive Tree Splitting by
 // Estevez and Kulla.
 
-use crate::geometry::GeomSurface;
+use crate::interaction::Interaction;
 use arrayvec::ArrayVec;
 use partition;
 use pmath::bbox::BBox3;
@@ -19,13 +19,12 @@ pub trait BVHObject: Clone {
     fn get_bbox(&self, user_data: &Self::UserData) -> BBox3<f64>;
 
     fn intersect_test(&self, ray: Ray<f64>, user_data: &Self::UserData) -> bool;
-    fn intersect(&self, ray: Ray<f64>, user_data: &Self::UserData) -> Option<GeomSurface>;
+    fn intersect(&self, ray: Ray<f64>, user_data: &Self::UserData) -> Option<Interaction>;
 }
 
 pub struct BVH<Object: BVHObject> {
     objects: Vec<Object>,
     nodes: Vec<Node>,
-
     bbox: BBox3<f64>,
 }
 
@@ -81,6 +80,10 @@ impl<Object: BVHObject> BVH<Object> {
         self.bbox
     }
 
+    pub fn get_objects(&self) -> &[Object] {
+        &self.objects[..]
+    }
+
     /// Given a `Ray`, performs an intersection test, simply returning true if the ray intersects any object in
     /// the BVH and false otherwise.
     pub fn intersect_test(&self, ray: Ray<f64>, user_data: &Object::UserData) -> bool {
@@ -131,7 +134,7 @@ impl<Object: BVHObject> BVH<Object> {
     }
 
     /// Given a `Ray`, performs an intersection, returning a `GeomSurface` of the point of intersection.
-    pub fn intersect(&self, ray: Ray<f64>, user_data: &Object::UserData) -> Option<GeomSurface> {
+    pub fn intersect(&self, ray: Ray<f64>, user_data: &Object::UserData) -> Option<Interaction> {
         // We do this because t_far may get updated:
         let inv_dir = ray.dir.inv_scale(1.0);
         let is_dir_neg = ray.dir.comp_wise_is_neg();

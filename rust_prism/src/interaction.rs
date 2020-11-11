@@ -2,7 +2,7 @@ use pmath::vector::{Vec2, Vec3};
 
 /// Represents any information that we may need for
 #[derive(Clone, Copy, Debug)]
-pub struct GeomSurf {
+pub struct GeomIntr {
     uv: Vec2<f64>,   // uv coordinate at the intersection
     dpdu: Vec3<f64>, // vectors parallel to the triangle
     dpdv: Vec3<f64>,
@@ -15,21 +15,21 @@ pub struct GeomSurf {
 }
 
 #[derive(Clone, Copy, Debug)]
-pub struct VolSurf {}
+pub struct VolIntr {}
 
 #[derive(Clone, Copy, Debug)]
-pub enum SurfType {
-    Geom(GeomSurf),
-    Vol(VolSurf),
+pub enum IntrType {
+    Geom(GeomIntr),
+    Vol(VolIntr),
 }
 
 #[derive(Clone, Copy, Debug)]
-pub struct Surface {
+pub struct Interaction {
     pub p: Vec3<f64>,  // intersection point
     pub n: Vec3<f64>,  // geometric normal (of triangle)
     pub wo: Vec3<f64>, // direction of intersection leaving the point
     pub t: f64,        // the parametric parameter of the ray where the intersection happened
     pub time: f64,     // the time period when the intersection happened
 
-    pub surf_type: SurfType, // the type of interaction where the intersection occurs
+    pub intr_type: IntrType, // the type of interaction where the intersection occurs
 }

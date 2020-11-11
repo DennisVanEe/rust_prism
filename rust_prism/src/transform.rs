@@ -1,6 +1,7 @@
-use crate::geometry::GeomInteraction;
+use crate::interaction::{GeomIntr, Interaction, IntrType, VolIntr};
+use pmath::bbox::BBox3;
 use pmath::matrix::{Mat3x4, Mat4};
-use pmath::ray::{PrimaryRay, Ray, RayDiff};
+use pmath::ray::Ray;
 use pmath::vector::{Vec3, Vec4};
 
 use std::ops::Mul;
@@ -146,26 +147,61 @@ impl Transf {
         }
     }
 
-    pub fn geom_interaction(self, i: GeomInteraction) -> GeomInteraction {
-        GeomInteraction {
+    pub fn bbox(&self, b: BBox3<f64>) -> BBox3<f64> {
+        // From Arvo 1990 Graphics Gems 1
+
+        let pmin = self.frd.get_column(3);
+        let pmax = pmin;
+
+        let a0 = self.frd.get_column(0) * b.pmin;
+        let a1 = self.frd.get_column(0) * b.pmax;
+        let pmin = pmin + a0.min(a1);
+        let pmax = pmax + a0.max(a1);
+
+        let a0 = self.frd.get_column(1) * b.pmin;
+        let a1 = self.frd.get_column(1) * b.pmax;
+        let pmin = pmin + a0.min(a1);
+        let pmax = pmax + a0.max(a1);
+
+        let a0 = self.frd.get_column(2) * b.pmin;
+        let a1 = self.frd.get_column(2) * b.pmax;
+        let pmin = pmin + a0.min(a1);
+        let pmax = pmax + a0.max(a1);
+
+        BBox3 { pmin, pmax }
+    }
+
+    pub fn interaction(self, i: Interaction) -> Interaction {
+        Interaction {
             p: self.point(i.p),
             n: self.normal(i.n).normalize(),
             wo: self.vector(i.wo).normalize(),
-
             t: i.t,
+            time: i.time,
 
-            uv: i.uv,
-            dpdu: self.vector(i.dpdu),
-            dpdv: self.vector(i.dpdv),
-
-            shading_n: self.normal(i.shading_n).normalize(),
-            shading_dpdu: self.vector(i.shading_dpdu),
-            shading_dpdv: self.vector(i.shading_dpdv),
-            shading_dndu: self.normal(i.shading_dndu),
-            shading_dndv: self.normal(i.shading_dndv),
-
-            material_id: i.material_id,
+            intr_type: match i.intr_type {
+                IntrType::Geom(geom_intr) => IntrType::Geom(self.geom_intr(geom_intr)),
+                IntrType::Vol(vol_intr) => IntrType::Vol(self.vol_intr(vol_intr)),
+            },
         }
+    }
+
+    pub fn geom_intr(self, g: GeomIntr) -> GeomIntr {
+        GeomIntr {
+            uv: g.uv,
+            dpdu: self.vector(g.dpdu),
+            dpdv: self.vector(g.dpdv),
+
+            sn: self.normal(g.sn).normalize(),
+            sdpdu: self.vector(g.sdpdu),
+            sdpdv: self.vector(g.sdpdv),
+            sdndu: self.normal(g.sdndu),
+            sdndv: self.normal(g.sdndv),
+        }
+    }
+
+    pub fn vol_intr(self, v: VolIntr) -> VolIntr {
+        v
     }
 
     pub fn ray(self, r: Ray<f64>) -> Ray<f64> {
@@ -175,23 +211,6 @@ impl Transf {
             time: r.time,
             t_far: r.t_far,
             t_near: r.t_near,
-        }
-    }
-
-    pub fn primary_ray(self, p: PrimaryRay<f64>) -> PrimaryRay<f64> {
-        PrimaryRay {
-            ray: self.ray(p.ray),
-            ray_diff: self.ray_diff(p.ray_diff),
-        }
-    }
-
-    pub fn ray_diff(self, r: RayDiff<f64>) -> RayDiff<f64> {
-        RayDiff {
-            rx_org: self.point(r.rx_org),
-            ry_org: self.point(r.ry_org),
-
-            rx_dir: self.vector(r.rx_dir),
-            ry_dir: self.vector(r.ry_dir),
         }
     }
 }
